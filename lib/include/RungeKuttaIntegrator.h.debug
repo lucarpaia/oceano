@@ -1,0 +1,33 @@
+/**
+ * Namespace containing the time stepping methods.
+ */
+
+namespace TimeIntegrator {
+
+  // Base class for the Time Integrators. 
+  class RungeKuttaIntegrator
+  {
+  public:
+    RungeKuttaIntegrator() {}
+    ~RungeKuttaIntegrator() {}
+
+    /*!
+      @brief Init the class. 
+
+      Use the SCHEMA member for initializing the memory.  
+    */
+
+    unsigned int n_stages() const;
+
+    //virtual void init() = 0 ;
+    template <typename VectorType, typename Operator>
+    void perform_time_step(const Operator &pde_operator,
+                           const double    current_time,
+                           const double    time_step,
+                           VectorType &    solution,
+                           VectorType &    vec_ri,
+                           VectorType &    vec_ki) const;  
+  
+  };
+
+}

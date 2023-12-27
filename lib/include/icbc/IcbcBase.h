@@ -1,0 +1,169 @@
+/* ---------------------------------------------------------------------
+ *
+ * Copyright (C) 2020 - 2023 by the deal.II authors
+ *
+ * This file is part of the deal.II library.
+ *
+ * The deal.II library is free software; you can use it, redistribute
+ * it, and/or modify it under the terms of the GNU Lesser General
+ * Public License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ * The full text of the license can be found in the file LICENSE.md at
+ * the top level directory of deal.II.
+ *
+ * ---------------------------------------------------------------------
+
+ *
+ * Author: Martin Kronbichler, 2020
+ *         Luca Arpaia,        2023
+ */
+#ifndef ICBC_ICBCBASE_HPP
+#define ICBC_ICBCBASE_HPP
+
+#include <deal.II/base/conditional_ostream.h>
+#include <deal.II/base/utilities.h>
+#include <deal.II/base/function.h>
+
+/**
+ * Namespace containing the initial and boundary conditions.
+ */
+
+namespace ICBC
+{
+
+  using namespace dealii;
+
+
+  
+  // With the following line we use the parallel output class of Deal.II.
+  // The `ConditionalOStream` class has already been defined in the main and 
+  // we could have passed it from the interface instead of redefining it here. 
+  ConditionalOStream pcout(std::cout, 
+    Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0); 
+  
+  // @sect3{Equation data}
+
+  // We now define a base class for the boundary conditions. Given that
+  // the Euler equations are a problem with $d+2$ equations in $d$ dimensions,
+  // we need to tell the base class about the correct number of
+  // components. This is realized templating with the dimension the icbc class.
+  // The base class is overridden by derived classes which contain the  
+  // boundary conditions specific to each test case. 
+  template <int dim>  
+  class BcBase
+  {
+  public:
+        
+    BcBase(){};
+    virtual ~BcBase(){};
+    
+    // id for each boundary condition type.  
+    std::map<types::boundary_id, std::unique_ptr<Function<dim>>>
+      inflow_boundaries;
+    std::map<types::boundary_id, std::unique_ptr<Function<dim>>>
+                                   subsonic_outflow_boundaries;
+    std::set<types::boundary_id>   wall_boundaries;
+
+    // The subsequent four member functions are the ones that fill the boundary 
+    // containers. They must be called from outside to specify the various types 
+    // of boundaries. For an inflow boundary, we must specify all components in
+    // terms of density $\rho$, momentum $\rho\mathbf{u}$ and energy $E$. 
+    // Given this information, we then store the
+    // function alongside the respective boundary id in a map member variable of
+    // this class. Likewise, we proceed for the subsonic outflow boundaries (where
+    // we request a function as well, which we use to retrieve the energy) and for
+    // wall (no-penetration) boundaries where we impose zero normal velocity (no
+    // function necessary, so we only request the boundary id). For the present
+    // DG code where boundary conditions are solely applied as part of the weak
+    // form (during time integration), the call to set the boundary conditions
+    // can appear both before or after the `reinit()` call to this class. This
+    // is different from continuous finite element codes where the boundary
+    // conditions determine the content of the AffineConstraints object that is
+    // sent into MatrixFree for initialization, thus requiring to be set before
+    // the initialization of the matrix-free data structures.
+    void set_inflow_boundary(const types::boundary_id       boundary_id,
+                             std::unique_ptr<Function<dim>> inflow_function);
+
+    void set_subsonic_outflow_boundary(
+      const types::boundary_id       boundary_id,
+      std::unique_ptr<Function<dim>> outflow_energy);
+ 
+    void set_wall_boundary(const types::boundary_id boundary_id);
+
+    // The next member compose the different boundary conditions for each test case. 
+    // It is overridden by the derived classes specific to each test case. 
+    // In the boundary condition function the user defines the 
+    // composition of the boundary, that is for each boundary id a boundary condition 
+    // among the members defined above must be provided.
+    virtual void set_boundary_conditions()
+    {
+      pcout << "ERROR in set_boundary_conditions()"
+            << "The function is not written in the icbc derived class"
+            << std::endl;
+    }
+        
+  }; 
+
+  
+  
+  // The checks added in each of the four function are used to
+  // ensure that boundary conditions are mutually exclusive on the various
+  // parts of the boundary, i.e., that a user does not accidentally designate a
+  // boundary as both an inflow and say a subsonic outflow boundary.
+  template <int dim>
+  void BcBase<dim>::set_inflow_boundary(
+    const types::boundary_id       boundary_id,
+    std::unique_ptr<Function<dim>> inflow_function)
+  {
+    AssertThrow(subsonic_outflow_boundaries.find(boundary_id) ==
+                    subsonic_outflow_boundaries.end() &&
+                  wall_boundaries.find(boundary_id) == wall_boundaries.end(),
+                ExcMessage("You already set the boundary with id " +
+                           std::to_string(static_cast<int>(boundary_id)) +
+                           " to another type of boundary before now setting " +
+                           "it as inflow"));
+    AssertThrow(inflow_function->n_components == dim + 2,
+                ExcMessage("Expected function with dim+2 components"));
+
+    inflow_boundaries[boundary_id] = std::move(inflow_function);
+  }
+
+
+  template <int dim>
+  void BcBase<dim>::set_subsonic_outflow_boundary(
+    const types::boundary_id       boundary_id,
+    std::unique_ptr<Function<dim>> outflow_function)
+  {
+    AssertThrow(inflow_boundaries.find(boundary_id) ==
+                    inflow_boundaries.end() &&
+                  wall_boundaries.find(boundary_id) == wall_boundaries.end(),
+                ExcMessage("You already set the boundary with id " +
+                           std::to_string(static_cast<int>(boundary_id)) +
+                           " to another type of boundary before now setting " +
+                           "it as subsonic outflow"));
+    AssertThrow(outflow_function->n_components == dim + 2,
+                ExcMessage("Expected function with dim+2 components"));
+
+    subsonic_outflow_boundaries[boundary_id] = std::move(outflow_function);
+  }
+
+
+  template <int dim>
+  void BcBase<dim>::set_wall_boundary(
+    const types::boundary_id boundary_id)
+  {
+    AssertThrow(inflow_boundaries.find(boundary_id) ==
+                    inflow_boundaries.end() &&
+                  subsonic_outflow_boundaries.find(boundary_id) ==
+                    subsonic_outflow_boundaries.end(),
+                ExcMessage("You already set the boundary with id " +
+                           std::to_string(static_cast<int>(boundary_id)) +
+                           " to another type of boundary before now setting " +
+                           "it as wall boundary"));
+
+    wall_boundaries.insert(boundary_id);
+  }
+
+} // namespace ICBC
+
+#endif //ICBC_ICBCBASE_HPP
