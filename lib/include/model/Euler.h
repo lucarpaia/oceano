@@ -84,11 +84,19 @@ namespace Model
     ~Euler(){};
  
     double gamma;
- 
-    template <int dim, typename Number>
+
+    // This function returns the number of variables
+    /*inline unsigned int get_nvar() const 
+    {
+      return n_vars;
+    }*/
+
+    // The next function computes the velocity from the vector of conserved
+    // variables
+    template <int dim, int n_vars, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Number>
-      velocity(const Tensor<1, dim + 2, Number> &conserved_variables) const;
+      velocity(const Tensor<1, n_vars, Number> &conserved_variables) const;
 
     // The next function computes the pressure from the vector of conserved
     // variables, using the formula $p = (\gamma - 1) \left(E - \frac 12 \rho
@@ -97,19 +105,23 @@ namespace Model
     // specify the first template argument `dim` here because the compiler is
     // not able to deduce it from the arguments of the tensor, whereas the
     // second argument (number type) can be automatically deduced.
-    template <int dim, typename Number>
+    template <int dim, int n_vars, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Number
-      pressure(const Tensor<1, dim + 2, Number> &conserved_variables) const;
+      pressure(const Tensor<1, n_vars, Number> &conserved_variables) const;
 
     // Here is the definition of the Euler flux function, i.e., the definition
     // of the actual equation. Given the velocity and pressure (that the
     // compiler optimization will make sure are done only once), this is 
     // straight-forward given the equation stated in the introduction.
-    template <int dim, typename Number>
+    template <int dim, int n_vars, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
-      Tensor<1, dim + 2, Tensor<1, dim, Number>>
-      flux(const Tensor<1, dim + 2, Number> &conserved_variables) const;
+      Tensor<1, n_vars, Tensor<1, dim, Number>>
+      flux(const Tensor<1, n_vars, Number> &conserved_variables) const;
+
+  protected:
+    // This is the number of variables
+    //unsigned int n_vars; 
     
   };
   
@@ -131,10 +143,10 @@ namespace Model
     : gamma(gamma)
   {}
   
-  template <int dim, typename Number>
+  template <int dim, int n_vars, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
-    Euler::velocity(const Tensor<1, dim + 2, Number> &conserved_variables) const
+    Euler::velocity(const Tensor<1, n_vars, Number> &conserved_variables) const
   {
     const Number inverse_density = Number(1.) / conserved_variables[0];
 
@@ -145,13 +157,13 @@ namespace Model
     return velocity;
   }
 
-  template <int dim, typename Number>
+  template <int dim, int n_vars, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Number
-    Euler::pressure(const Tensor<1, dim + 2, Number> &conserved_variables) const
+    Euler::pressure(const Tensor<1, n_vars, Number> &conserved_variables) const
   {
     const Tensor<1, dim, Number> v =
-      velocity<dim>(conserved_variables);
+      velocity<dim, n_vars>(conserved_variables);
 
     Number rho_u_dot_u = conserved_variables[1] * v[0];
     for (unsigned int d = 1; d < dim; ++d)
@@ -160,16 +172,16 @@ namespace Model
     return (gamma - 1.) * (conserved_variables[dim + 1] - 0.5 * rho_u_dot_u);
   }
 
-  template <int dim, typename Number>
+  template <int dim, int n_vars, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
-    Tensor<1, dim + 2, Tensor<1, dim, Number>>
-    Euler::flux(const Tensor<1, dim + 2, Number> &conserved_variables) const
+    Tensor<1, n_vars, Tensor<1, dim, Number>>
+    Euler::flux(const Tensor<1, n_vars, Number> &conserved_variables) const
   {
     const Tensor<1, dim, Number> v =
-      velocity<dim>(conserved_variables);
-    const Number p = pressure<dim>(conserved_variables);
+      velocity<dim, n_vars>(conserved_variables);
+    const Number p = pressure<dim, n_vars>(conserved_variables);
 
-    Tensor<1, dim + 2, Tensor<1, dim, Number>> flux;
+    Tensor<1, n_vars, Tensor<1, dim, Number>> flux;
     for (unsigned int d = 0; d < dim; ++d)
       {
         flux[0][d] = conserved_variables[1 + d];
@@ -182,6 +194,6 @@ namespace Model
 
     return flux;
   }
-     
+       
 } // namespace Model
 #endif //EULER_HPP

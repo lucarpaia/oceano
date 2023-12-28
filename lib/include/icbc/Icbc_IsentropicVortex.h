@@ -128,8 +128,8 @@ namespace ICBC
 
 
   // The `Bc` class define the boundary conditions for the test-case.
-  template <int dim>  
-  class BcIsentropicVortex : public BcBase<dim>
+  template <int dim, int n_vars>  
+  class BcIsentropicVortex : public BcBase<dim, n_vars>
   {
   public:
   
@@ -143,8 +143,8 @@ namespace ICBC
 
 
   // Dirichlet boundary conditions (inflow) are specified all around the domain.
-  template <int dim>
-  void BcIsentropicVortex<dim>::set_boundary_conditions()
+  template <int dim, int n_vars>
+  void BcIsentropicVortex<dim, n_vars>::set_boundary_conditions()
   {
      this->set_inflow_boundary(
        0, std::make_unique<ExactSolution<dim>>(0));

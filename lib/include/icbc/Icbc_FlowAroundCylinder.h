@@ -99,8 +99,8 @@ namespace ICBC
 
 
   // The `Bc` class define the boundary conditions for the test-case.
-  template <int dim>  
-  class BcFlowAroundCylinder : public BcBase<dim>
+  template <int dim, int n_vars>  
+  class BcFlowAroundCylinder : public BcBase<dim, n_vars>
   {
   public:
         
@@ -119,8 +119,8 @@ namespace ICBC
   // the right. For the boundary around the cylinder (boundary id equal to 2)
   // as well as the channel walls (boundary id equal to 3) we use the wall
   // boundary type, which is no-normal flow.
-  template <int dim>
-  void BcFlowAroundCylinder<dim>::set_boundary_conditions()
+  template <int dim, int n_vars>
+  void BcFlowAroundCylinder<dim, n_vars>::set_boundary_conditions()
   {
      this->set_inflow_boundary(
        0, std::make_unique<ExactSolution<dim>>(0));

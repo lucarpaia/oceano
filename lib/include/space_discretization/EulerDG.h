@@ -96,19 +96,19 @@ namespace SpaceDiscretization
   }
 
 
-  template <int dim, typename Number, int n_components = dim + 2>
-  Tensor<1, n_components, VectorizedArray<Number>>
+  template <int dim, typename Number, int n_vars>
+  Tensor<1, n_vars, VectorizedArray<Number>>
   evaluate_function(const Function<dim> &                      function,
                     const Point<dim, VectorizedArray<Number>> &p_vectorized)
   {
-    AssertDimension(function.n_components, n_components);
-    Tensor<1, n_components, VectorizedArray<Number>> result;
+    AssertDimension(function.n_components, n_vars);
+    Tensor<1, n_vars, VectorizedArray<Number>> result;
     for (unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v)
       {
         Point<dim> p;
         for (unsigned int d = 0; d < dim; ++d)
           p[d] = p_vectorized[d][v];
-        for (unsigned int d = 0; d < n_components; ++d)
+        for (unsigned int d = 0; d < n_vars; ++d)
           result[d][v] = function.value(p, d);
       }
     return result;
@@ -139,16 +139,16 @@ namespace SpaceDiscretization
   // to pass in various forms of boundary conditions on different parts of the
   // domain boundary marked by types::boundary_id variables, as well as
   // possible body forces.
-  template <int dim, int degree, int n_points_1d>
+  template <int dim, int n_vars, int degree, int n_points_1d>
   class EulerOperator
   {
   public:
     static constexpr unsigned int n_quadrature_points_1d = n_points_1d;
 
-    EulerOperator(ICBC::BcBase<dim> *bc,
-                  TimerOutput       &timer_output, 
-                  double             gamma);
-
+    EulerOperator(ICBC::BcBase<dim, n_vars> *bc,
+                  TimerOutput                &timer_output, 
+                  double                      gamma);
+ 
     void reinit(const Mapping<dim> &   mapping,
                 const DoFHandler<dim> &dof_handler);
 
@@ -180,7 +180,7 @@ namespace SpaceDiscretization
     void
     initialize_vector(LinearAlgebra::distributed::Vector<Number> &vector) const;
 
-    ICBC::BcBase<dim> *bc;
+    ICBC::BcBase<dim, n_vars> *bc;
     
   private:
     MatrixFree<dim, Number> data;
@@ -230,9 +230,9 @@ namespace SpaceDiscretization
 
 
 
-  template <int dim, int degree, int n_points_1d>
-  EulerOperator<dim, degree, n_points_1d>::EulerOperator(
-    ICBC::BcBase<dim>                *bc,  
+  template <int dim, int n_vars, int degree, int n_points_1d>
+  EulerOperator<dim, n_vars, degree, n_points_1d>::EulerOperator(
+    ICBC::BcBase<dim, n_vars>         *bc,  
     TimerOutput                      &timer,
     double                            gamma)
     : bc(bc)
@@ -261,8 +261,8 @@ namespace SpaceDiscretization
   // only on affine element shapes and not on deformed elements, it enables
   // the fast inversion of the mass matrix by tensor product techniques,
   // necessary to ensure optimal computational efficiency overall.
-  template <int dim, int degree, int n_points_1d>
-  void EulerOperator<dim, degree, n_points_1d>::reinit(
+  template <int dim, int n_vars, int degree, int n_points_1d>
+  void EulerOperator<dim, n_vars, degree, n_points_1d>::reinit(
     const Mapping<dim> &   mapping,
     const DoFHandler<dim> &dof_handler)
   {
@@ -291,8 +291,8 @@ namespace SpaceDiscretization
 
 
 
-  template <int dim, int degree, int n_points_1d>
-  void EulerOperator<dim, degree, n_points_1d>::initialize_vector(
+  template <int dim, int n_vars, int degree, int n_points_1d>
+  void EulerOperator<dim, n_vars, degree, n_points_1d>::initialize_vector(
     LinearAlgebra::distributed::Vector<Number> &vector) const
   {
     data.initialize_dof_vector(vector);
@@ -300,8 +300,8 @@ namespace SpaceDiscretization
 
 
 
-  template <int dim, int degree, int n_points_1d>
-  void EulerOperator<dim, degree, n_points_1d>::set_body_force(
+  template <int dim, int n_vars, int degree, int n_points_1d>
+  void EulerOperator<dim, n_vars, degree, n_points_1d>::set_body_force(
     std::unique_ptr<Function<dim>> body_force)
   {
     AssertDimension(body_force->n_components, dim);
@@ -332,10 +332,10 @@ namespace SpaceDiscretization
   // previously. The matrix-free framework provides several ways to handle the
   // multi-component case. The variant shown here utilizes an FEEvaluation
   // object with multiple components embedded into it, specified by the fourth
-  // template argument `dim + 2` for the components in the Euler system. As a
+  // template argument `n_vars` for the components in the Euler system. As a
   // consequence, the return type of FEEvaluation::get_value() is not a scalar
   // any more (that would return a VectorizedArray type, collecting data from
-  // several elements), but a Tensor of `dim+2` components. The functionality
+  // several elements), but a Tensor of `n_vars` components. The functionality
   // is otherwise similar to the scalar case; it is handled by a template
   // specialization of a base class, called FEEvaluationAccess. An alternative
   // variant would have been to use several FEEvaluation objects, a scalar one
@@ -371,7 +371,7 @@ namespace SpaceDiscretization
   // given the current solution evaluated at quadrature points, returned by
   // `phi.get_value(q)`, and tell the FEEvaluation object to queue the flux
   // for testing it by the gradients of the shape functions (which is a Tensor
-  // of outer `dim+2` components, each holding a tensor of `dim` components
+  // of outer `n_vars` components, each holding a tensor of `dim` components
   // for the $x,y,z$ component of the Euler flux). One final thing worth
   // mentioning is the order in which we queue the data for testing by the
   // value of the test function, `phi.submit_value()`, in case we are given an
@@ -390,14 +390,14 @@ namespace SpaceDiscretization
   // The interfaces imposes the present list of arguments, but since we are in
   // a member function where the MatrixFree object is already available as the
   // `data` variable, we stick with that to avoid confusion.
-  template <int dim, int degree, int n_points_1d>
-  void EulerOperator<dim, degree, n_points_1d>::local_apply_cell(
+  template <int dim, int n_vars, int degree, int n_points_1d>
+  void EulerOperator<dim, n_vars, degree, n_points_1d>::local_apply_cell(
     const MatrixFree<dim, Number> &,
     LinearAlgebra::distributed::Vector<Number> &      dst,
     const LinearAlgebra::distributed::Vector<Number> &src,
     const std::pair<unsigned int, unsigned int> &     cell_range) const
   {
-    FEEvaluation<dim, degree, n_points_1d, dim + 2, Number> phi(data);
+    FEEvaluation<dim, degree, n_points_1d, n_vars, Number> phi(data);
 
     Tensor<1, dim, VectorizedArray<Number>> constant_body_force;
     const Functions::ConstantFunction<dim> *constant_function =
@@ -415,7 +415,7 @@ namespace SpaceDiscretization
         for (unsigned int q = 0; q < phi.n_q_points; ++q)
           {
             const auto w_q = phi.get_value(q);
-            phi.submit_gradient(euler.flux<dim>(w_q), q);
+            phi.submit_gradient(euler.flux<dim, n_vars>(w_q), q);
             if (body_force.get() != nullptr)
               {
                 const Tensor<1, dim, VectorizedArray<Number>> force =
@@ -423,7 +423,7 @@ namespace SpaceDiscretization
                                       evaluate_function<dim, Number, dim>(
                                         *body_force, phi.quadrature_point(q));
 
-                Tensor<1, dim + 2, VectorizedArray<Number>> forcing;
+                Tensor<1, n_vars, VectorizedArray<Number>> forcing;
                 for (unsigned int d = 0; d < dim; ++d)
                   forcing[d + 1] = w_q[0] * force[d];
                 for (unsigned int d = 0; d < dim; ++d)
@@ -481,16 +481,16 @@ namespace SpaceDiscretization
   // introduction. The flux is then queued for testing both on the minus sign
   // and on the plus sign, with switched sign as the normal vector from the
   // plus side is exactly opposed to the one from the minus side.
-  template <int dim, int degree, int n_points_1d>
-  void EulerOperator<dim, degree, n_points_1d>::local_apply_face(
+  template <int dim, int n_vars, int degree, int n_points_1d>
+  void EulerOperator<dim, n_vars, degree, n_points_1d>::local_apply_face(
     const MatrixFree<dim, Number> &,
     LinearAlgebra::distributed::Vector<Number> &      dst,
     const LinearAlgebra::distributed::Vector<Number> &src,
     const std::pair<unsigned int, unsigned int> &     face_range) const
   {
-    FEFaceEvaluation<dim, degree, n_points_1d, dim + 2, Number> phi_m(data,
+    FEFaceEvaluation<dim, degree, n_points_1d, n_vars, Number> phi_m(data,
                                                                       true);
-    FEFaceEvaluation<dim, degree, n_points_1d, dim + 2, Number> phi_p(data,
+    FEFaceEvaluation<dim, degree, n_points_1d, n_vars, Number> phi_p(data,
                                                                       false);
 
     for (unsigned int face = face_range.first; face < face_range.second; ++face)
@@ -504,9 +504,9 @@ namespace SpaceDiscretization
         for (unsigned int q = 0; q < phi_m.n_q_points; ++q)
           {
             const auto numerical_flux =
-              num_flux.euler_numerical_flux<dim>(phi_m.get_value(q),
-                                                       phi_p.get_value(q),
-                                                       phi_m.normal_vector(q));
+              num_flux.euler_numerical_flux<dim, n_vars>(phi_m.get_value(q),
+                                                         phi_p.get_value(q),
+                                                         phi_m.normal_vector(q));
             phi_m.submit_value(-numerical_flux, q);
             phi_p.submit_value(numerical_flux, q);
           }
@@ -569,14 +569,14 @@ namespace SpaceDiscretization
   // noticeable, so we opt for the simpler code here. Also note that the final
   // `else` clause will catch the case when some part of the boundary was not
   // assigned any boundary condition via `EulerOperator::set_..._boundary(...)`.
-  template <int dim, int degree, int n_points_1d>
-  void EulerOperator<dim, degree, n_points_1d>::local_apply_boundary_face(
+  template <int dim, int n_vars, int degree, int n_points_1d>
+  void EulerOperator<dim, n_vars, degree, n_points_1d>::local_apply_boundary_face(
     const MatrixFree<dim, Number> &,
     LinearAlgebra::distributed::Vector<Number> &      dst,
     const LinearAlgebra::distributed::Vector<Number> &src,
     const std::pair<unsigned int, unsigned int> &     face_range) const
   {
-    FEFaceEvaluation<dim, degree, n_points_1d, dim + 2, Number> phi(data, true);
+    FEFaceEvaluation<dim, degree, n_points_1d, n_vars, Number> phi(data, true);
 
     for (unsigned int face = face_range.first; face < face_range.second; ++face)
       {
@@ -594,7 +594,7 @@ namespace SpaceDiscretization
 
             bool at_outflow = false;
 
-            Tensor<1, dim + 2, VectorizedArray<Number>> w_p;
+            Tensor<1, n_vars, VectorizedArray<Number>> w_p;
             const auto boundary_id = data.get_boundary_id(face);
             if (bc->wall_boundaries.find(boundary_id) != bc->wall_boundaries.end())
               {
@@ -606,7 +606,8 @@ namespace SpaceDiscretization
             else if (bc->inflow_boundaries.find(boundary_id) !=
                      bc->inflow_boundaries.end())
               w_p =
-                evaluate_function(*bc->inflow_boundaries.find(boundary_id)->second,
+                evaluate_function<dim, Number, n_vars>(
+                		  *bc->inflow_boundaries.find(boundary_id)->second,
                                   phi.quadrature_point(q));
             else if (bc->subsonic_outflow_boundaries.find(boundary_id) !=
                      bc->subsonic_outflow_boundaries.end())
@@ -624,7 +625,7 @@ namespace SpaceDiscretization
                                      "you set a boundary condition for "
                                      "this part of the domain boundary?"));
 
-            auto flux = num_flux.euler_numerical_flux<dim>(w_m, w_p, normal);
+            auto flux = num_flux.euler_numerical_flux<dim, n_vars>(w_m, w_p, normal);
 
             if (at_outflow)
               for (unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v)
@@ -671,15 +672,15 @@ namespace SpaceDiscretization
   // `degree+1` in terms of the variable name) points for the mass
   // matrix. This leads to square contributions to the mass matrix and ensures
   // exact integration, as explained in the introduction.
-  template <int dim, int degree, int n_points_1d>
-  void EulerOperator<dim, degree, n_points_1d>::local_apply_inverse_mass_matrix(
+  template <int dim, int n_vars, int degree, int n_points_1d>
+  void EulerOperator<dim, n_vars, degree, n_points_1d>::local_apply_inverse_mass_matrix(
     const MatrixFree<dim, Number> &,
     LinearAlgebra::distributed::Vector<Number> &      dst,
     const LinearAlgebra::distributed::Vector<Number> &src,
     const std::pair<unsigned int, unsigned int> &     cell_range) const
   {
-    FEEvaluation<dim, degree, degree + 1, dim + 2, Number> phi(data, 0, 1);
-    MatrixFreeOperators::CellwiseInverseMassMatrix<dim, degree, dim + 2, Number>
+    FEEvaluation<dim, degree, degree + 1, n_vars, Number> phi(data, 0, 1);
+    MatrixFreeOperators::CellwiseInverseMassMatrix<dim, degree, n_vars, Number>
       inverse(phi);
 
     for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
@@ -729,8 +730,8 @@ namespace SpaceDiscretization
   // Around all these functions, we put timer scopes to record the
   // computational time for statistics about the contributions of the various
   // parts.
-  template <int dim, int degree, int n_points_1d>
-  void EulerOperator<dim, degree, n_points_1d>::apply(
+  template <int dim, int n_vars, int degree, int n_points_1d>
+  void EulerOperator<dim, n_vars, degree, n_points_1d>::apply(
     const double                                      current_time,
     const LinearAlgebra::distributed::Vector<Number> &src,
     LinearAlgebra::distributed::Vector<Number> &      dst) const
@@ -805,8 +806,8 @@ namespace SpaceDiscretization
   // time with default vector updates on a 40-core machine, the percentage is
   // around 35% with the more optimized variant. In other words, this is a
   // speedup of around a third.
-  template <int dim, int degree, int n_points_1d>
-  void EulerOperator<dim, degree, n_points_1d>::perform_stage(
+  template <int dim, int n_vars, int degree, int n_points_1d>
+  void EulerOperator<dim, n_vars, degree, n_points_1d>::perform_stage(
     const Number                                      current_time,
     const Number                                      factor_solution,
     const Number                                      factor_ai,
@@ -915,23 +916,24 @@ namespace SpaceDiscretization
   // accumulating the results as typical in integration tasks -- we can do
   // this because every vector entry has contributions from only a single
   // cell for discontinuous Galerkin discretizations.
-  template <int dim, int degree, int n_points_1d>
-  void EulerOperator<dim, degree, n_points_1d>::project(
+  template <int dim, int n_vars, int degree, int n_points_1d>
+  void EulerOperator<dim, n_vars, degree, n_points_1d>::project(
     const Function<dim> &                       function,
     LinearAlgebra::distributed::Vector<Number> &solution) const
   {
-    FEEvaluation<dim, degree, degree + 1, dim + 2, Number> phi(data, 0, 1);
-    MatrixFreeOperators::CellwiseInverseMassMatrix<dim, degree, dim + 2, Number>
+    FEEvaluation<dim, degree, degree + 1, n_vars, Number> phi(data, 0, 1);
+    MatrixFreeOperators::CellwiseInverseMassMatrix<dim, degree, n_vars, Number>
       inverse(phi);
     solution.zero_out_ghost_values();
     for (unsigned int cell = 0; cell < data.n_cell_batches(); ++cell)
       {
         phi.reinit(cell);
         for (unsigned int q = 0; q < phi.n_q_points; ++q)
-          phi.submit_dof_value(evaluate_function(function,
+          phi.submit_dof_value(evaluate_function<dim, Number, n_vars>(
+          					 function,
                                                  phi.quadrature_point(q)),
                                q);
-        inverse.transform_from_q_points_to_basis(dim + 2,
+        inverse.transform_from_q_points_to_basis(n_vars,
                                                  phi.begin_dof_values(),
                                                  phi.begin_dof_values());
         phi.set_dof_values(solution);
@@ -963,14 +965,14 @@ namespace SpaceDiscretization
   // number of lanes with valid data. It equals VectorizedArray::size() on
   // most cells, but can be less on the last cell batch if the number of cells
   // has a remainder compared to the SIMD width.
-  template <int dim, int degree, int n_points_1d>
-  std::array<double, 3> EulerOperator<dim, degree, n_points_1d>::compute_errors(
+  template <int dim, int n_vars, int degree, int n_points_1d>
+  std::array<double, 3> EulerOperator<dim, n_vars, degree, n_points_1d>::compute_errors(
     const Function<dim> &                             function,
     const LinearAlgebra::distributed::Vector<Number> &solution) const
   {
     TimerOutput::Scope t(timer, "compute errors");
     double             errors_squared[3] = {};
-    FEEvaluation<dim, degree, n_points_1d, dim + 2, Number> phi(data, 0, 0);
+    FEEvaluation<dim, degree, n_points_1d, n_vars, Number> phi(data, 0, 0);
 
     for (unsigned int cell = 0; cell < data.n_cell_batches(); ++cell)
       {
@@ -980,7 +982,9 @@ namespace SpaceDiscretization
         for (unsigned int q = 0; q < phi.n_q_points; ++q)
           {
             const auto error =
-              evaluate_function(function, phi.quadrature_point(q)) -
+              evaluate_function<dim, Number, n_vars>(
+              			function, 
+              			phi.quadrature_point(q)) -
               phi.get_value(q);
             const auto JxW = phi.JxW(q);
 
@@ -1046,13 +1050,13 @@ namespace SpaceDiscretization
   // are close to the maximal value anyway. In all other cases, convergence
   // will be quick. Thus, we can merely hardcode 5 iterations here and be
   // confident that the result is good.
-  template <int dim, int degree, int n_points_1d>
-  double EulerOperator<dim, degree, n_points_1d>::compute_cell_transport_speed(
+  template <int dim, int n_vars, int degree, int n_points_1d>
+  double EulerOperator<dim, n_vars, degree, n_points_1d>::compute_cell_transport_speed(
     const LinearAlgebra::distributed::Vector<Number> &solution) const
   {
     TimerOutput::Scope t(timer, "compute transport speed");
     Number             max_transport = 0;
-    FEEvaluation<dim, degree, degree + 1, dim + 2, Number> phi(data, 0, 1);
+    FEEvaluation<dim, degree, degree + 1, n_vars, Number> phi(data, 0, 1);
 
     for (unsigned int cell = 0; cell < data.n_cell_batches(); ++cell)
       {
@@ -1062,8 +1066,8 @@ namespace SpaceDiscretization
         for (unsigned int q = 0; q < phi.n_q_points; ++q)
           {
             const auto solution = phi.get_value(q);
-            const auto velocity = euler.velocity<dim>(solution);
-            const auto pressure = euler.pressure<dim>(solution);
+            const auto velocity = euler.velocity<dim, n_vars>(solution);
+            const auto pressure = euler.pressure<dim, n_vars>(solution);
 
             const auto inverse_jacobian = phi.inverse_jacobian(q);
             const auto convective_speed = inverse_jacobian * velocity;

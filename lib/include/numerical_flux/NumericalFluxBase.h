@@ -36,7 +36,7 @@ namespace NumericalFlux
   
   // This next function is a helper to simplify the implementation of the
   // numerical flux, implementing the action of a tensor of tensors (with
-  // non-standard outer dimension of size `dim + 2`, so the standard overloads
+  // non-standard outer dimension of size `n_vars`, so the standard overloads
   // provided by deal.II's tensor classes do not apply here) with another
   // tensor of the same inner dimension, i.e., a matrix-vector product.
   template <int n_components, int dim, typename Number>
@@ -80,21 +80,14 @@ namespace NumericalFlux
   // I would have liked to template the numerical flux class with 
   // <int dim, typename Number> which would have been cleaner. But I was not able 
   // to compile the call to the function `euler_numerical_flux()` which take
-  // as argument `Tensor<1, dim + 2, Number>` while is receiving 
-  // `Tensor<1, dim + 2, VectorizedArray<Number>>`. I don't know why, without
+  // as argument `Tensor<1, n_vars, Number>` while is receiving 
+  // `Tensor<1, n_vars, VectorizedArray<Number>>`. I don't know why, without
   // a template class, everything works. I leave this for future work.  
   class NumericalFluxBase
   {
   public:
     NumericalFluxBase(double gamma);
     ~NumericalFluxBase(){};
-    
-    /*template <int dim, typename Number>
-    inline DEAL_II_ALWAYS_INLINE //
-      Tensor<1, dim + 2, Number>
-      euler_numerical_flux(const Tensor<1, dim + 2, Number> &u_m,
-                           const Tensor<1, dim + 2, Number> &u_p,
-                           const Tensor<1, dim, Number> &    normal) const;*/
                                     
   public:
     Model::Euler euler;

@@ -49,7 +49,7 @@ namespace ICBC
   // components. This is realized templating with the dimension the icbc class.
   // The base class is overridden by derived classes which contain the  
   // boundary conditions specific to each test case. 
-  template <int dim>  
+  template <int dim, int n_vars>  
   class BcBase
   {
   public:
@@ -110,8 +110,8 @@ namespace ICBC
   // ensure that boundary conditions are mutually exclusive on the various
   // parts of the boundary, i.e., that a user does not accidentally designate a
   // boundary as both an inflow and say a subsonic outflow boundary.
-  template <int dim>
-  void BcBase<dim>::set_inflow_boundary(
+  template <int dim, int n_vars>
+  void BcBase<dim, n_vars>::set_inflow_boundary(
     const types::boundary_id       boundary_id,
     std::unique_ptr<Function<dim>> inflow_function)
   {
@@ -122,15 +122,15 @@ namespace ICBC
                            std::to_string(static_cast<int>(boundary_id)) +
                            " to another type of boundary before now setting " +
                            "it as inflow"));
-    AssertThrow(inflow_function->n_components == dim + 2,
+    AssertThrow(inflow_function->n_components == n_vars,
                 ExcMessage("Expected function with dim+2 components"));
 
     inflow_boundaries[boundary_id] = std::move(inflow_function);
   }
 
 
-  template <int dim>
-  void BcBase<dim>::set_subsonic_outflow_boundary(
+  template <int dim, int n_vars>
+  void BcBase<dim, n_vars>::set_subsonic_outflow_boundary(
     const types::boundary_id       boundary_id,
     std::unique_ptr<Function<dim>> outflow_function)
   {
@@ -141,15 +141,15 @@ namespace ICBC
                            std::to_string(static_cast<int>(boundary_id)) +
                            " to another type of boundary before now setting " +
                            "it as subsonic outflow"));
-    AssertThrow(outflow_function->n_components == dim + 2,
+    AssertThrow(outflow_function->n_components == n_vars,
                 ExcMessage("Expected function with dim+2 components"));
 
     subsonic_outflow_boundaries[boundary_id] = std::move(outflow_function);
   }
 
 
-  template <int dim>
-  void BcBase<dim>::set_wall_boundary(
+  template <int dim, int n_vars>
+  void BcBase<dim, n_vars>::set_wall_boundary(
     const types::boundary_id boundary_id)
   {
     AssertThrow(inflow_boundaries.find(boundary_id) ==

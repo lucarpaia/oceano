@@ -24,19 +24,19 @@
 // a pointer base class which act as an interface with virtual functions defined in it. 
 // However, calls to virtual functions (model flux, numerical flux, boundary conditions)
 // happens at each quadrature points and this can be the cause of a bit of overhead.
-// Moroever these choices are tested in a development phase and typically 
+// Moreover these choices are tested in a development phase and typically 
 // both the model and the numerics are kept fixed by users. Also boundary and initial 
 // conditions for real case scenario consists in reading external data and not in 
 // using analytical functions. In order to not introduce in the optimized deal.II code 
 // call to virtual functions that would point, almost always, to the same derived class,
-// we use instead c++ preprocessors. C++ preprocessor allows as to avoid interface classes
+// we use instead c++ preprocessors. C++ preprocessor allows to avoid interface classes
 // and to define just the classes actually used.
 
 // The following are the preprocessors that select the initial and boundary conditions
-#define   ICBC_ISENTROPICVORTEX
-#undef    ICBC_FLOWAROUNDCYLINDER
+#undef   ICBC_ISENTROPICVORTEX
+#define    ICBC_FLOWAROUNDCYLINDER
 // and numerical flux:
-#define   NUMERICALFLUX_LAXFRIEDRICHSMODIFIED
+#define  NUMERICALFLUX_LAXFRIEDRICHSMODIFIED
 #undef    NUMERICALFLUX_HARTENVANLEER
 // The include files are similar to the previous matrix-free tutorial programs
 // step-37, step-48, and step-59
@@ -104,8 +104,9 @@ namespace SpaceDiscretization
   // the final time up to which we run the simulation, and a variable
   // `output_tick` that specifies in which intervals we want to write output
   // (assuming that the tick is larger than the time step size).
-  constexpr unsigned int testcase             = 0;
+  constexpr unsigned int testcase             = 1;
   constexpr unsigned int dimension            = 2;
+  constexpr unsigned int n_variables          = dimension + 2;  
   constexpr unsigned int n_global_refinements = 0;
   constexpr unsigned int fe_degree            = 1;
   constexpr unsigned int n_q_points_1d        = fe_degree + 2;
@@ -157,11 +158,11 @@ namespace SpaceDiscretization
   // information by calculator tools within visualization programs such as
   // ParaView, but it is so much more convenient to do it already when writing
   // the output.
-  template <int dim>
+  template <int dim, int n_vars>
   class EulerProblem
   {
   public:
-    EulerProblem(ICBC::BcBase<dim>* bc);
+    EulerProblem(ICBC::BcBase<dim, n_vars>* bc);
 
     void run();
 
@@ -186,7 +187,7 @@ namespace SpaceDiscretization
 
     TimerOutput timer;
 
-    EulerOperator<dim, fe_degree, n_q_points_1d> euler_operator;
+    EulerOperator<dim, n_vars, fe_degree, n_q_points_1d> euler_operator;
 
     double time, time_step;
 
@@ -217,8 +218,8 @@ namespace SpaceDiscretization
 
 
 
-  template <int dim>
-  EulerProblem<dim>::Postprocessor::Postprocessor(double gamma)
+  template <int dim, int n_vars>
+  EulerProblem<dim, n_vars>::Postprocessor::Postprocessor(double gamma)
     : do_schlieren_plot(dim == 2)
     , euler(gamma)
   {}
@@ -235,33 +236,33 @@ namespace SpaceDiscretization
   // speed of sound $c=\sqrt{\gamma p / \rho}$, as well as the Schlieren plot
   // showing $s = |\nabla \rho|^2$ in case it is enabled. (See step-69 for
   // another example where we create a Schlieren plot.)
-  template <int dim>
-  void EulerProblem<dim>::Postprocessor::evaluate_vector_field(
+  template <int dim, int n_vars>
+  void EulerProblem<dim, n_vars>::Postprocessor::evaluate_vector_field(
     const DataPostprocessorInputs::Vector<dim> &inputs,
     std::vector<Vector<double>> &               computed_quantities) const
   {
     const unsigned int n_evaluation_points = inputs.solution_values.size();
-
+    
     if (do_schlieren_plot == true)
       Assert(inputs.solution_gradients.size() == n_evaluation_points,
              ExcInternalError());
 
     Assert(computed_quantities.size() == n_evaluation_points,
            ExcInternalError());
-    Assert(inputs.solution_values[0].size() == dim + 2, ExcInternalError());
+    Assert(inputs.solution_values[0].size() == n_vars, ExcInternalError());
     Assert(computed_quantities[0].size() ==
-             dim + 2 + (do_schlieren_plot == true ? 1 : 0),
+             n_vars + (do_schlieren_plot == true ? 1 : 0),
            ExcInternalError());
 
     for (unsigned int p = 0; p < n_evaluation_points; ++p)
       {
-        Tensor<1, dim + 2> solution;
-        for (unsigned int d = 0; d < dim + 2; ++d)
+        Tensor<1, n_vars> solution;
+        for (unsigned int d = 0; d < n_vars; ++d)
           solution[d] = inputs.solution_values[p](d);
 
         const double         density  = solution[0];
-        const Tensor<1, dim> velocity = euler.velocity<dim>(solution);
-        const double         pressure = euler.pressure<dim>(solution);
+        const Tensor<1, dim> velocity = euler.velocity<dim, n_vars>(solution);
+        const double         pressure = euler.pressure<dim, n_vars>(solution);
 
         for (unsigned int d = 0; d < dim; ++d)
           computed_quantities[p](d) = velocity[d];
@@ -269,15 +270,15 @@ namespace SpaceDiscretization
         computed_quantities[p](dim + 1) = std::sqrt(gamma * pressure / density);
 
         if (do_schlieren_plot == true)
-          computed_quantities[p](dim + 2) =
+          computed_quantities[p](n_vars) =
             inputs.solution_gradients[p][0] * inputs.solution_gradients[p][0];
       }
   }
 
 
 
-  template <int dim>
-  std::vector<std::string> EulerProblem<dim>::Postprocessor::get_names() const
+  template <int dim, int n_vars>
+  std::vector<std::string> EulerProblem<dim, n_vars>::Postprocessor::get_names() const
   {
     std::vector<std::string> names;
     for (unsigned int d = 0; d < dim; ++d)
@@ -296,9 +297,9 @@ namespace SpaceDiscretization
   // For the interpretation of quantities, we have scalar density, energy,
   // pressure, speed of sound, and the Schlieren plot, and vectors for the
   // momentum and the velocity.
-  template <int dim>
+  template <int dim, int n_vars>
   std::vector<DataComponentInterpretation::DataComponentInterpretation>
-  EulerProblem<dim>::Postprocessor::get_data_component_interpretation() const
+  EulerProblem<dim, n_vars>::Postprocessor::get_data_component_interpretation() const
   {
     std::vector<DataComponentInterpretation::DataComponentInterpretation>
       interpretation;
@@ -320,8 +321,8 @@ namespace SpaceDiscretization
   // With respect to the necessary update flags, we only need the values for
   // all quantities but the Schlieren plot, which is based on the density
   // gradient.
-  template <int dim>
-  UpdateFlags EulerProblem<dim>::Postprocessor::get_needed_update_flags() const
+  template <int dim, int n_vars>
+  UpdateFlags EulerProblem<dim, n_vars>::Postprocessor::get_needed_update_flags() const
   {
     if (do_schlieren_plot == true)
       return update_values | update_gradients;
@@ -333,16 +334,16 @@ namespace SpaceDiscretization
 
   // The constructor for this class is unsurprising: We set up a parallel
   // triangulation based on the `MPI_COMM_WORLD` communicator, a vector finite
-  // element with `dim+2` components for density, momentum, and energy, a
+  // element with `n_vars` components for density, momentum, and energy, a
   // high-order mapping of the same degree as the underlying finite element,
   // and initialize the time and time step to zero.
-  template <int dim>
-  EulerProblem<dim>::EulerProblem(ICBC::BcBase<dim>* bc)
+  template <int dim, int n_vars>
+  EulerProblem<dim, n_vars>::EulerProblem(ICBC::BcBase<dim, n_vars>* bc)
     : pcout(std::cout, Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
 #ifdef DEAL_II_WITH_P4EST
     , triangulation(MPI_COMM_WORLD)
 #endif
-    , fe(FE_DGQ<dim>(fe_degree), dim + 2)
+    , fe(FE_DGQ<dim>(fe_degree), n_vars)
     , mapping(fe_degree)
     , dof_handler(triangulation)
     , timer(pcout, TimerOutput::never, TimerOutput::wall_times)
@@ -366,8 +367,8 @@ namespace SpaceDiscretization
   // specified number of global refinements, create the unknown numbering from
   // the DoFHandler, and hand the DoFHandler and Mapping objects to the
   // initialization of the EulerOperator.
-  template <int dim>
-  void EulerProblem<dim>::make_grid_and_dofs()
+  template <int dim, int n_vars>
+  void EulerProblem<dim, n_vars>::make_grid_and_dofs()
   {
     switch (testcase)
       {
@@ -425,7 +426,7 @@ namespace SpaceDiscretization
     std::locale s = pcout.get_stream().getloc();
     pcout.get_stream().imbue(std::locale(""));
     pcout << "Number of degrees of freedom: " << dof_handler.n_dofs()
-          << " ( = " << (dim + 2) << " [vars] x "
+          << " ( = " << (n_vars) << " [vars] x "
           << triangulation.n_global_active_cells() << " [cells] x "
           << Utilities::pow(fe_degree + 1, dim) << " [dofs/cell/var] )"
           << std::endl;
@@ -482,8 +483,8 @@ namespace SpaceDiscretization
   //   line that sets `flags.write_higher_order_cells = true;`. On the other
   //   hand, Paraview is able to understand VTU files with higher order cells
   //   just fine.
-  template <int dim>
-  void EulerProblem<dim>::output_results(const unsigned int result_number)
+  template <int dim, int n_vars>
+  void EulerProblem<dim, n_vars>::output_results(const unsigned int result_number)
   {
     const std::array<double, 3> errors =
       euler_operator.compute_errors(ICBC::ExactSolution<dimension>(time), solution);
@@ -587,8 +588,8 @@ namespace SpaceDiscretization
   // size and print them to screen. For velocities and speeds of sound close
   // to unity as in this tutorial program, the predicted effective mesh size
   // will be close, but they could vary if scaling were different.
-  template <int dim>
-  void EulerProblem<dim>::run()
+  template <int dim, int n_vars>
+  void EulerProblem<dim, n_vars>::run()
   {
     {
       const unsigned int n_vect_number = VectorizedArray<Number>::size();
@@ -709,22 +710,23 @@ int main(int argc, char **argv)
       // Next, the pointer is allocated as a derived class specific 
       // to the test-case which will override the boundary conditions. 
       // The pointer is easily pass as argument to the `EulerProblem` class.
-      ICBC::BcBase<dimension> *bc;
+      ICBC::BcBase<dimension, n_variables> *bc;
       // The switch between the different test-cases is realized with Preprocessor keys.
       // The choice to use a Preprocessor also for the boundary conditions is because we
       // use it for the initial condition and we have mantained the same directive 
       // to easily switch both initial and boundary conditions depending on the test-case.
 #if defined ICBC_ISENTROPICVORTEX          
-      bc = new ICBC::BcIsentropicVortex<dimension>;
+      bc = new ICBC::BcIsentropicVortex<dimension, n_variables>;
 #elif defined ICBC_FLOWAROUNDCYLINDER          
-      bc = new ICBC::BcFlowAroundCylinder<dimension>;
+      bc = new ICBC::BcFlowAroundCylinder<dimension, n_variables>;
 #else          
       Assert(false, ExcNotImplemented());
       return 0.;
 #endif 
           
-      EulerProblem<dimension> euler_problem(bc);
+      EulerProblem<dimension, n_variables> euler_problem(bc);
       euler_problem.run();
+      
       delete bc;
     }
   catch (std::exception &exc)

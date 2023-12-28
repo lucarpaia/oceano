@@ -56,8 +56,8 @@ namespace NumericalFlux
   // I would have liked to template the numerical flux class with 
   // <int dim, typename Number> which would have been cleaner. But I was not able 
   // to compile the call to the function `euler_numerical_flux()` which take
-  // as argument `Tensor<1, dim + 2, Number>` while is receiving 
-  // `Tensor<1, dim + 2, VectorizedArray<Number>>`. I don't know why, without
+  // as argument `Tensor<1, n_vars, Number>` while is receiving 
+  // `Tensor<1, n_vars, VectorizedArray<Number>>`. I don't know why, without
   // a template class, everything works. I leave this for future work.  
   class HartenVanLeer : public NumericalFluxBase
   {
@@ -65,11 +65,11 @@ namespace NumericalFlux
     HartenVanLeer(double gamma);
     ~HartenVanLeer(){};
     
-    template <int dim, typename Number>
+    template <int dim, int n_vars, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
-      Tensor<1, dim + 2, Number>
-      euler_numerical_flux(const Tensor<1, dim + 2, Number> &u_m,
-                           const Tensor<1, dim + 2, Number> &u_p,
+      Tensor<1, n_vars, Number>
+      euler_numerical_flux(const Tensor<1, n_vars, Number> &u_m,
+                           const Tensor<1, n_vars, Number> &u_p,
                            const Tensor<1, dim, Number> &    normal) const;
                            
   };
@@ -93,12 +93,12 @@ namespace NumericalFlux
     : NumericalFluxBase(gamma)
   {} 
   
-  template <int dim, typename Number>
+  template <int dim, int n_vars, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
-    Tensor<1, dim + 2, Number>
+    Tensor<1, n_vars, Number>
     HartenVanLeer::euler_numerical_flux(
-      const Tensor<1, dim + 2, Number>  &u_m,
-      const Tensor<1, dim + 2, Number>  &u_p,
+      const Tensor<1, n_vars, Number>  &u_m,
+      const Tensor<1, n_vars, Number>  &u_p,
       const Tensor<1, dim, Number> &     normal) const
   {
     const auto velocity_m = euler.velocity<dim>(u_m);
