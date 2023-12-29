@@ -33,8 +33,8 @@
 // and to define just the classes actually used.
 
 // The following are the preprocessors that select the initial and boundary conditions
-#undef   ICBC_ISENTROPICVORTEX
-#define    ICBC_FLOWAROUNDCYLINDER
+#define   ICBC_ISENTROPICVORTEX
+#undef    ICBC_FLOWAROUNDCYLINDER
 // and numerical flux:
 #define  NUMERICALFLUX_LAXFRIEDRICHSMODIFIED
 #undef    NUMERICALFLUX_HARTENVANLEER
@@ -57,6 +57,7 @@
 
 #include <deal.II/grid/grid_generator.h>
 #include <deal.II/grid/tria.h>
+#include <deal.II/grid/grid_in.h>
 
 #include <deal.II/lac/affine_constraints.h>
 #include <deal.II/lac/la_parallel_vector.h>
@@ -104,12 +105,13 @@ namespace SpaceDiscretization
   // the final time up to which we run the simulation, and a variable
   // `output_tick` that specifies in which intervals we want to write output
   // (assuming that the tick is larger than the time step size).
-  constexpr unsigned int testcase             = 1;
+  constexpr unsigned int testcase             = 0;
   constexpr unsigned int dimension            = 2;
   constexpr unsigned int n_variables          = dimension + 2;  
   constexpr unsigned int n_global_refinements = 0;
   constexpr unsigned int fe_degree            = 1;
   constexpr unsigned int n_q_points_1d        = fe_degree + 2;
+  const     char*        mshfile              = "isentropicVortex.msh";
 
   using Number = double;
 
@@ -158,6 +160,11 @@ namespace SpaceDiscretization
   // information by calculator tools within visualization programs such as
   // ParaView, but it is so much more convenient to do it already when writing
   // the output.
+  //
+  // The class is templated with the dimension and the number of variables.
+  // Both are important because all templated members and methods
+  // (Tensor and Functions for example) that are defined in nested classes
+  // needs to inherit `dim` and `n_vars`. 
   template <int dim, int n_vars>
   class EulerProblem
   {
@@ -354,13 +361,18 @@ namespace SpaceDiscretization
 
 
 
-  // As a mesh, this tutorial program implements two options, depending on the
-  // global variable `testcase`: For the analytical variant (`testcase==0`),
-  // the domain is $(0, 10) \times (-5, 5)$, with Dirichlet boundary
-  // conditions (inflow) all around the domain. For `testcase==1`, we set the
-  // domain to a cylinder in a rectangular box, derived from the flow past
-  // cylinder testcase for incompressible viscous flow by Sch&auml;fer and
-  // Turek (1996). Furthermore, for the 3d cylinder
+  // It is possible to create the mesh inside 
+  // deal.II using the functions in the namespace GridGenearator. However 
+  // here we use only the possibility to import the mesh from an external mesher, Gmsh. 
+  // Gmsh is the smallest and most quickly set up open source tool we are aware of. 
+  // One of the issues is that deal.II, at least until version 9.2, 
+  // can only deal with meshes that only consist of quadrilaterals and hexahedra - 
+  // tetrahedral meshes were not supported and will likely not be supported with all 
+  // of the features deal.II offers for quadrilateral and hexahedral meshes for several 
+  // versions following the 9.3 release that introduced support for simplicial and 
+  // mixed meshes first. Gmsh can generate unstructured 2d quad meshes.
+  //
+  // Furthermore, for the 3d cylinder
   // we also add a gravity force in vertical direction. Having the base mesh
   // in place (including the manifolds set by
   // GridGenerator::channel_with_cylinder()), we can then perform the
@@ -374,28 +386,11 @@ namespace SpaceDiscretization
       {
         case 0:
           {
-            Point<dim> lower_left;
-            for (unsigned int d = 1; d < dim; ++d)
-              lower_left[d] = -5;
-
-            Point<dim> upper_right;
-            upper_right[0] = 10;
-            for (unsigned int d = 1; d < dim; ++d)
-              upper_right[d] = 5;
-
-            GridGenerator::hyper_rectangle(triangulation,
-                                           lower_left,
-                                           upper_right);
-            triangulation.refine_global(5);
-            
             break;
           }
 
         case 1:
           {
-            GridGenerator::channel_with_cylinder(
-              triangulation, 0.03, 1, 0, true);
-
             if (dim == 3)
               euler_operator.set_body_force(
                 std::make_unique<Functions::ConstantFunction<dim>>(
@@ -408,6 +403,25 @@ namespace SpaceDiscretization
           Assert(false, ExcNotImplemented());
       }
 
+    // The class GridIn can read many different mesh formats from a 
+    // file from disk. In order to read a grid from a file, we generate an object 
+    // of data type GridIn and associate the triangulation to it (i.e. we tell 
+    // it to fill our triangulation object when we ask it to read the file). 
+    // Then we open the respective file and initialize the triangulation with 
+    // the data in the file
+    GridIn<dim> gridin;
+    gridin.attach_triangulation(triangulation);
+  
+    char cwd[1024];
+    Assert(getcwd(cwd, sizeof(cwd)) != NULL,
+           ExcInternalError());   
+    std::string current_working_directory(cwd);
+    std::string slash("/");
+    std::string msh_file(mshfile);
+         
+    std::ifstream f(current_working_directory+slash+msh_file);
+    gridin.read_msh(f);
+ 
     euler_operator.bc->set_boundary_conditions();
 
     triangulation.refine_global(n_global_refinements);

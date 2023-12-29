@@ -146,9 +146,9 @@ namespace SpaceDiscretization
     static constexpr unsigned int n_quadrature_points_1d = n_points_1d;
 
     EulerOperator(ICBC::BcBase<dim, n_vars> *bc,
-                  TimerOutput                &timer_output, 
-                  double                      gamma);
- 
+                  TimerOutput               &timer_output, 
+                  double                     gamma);
+
     void reinit(const Mapping<dim> &   mapping,
                 const DoFHandler<dim> &dof_handler);
 
