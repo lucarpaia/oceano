@@ -80,7 +80,7 @@ namespace NumericalFlux
   class LaxFriedrichsModified : public NumericalFluxBase
   {
   public:
-    LaxFriedrichsModified(double gamma); 
+    LaxFriedrichsModified(IO::ParameterHandler &param); 
     ~LaxFriedrichsModified(){};
 
     template <int dim, int n_vars, typename Number>
@@ -107,8 +107,8 @@ namespace NumericalFlux
   // multiple times. I hope this does not add much overhead. The physical parameter
   // `gamma` is also passed to construct the model class.
   LaxFriedrichsModified::LaxFriedrichsModified(
-    double gamma)
-    : NumericalFluxBase(gamma)
+    IO::ParameterHandler &param)
+    : NumericalFluxBase(param)
   {} 
   
   template <int dim, int n_vars, typename Number>

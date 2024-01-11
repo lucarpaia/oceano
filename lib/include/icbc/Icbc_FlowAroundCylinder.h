@@ -111,8 +111,6 @@ namespace ICBC
     
   }; 
 
-
-
   // Here, we have a larger variety of boundaries. The inflow
   // part at the left of the channel is given the inflow type, for which we
   // choose a constant inflow profile, whereas we set a subsonic outflow at
@@ -122,15 +120,43 @@ namespace ICBC
   template <int dim, int n_vars>
   void BcFlowAroundCylinder<dim, n_vars>::set_boundary_conditions()
   {
-     this->set_inflow_boundary(
-       0, std::make_unique<ExactSolution<dim>>(0));
-     this->set_subsonic_outflow_boundary(
-       1, std::make_unique<ExactSolution<dim>>(0));
+    this->set_inflow_boundary(
+      0, std::make_unique<ExactSolution<dim>>(0));
+    this->set_subsonic_outflow_boundary(
+      1, std::make_unique<ExactSolution<dim>>(0));
 
-     this->set_wall_boundary(2);
-     this->set_wall_boundary(3);
+    this->set_wall_boundary(2);
+    this->set_wall_boundary(3);
   }         
-    
+
+
+
+  // The `BodyForce` class define the body force for the test-case.
+  // In this case it is a constant gravity, of course in the vertical
+  // direction.
+  template <int dim>
+  class BodyForce : public Function<dim>
+  {
+  public:
+    BodyForce()
+      : Function<dim>(dim)
+    {}
+
+    virtual double value(const Point<dim> & p,
+                         const unsigned int component = 0) const override;
+  };
+
+  template <int dim>
+  double BodyForce<dim>::value(const Point<dim> & x,
+                               const unsigned int component) const
+  {
+    (void)x;
+    if (component == 1)
+      return -0.2;
+    else
+      return 0.;
+  }
+
 } // namespace ICBC
 
 #endif //ICBC_FLOWAROUNDCYLIDER_HPP

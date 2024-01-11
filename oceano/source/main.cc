@@ -33,8 +33,8 @@
 // and to define just the classes actually used.
 
 // The following are the preprocessors that select the initial and boundary conditions
-#define   ICBC_ISENTROPICVORTEX
-#undef    ICBC_FLOWAROUNDCYLINDER
+#define  ICBC_ISENTROPICVORTEX
+#undef   ICBC_FLOWAROUNDCYLINDER
 // and numerical flux:
 #define  NUMERICALFLUX_LAXFRIEDRICHSMODIFIED
 #undef    NUMERICALFLUX_HARTENVANLEER
@@ -78,6 +78,7 @@
 // The following files include the oceano libraries
 #include <time_integrator/LowStorageRungeKuttaIntegrator.h>
 #include <space_discretization/EulerDG.h>
+#include <io/CommandLineParser.h>
 // The following files are included depending on
 // the Preprocessor keys. This is necessary because 
 // we have done a limited use of virtual classes; on the contrary 
@@ -89,7 +90,7 @@
 #include <icbc/Icbc_FlowAroundCylinder.h>
 #endif
 
-namespace SpaceDiscretization
+namespace Problem
 {
   using namespace dealii;
 
@@ -105,19 +106,19 @@ namespace SpaceDiscretization
   // the final time up to which we run the simulation, and a variable
   // `output_tick` that specifies in which intervals we want to write output
   // (assuming that the tick is larger than the time step size).
-  constexpr unsigned int testcase             = 0;
+  //constexpr unsigned int testcase             = 0;
   constexpr unsigned int dimension            = 2;
   constexpr unsigned int n_variables          = dimension + 2;  
-  constexpr unsigned int n_global_refinements = 0;
+  //constexpr unsigned int n_global_refinements = 0;
   constexpr unsigned int fe_degree            = 1;
   constexpr unsigned int n_q_points_1d        = fe_degree + 2;
-  const     char*        mshfile              = "isentropicVortex.msh";
+  //const     char*        mshfile              = "isentropicVortex.msh";
 
   using Number = double;
 
-  constexpr double gamma       = 1.4;
-  constexpr double final_time  = testcase == 0 ? 10 : 2.0;
-  constexpr double output_tick = testcase == 0 ? 1 : 0.05;
+  //constexpr double gamma       = 1.4;
+  //constexpr double final_time  = testcase == 0 ? 10 : 2.0;
+  //constexpr double output_tick = testcase == 0 ? 1 : 0.05;
 
   // Next off are some details of the time integrator, namely a Courant number
   // that scales the time step size in terms of the formula $\Delta t =
@@ -169,16 +170,17 @@ namespace SpaceDiscretization
   class EulerProblem
   {
   public:
-    EulerProblem(ICBC::BcBase<dim, n_vars>* bc);
+    EulerProblem(IO::ParameterHandler       &,
+                 ICBC::BcBase<dim, n_vars>* bc);
 
     void run();
 
   private:
     void make_grid_and_dofs();
 
-    void output_results(const unsigned int result_number);
-
     LinearAlgebra::distributed::Vector<Number> solution;
+
+    ParameterHandler &prm;
 
     ConditionalOStream pcout;
 
@@ -194,7 +196,8 @@ namespace SpaceDiscretization
 
     TimerOutput timer;
 
-    EulerOperator<dim, n_vars, fe_degree, n_q_points_1d> euler_operator;
+    SpaceDiscretization::EulerOperator<dim, n_vars, fe_degree, n_q_points_1d>
+      euler_operator;
 
     double time, time_step;
 
@@ -202,7 +205,7 @@ namespace SpaceDiscretization
     class Postprocessor : public DataPostprocessor<dim>
     {
     public:
-      Postprocessor(double gamma);
+      Postprocessor(IO::ParameterHandler &param);
 
       virtual void evaluate_vector_field(
         const DataPostprocessorInputs::Vector<dim> &inputs,
@@ -218,18 +221,37 @@ namespace SpaceDiscretization
 
     private:
       const bool do_schlieren_plot;
-      
+
+    public:
+      bool do_error;
+      double output_tick;
+      std::string output_filename;
+
       Model::Euler euler;
     };
+
+   private:
+    void output_results(
+      Postprocessor      &postprocessor,
+      const unsigned int  result_number);
   };
 
 
-
+  // The constructor of the postprocessor class takes as arguments the parameters handler
+  // class in order to read the output parameters defined from the parameter file. These
+  // parameters are stored as class members.
   template <int dim, int n_vars>
-  EulerProblem<dim, n_vars>::Postprocessor::Postprocessor(double gamma)
+  EulerProblem<dim, n_vars>::Postprocessor::Postprocessor(
+    IO::ParameterHandler &prm)
     : do_schlieren_plot(dim == 2)
-    , euler(gamma)
-  {}
+    , euler(prm)
+  {
+    prm.enter_subsection("Output parameters");
+    do_error = prm.get_double("Output_error");
+    output_tick = prm.get_double("Output_tick");
+    output_filename = prm.get("Output_filename");
+    prm.leave_subsection();
+  }
 
 
 
@@ -274,7 +296,7 @@ namespace SpaceDiscretization
         for (unsigned int d = 0; d < dim; ++d)
           computed_quantities[p](d) = velocity[d];
         computed_quantities[p](dim)     = pressure;
-        computed_quantities[p](dim + 1) = std::sqrt(gamma * pressure / density);
+        computed_quantities[p](dim + 1) = std::sqrt(euler.gamma * pressure / density);
 
         if (do_schlieren_plot == true)
           computed_quantities[p](n_vars) =
@@ -345,8 +367,10 @@ namespace SpaceDiscretization
   // high-order mapping of the same degree as the underlying finite element,
   // and initialize the time and time step to zero.
   template <int dim, int n_vars>
-  EulerProblem<dim, n_vars>::EulerProblem(ICBC::BcBase<dim, n_vars>* bc)
-    : pcout(std::cout, Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
+  EulerProblem<dim, n_vars>::EulerProblem(IO::ParameterHandler      &param,
+                                          ICBC::BcBase<dim, n_vars>* bc)
+    : prm(param)
+    , pcout(std::cout, Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
 #ifdef DEAL_II_WITH_P4EST
     , triangulation(MPI_COMM_WORLD)
 #endif
@@ -354,7 +378,7 @@ namespace SpaceDiscretization
     , mapping(fe_degree)
     , dof_handler(triangulation)
     , timer(pcout, TimerOutput::never, TimerOutput::wall_times)
-    , euler_operator(bc, timer, gamma)
+    , euler_operator(param, bc, timer)
     , time(0)
     , time_step(0)
   {}
@@ -372,7 +396,7 @@ namespace SpaceDiscretization
   // versions following the 9.3 release that introduced support for simplicial and 
   // mixed meshes first. Gmsh can generate unstructured 2d quad meshes.
   //
-  // Furthermore, for the 3d cylinder
+  // Furthermore,
   // we also add a gravity force in vertical direction. Having the base mesh
   // in place (including the manifolds set by
   // GridGenerator::channel_with_cylinder()), we can then perform the
@@ -382,26 +406,8 @@ namespace SpaceDiscretization
   template <int dim, int n_vars>
   void EulerProblem<dim, n_vars>::make_grid_and_dofs()
   {
-    switch (testcase)
-      {
-        case 0:
-          {
-            break;
-          }
 
-        case 1:
-          {
-            if (dim == 3)
-              euler_operator.set_body_force(
-                std::make_unique<Functions::ConstantFunction<dim>>(
-                  std::vector<double>({0., 0., -0.2})));
-
-            break;
-          }
-
-        default:
-          Assert(false, ExcNotImplemented());
-      }
+    euler_operator.bc->set_body_force(std::make_unique<ICBC::BodyForce<dim>>());
 
     // The class GridIn can read many different mesh formats from a 
     // file from disk. In order to read a grid from a file, we generate an object 
@@ -417,9 +423,15 @@ namespace SpaceDiscretization
            ExcInternalError());   
     std::string current_working_directory(cwd);
     std::string slash("/");
-    std::string msh_file(mshfile);
+
+    prm.enter_subsection("Mesh & geometry parameters");
+    const std::string file_msh = prm.get("Mesh_filename");
+    const unsigned int n_global_refinements = prm.get_integer("Number_of_refinements");
+    prm.leave_subsection();
          
-    std::ifstream f(current_working_directory+slash+msh_file);
+    std::ifstream f(current_working_directory+slash+file_msh);
+    pcout << "Reading mesh file: " << file_msh << std::endl;
+
     gridin.read_msh(f);
  
     euler_operator.bc->set_boundary_conditions();
@@ -498,13 +510,16 @@ namespace SpaceDiscretization
   //   hand, Paraview is able to understand VTU files with higher order cells
   //   just fine.
   template <int dim, int n_vars>
-  void EulerProblem<dim, n_vars>::output_results(const unsigned int result_number)
+  void EulerProblem<dim, n_vars>::output_results(
+    Postprocessor      &postprocessor,
+    const unsigned int  result_number)
   {
     const std::array<double, 3> errors =
       euler_operator.compute_errors(ICBC::ExactSolution<dimension>(time), solution);
 //      euler_operator.compute_errors(
 //        euler_operator.icbc->set_initial_conditions(time), solution);
-    const std::string quantity_name = testcase == 0 ? "error" : "norm";
+    const std::string quantity_name =
+      postprocessor.do_error == 1 ? "error" : "norm";
 
     pcout << "Time:" << std::setw(8) << std::setprecision(3) << time
           << ", dt: " << std::setw(8) << std::setprecision(2) << time_step
@@ -516,7 +531,6 @@ namespace SpaceDiscretization
     {
       TimerOutput::Scope t(timer, "output");
 
-      Postprocessor postprocessor(gamma);
       DataOut<dim>  data_out;
 
       DataOutBase::VtkFlags flags;
@@ -546,7 +560,8 @@ namespace SpaceDiscretization
       data_out.add_data_vector(solution, postprocessor);
 
       LinearAlgebra::distributed::Vector<Number> reference;
-      if (testcase == 0 && dim == 2)
+
+      if (postprocessor.do_error && dim == 2)
         {
           reference.reinit(solution);
           euler_operator.project(ICBC::ExactSolution<dimension>(time), reference);
@@ -582,7 +597,8 @@ namespace SpaceDiscretization
                              DataOut<dim>::curved_inner_cells);
 
       const std::string filename =
-        "solution_" + Utilities::int_to_string(result_number, 3) + ".vtu";
+        postprocessor.output_filename + "_"
+        + Utilities::int_to_string(result_number, 3) + ".vtu";
       data_out.write_vtu_in_parallel(filename, MPI_COMM_WORLD);
     }
   }
@@ -647,7 +663,14 @@ namespace SpaceDiscretization
           << std::endl
           << std::endl;
 
-    output_results(0);
+    // We have moved the constructor of the `Postprocessor` class in this
+    // top level `run()`, so that we can pass it by reference to many
+    // functions that postprocess the solution. For now there the postprocess
+    // consists of only one function that print the solution and compute an
+    // error or norm of the solution.
+    Postprocessor postprocessor(prm);
+
+    output_results(postprocessor, 0);
 
     // Now we are ready to start the time loop, which we run until the time
     // has reached the desired end time. Every 5 time steps, we compute a new
@@ -664,6 +687,9 @@ namespace SpaceDiscretization
     // (e.g. 0.02), we also write the output. After the end of the time loop,
     // we summarize the computation by printing some statistics, which is
     // mostly done by the TimerOutput::print_wall_time_statistics() function.
+    prm.enter_subsection("Time parameters");
+    const double final_time = prm.get_double("Final_time");
+    prm.leave_subsection();
     unsigned int timestep_number = 0;
 
     while (time < final_time - 1e-12)
@@ -687,18 +713,19 @@ namespace SpaceDiscretization
 
         time += time_step;
 
-        if (static_cast<int>(time / output_tick) !=
-              static_cast<int>((time - time_step) / output_tick) ||
+        if (static_cast<int>(time / postprocessor.output_tick) !=
+              static_cast<int>((time - time_step) / postprocessor.output_tick) ||
             time >= final_time - 1e-12)
           output_results(
-            static_cast<unsigned int>(std::round(time / output_tick)));
+            postprocessor,
+            static_cast<unsigned int>(std::round(time / postprocessor.output_tick)));
       }
 
     timer.print_wall_time_statistics(MPI_COMM_WORLD);
     pcout << std::endl;
   }
 
-} // namespace SpaceDiscretization
+} // namespace Problem
 
 
 
@@ -709,7 +736,7 @@ namespace SpaceDiscretization
 // only with MPI, and set the thread count to 1.
 int main(int argc, char **argv)
 {
-  using namespace SpaceDiscretization;
+  using namespace Problem;
   using namespace dealii;
 
   Utilities::MPI::MPI_InitFinalize mpi_initialization(argc, argv, 1);
@@ -717,6 +744,17 @@ int main(int argc, char **argv)
   try
     {
       deallog.depth_console(0);
+
+      // We define `CommandLineParser` objects that parse the command line
+      IO::CommandLineParser prs;
+      prs.parse_command_line(argc, argv);
+
+      // We define `ParameterHandler` and `ParameterReader` objects, and let the latter 
+      // read in the parameter values from a configuration textfile. The values so
+      // read are then handed over to an instance of the EulerProblem class:
+      IO::ParameterHandler prm;
+      IO::ParameterReader  param(prm);      
+      param.read_parameters(argv[2]);
 
       // The boundary condition class is the only class declared as a pointer.
       // This is because we want to realize run-time polymrophism. In the base class 
@@ -737,8 +775,12 @@ int main(int argc, char **argv)
       Assert(false, ExcNotImplemented());
       return 0.;
 #endif 
-          
-      EulerProblem<dimension, n_variables> euler_problem(bc);
+      
+      // The EulerProblem class takes as argument the only two classes that have been
+      // previously defined and that are filled at runtime. One is the pointer class
+      // for the boundary conditions, the other is a reference to the parameter
+      // class to read the paramteres from an external config file.     
+      EulerProblem<dimension, n_variables> euler_problem(prm, bc);
       euler_problem.run();
       
       delete bc;

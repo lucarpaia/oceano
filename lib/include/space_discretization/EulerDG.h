@@ -145,14 +145,12 @@ namespace SpaceDiscretization
   public:
     static constexpr unsigned int n_quadrature_points_1d = n_points_1d;
 
-    EulerOperator(ICBC::BcBase<dim, n_vars> *bc,
-                  TimerOutput               &timer_output, 
-                  double                     gamma);
+    EulerOperator(IO::ParameterHandler      &param,
+                  ICBC::BcBase<dim, n_vars> *bc,
+                  TimerOutput               &timer_output);
 
     void reinit(const Mapping<dim> &   mapping,
                 const DoFHandler<dim> &dof_handler);
-
-    void set_body_force(std::unique_ptr<Function<dim>> body_force);
 
     void apply(const double                                      current_time,
                const LinearAlgebra::distributed::Vector<Number> &src,
@@ -201,8 +199,6 @@ namespace SpaceDiscretization
     return 0.;
 #endif
 
-    std::unique_ptr<Function<dim>> body_force;
-
     void local_apply_inverse_mass_matrix(
       const MatrixFree<dim, Number> &                   data,
       LinearAlgebra::distributed::Vector<Number> &      dst,
@@ -232,13 +228,13 @@ namespace SpaceDiscretization
 
   template <int dim, int n_vars, int degree, int n_points_1d>
   EulerOperator<dim, n_vars, degree, n_points_1d>::EulerOperator(
-    ICBC::BcBase<dim, n_vars>         *bc,  
-    TimerOutput                      &timer,
-    double                            gamma)
+    IO::ParameterHandler             &param,
+    ICBC::BcBase<dim, n_vars>        *bc,
+    TimerOutput                      &timer)
     : bc(bc)
     , timer(timer)
-    , euler(gamma)
-    , num_flux(gamma)
+    , euler(param)
+    , num_flux(param)
   {}
 
 
@@ -300,17 +296,6 @@ namespace SpaceDiscretization
 
 
 
-  template <int dim, int n_vars, int degree, int n_points_1d>
-  void EulerOperator<dim, n_vars, degree, n_points_1d>::set_body_force(
-    std::unique_ptr<Function<dim>> body_force)
-  {
-    AssertDimension(body_force->n_components, dim);
-
-    this->body_force = std::move(body_force);
-  }
-
-
-
   // @sect4{Local evaluators}
 
   // Now we proceed to the local evaluators for the Euler problem. The
@@ -356,14 +341,14 @@ namespace SpaceDiscretization
   // FEEvaluation::gather_evaluate() and FEEvaluation::integrate_scatter()
   // calls.
   //
-  // When it comes to the evaluation of the body force vector, we distinguish
-  // between two cases for efficiency reasons: In case we have a constant
-  // function (derived from Functions::ConstantFunction), we can precompute
-  // the value outside the loop over quadrature points and simply use the
-  // value everywhere. For a more general function, we instead need to call
-  // the `evaluate_function()` method we provided above; this path is more
-  // expensive because we need to access the memory associated with the
-  // quadrature point data.
+  // When it comes to the evaluation of the body force vector, we need to call
+  // the `evaluate_function()` method we provided above; Since the body force,
+  // in the general case is not a constant, we must call it inside the loop over
+  // quadrature point data, which of course is quite expensive.
+  // Once the body force has been computed we compute the body force term associated
+  // the right-hand side of the Euler equation inside the `source()` function,
+  // a member function of the model class.
+  //
   //
   // The rest follows the other tutorial programs. Since we have implemented
   // all physics for the Euler equations in the separate `euler.flux()`
@@ -399,14 +384,6 @@ namespace SpaceDiscretization
   {
     FEEvaluation<dim, degree, n_points_1d, n_vars, Number> phi(data);
 
-    Tensor<1, dim, VectorizedArray<Number>> constant_body_force;
-    const Functions::ConstantFunction<dim> *constant_function =
-      dynamic_cast<Functions::ConstantFunction<dim> *>(body_force.get());
-
-    if (constant_function)
-      constant_body_force = evaluate_function<dim, Number, dim>(
-        *constant_function, Point<dim, VectorizedArray<Number>>());
-
     for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
       {
         phi.reinit(cell);
@@ -416,24 +393,14 @@ namespace SpaceDiscretization
           {
             const auto w_q = phi.get_value(q);
             phi.submit_gradient(euler.flux<dim, n_vars>(w_q), q);
-            if (body_force.get() != nullptr)
-              {
-                const Tensor<1, dim, VectorizedArray<Number>> force =
-                  constant_function ? constant_body_force :
-                                      evaluate_function<dim, Number, dim>(
-                                        *body_force, phi.quadrature_point(q));
 
-                Tensor<1, n_vars, VectorizedArray<Number>> forcing;
-                for (unsigned int d = 0; d < dim; ++d)
-                  forcing[d + 1] = w_q[0] * force[d];
-                for (unsigned int d = 0; d < dim; ++d)
-                  forcing[dim + 1] += force[d] * w_q[d + 1];
-
-                phi.submit_value(forcing, q);
-              }
+            const Tensor<1, dim, VectorizedArray<Number>> body_force_q =
+              evaluate_function<dim, Number, dim>(
+                *bc->body_force, phi.quadrature_point(q));
+            phi.submit_value(euler.source<dim, n_vars>(w_q, body_force_q), q);
           }
 
-        phi.integrate_scatter(((body_force.get() != nullptr) ?
+        phi.integrate_scatter(((bc->body_force.get() != nullptr) ?
                                  EvaluationFlags::values :
                                  EvaluationFlags::nothing) |
                                 EvaluationFlags::gradients,

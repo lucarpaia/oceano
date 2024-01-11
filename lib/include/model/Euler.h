@@ -20,6 +20,9 @@
 #ifndef EULER_HPP
 #define EULER_HPP
 
+// The following files include the oceano libraries
+#include <io/ParameterReader.h>
+
 /**
  * Namespace containing the model equations.
  */
@@ -80,7 +83,7 @@ namespace Model
   class Euler
   {
   public:
-    Euler(double gamma);
+    Euler(IO::ParameterHandler &prm);
     ~Euler(){};
  
     double gamma;
@@ -119,6 +122,14 @@ namespace Model
       Tensor<1, n_vars, Tensor<1, dim, Number>>
       flux(const Tensor<1, n_vars, Number> &conserved_variables) const;
 
+    // Here is the definition of the Euler source function. In the source
+    // term we have coded only a body force ...
+    template <int dim, int n_vars, typename Number>
+    inline DEAL_II_ALWAYS_INLINE //
+      Tensor<1, n_vars, Number>
+      source(const Tensor<1, n_vars, Number> &conserved_variables,
+             const Tensor<1, dim, Number>    &body_force) const;
+
   protected:
     // This is the number of variables
     //unsigned int n_vars; 
@@ -132,16 +143,18 @@ namespace Model
   // or inlined. Both templated and inlined functions are hard to be separated
   // between declaration and implementation. We keep them in the header file. 
   
-  // The constructor of the model class takes as arguments the physical parameters
-  // which may be test-case/user dependent. These
+  // The constructor of the model class takes as arguments the parameters handler
+  // class in order to read the test-case/user dependent parameters. These
   // parameters are stored as class members. In this way they are defined/read 
   // from file in one place and then used whenever needed  with `model.param`, 
-  // instead of being read/defined multiple times. I hope this does not add 
-  // much overhead.
+  // instead of being read/defined multiple times.
   Euler::Euler(
-    double gamma)
-    : gamma(gamma)
-  {}
+    IO::ParameterHandler &prm)
+  {
+    prm.enter_subsection("Physical constants");
+    gamma = prm.get_double("g");
+    prm.leave_subsection();
+  }
   
   template <int dim, int n_vars, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
@@ -194,6 +207,21 @@ namespace Model
 
     return flux;
   }
-       
+
+  template <int dim, int n_vars, typename Number>
+  inline DEAL_II_ALWAYS_INLINE //
+    Tensor<1, n_vars, Number>
+    Euler::source(const Tensor<1, n_vars, Number> &conserved_variables,
+                  const Tensor<1, dim, Number>    &body_force) const
+  {
+    Tensor<1, n_vars, Number> source;
+    for (unsigned int d = 0; d < dim; ++d)
+        source[d + 1] = conserved_variables[0] * body_force[d];
+    for (unsigned int d = 0; d < dim; ++d)
+        source[dim + 1] += body_force[d] * conserved_variables[d + 1];
+
+    return source;
+  }
+
 } // namespace Model
 #endif //EULER_HPP

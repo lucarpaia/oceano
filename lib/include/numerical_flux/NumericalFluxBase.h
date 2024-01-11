@@ -86,7 +86,7 @@ namespace NumericalFlux
   class NumericalFluxBase
   {
   public:
-    NumericalFluxBase(double gamma);
+    NumericalFluxBase(IO::ParameterHandler &param);
     ~NumericalFluxBase(){};
                                     
   public:
@@ -94,8 +94,8 @@ namespace NumericalFlux
   };
 
   NumericalFluxBase::NumericalFluxBase(
-    double gamma)
-    : euler(gamma)
+    IO::ParameterHandler &param)
+    : euler(param)
   {} 
    
 } // namespace NumericalFlux

@@ -127,6 +127,7 @@ namespace ICBC
   };
 
 
+
   // The `Bc` class define the boundary conditions for the test-case.
   template <int dim, int n_vars>  
   class BcIsentropicVortex : public BcBase<dim, n_vars>
@@ -140,8 +141,6 @@ namespace ICBC
 
   }; 
 
-
-
   // Dirichlet boundary conditions (inflow) are specified all around the domain.
   template <int dim, int n_vars>
   void BcIsentropicVortex<dim, n_vars>::set_boundary_conditions()
@@ -149,6 +148,33 @@ namespace ICBC
      this->set_inflow_boundary(
        0, std::make_unique<ExactSolution<dim>>(0));
   }         
+
+
+
+  // The `BodyForce` class define the body force for the test-case.
+  // In this case it is null.
+  template <int dim>  
+  class BodyForce : public Function<dim>
+  {
+  public:
+    BodyForce()
+      : Function<dim>(dim)
+    {}
+
+    virtual double value(const Point<dim> & p,
+                         const unsigned int component = 0) const override;
+  };
+
+  template <int dim>
+  double BodyForce<dim>::value(const Point<dim> & x,
+                               const unsigned int component) const
+  {
+    (void)x;
+    if (component == 1)
+      return 0.;
+    else
+      return 0.;
+  }
     
 } // namespace ICBC
 
