@@ -122,12 +122,6 @@ namespace Problem
   const double courant_number = 0.15 / std::pow(fe_degree, 1.5);
   constexpr TimeIntegrator::LowStorageRungeKuttaScheme lsrk_scheme = TimeIntegrator::stage_5_order_4;
 
-  // Eventually, we select a detail of the spatial discretization, namely the
-  // numerical flux (Riemann solver) at the faces between cells. For this
-  // program, we have implemented a modified variant of the Lax--Friedrichs
-  // flux and the Harten--Lax--van Leer (HLL) flux.
-//  constexpr NumericalFlux::EulerNumericalFlux numerical_flux_type = NumericalFlux::lax_friedrichs_modified;
-
 
 
   // @sect3{The EulerProblem class}
