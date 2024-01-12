@@ -32,10 +32,15 @@
 // we use instead c++ preprocessors. C++ preprocessor allows to avoid interface classes
 // and to define just the classes actually used.
 
-// The following are the preprocessors that select the initial and boundary conditions
-#undef ICBC_ISENTROPICVORTEX
-#define   ICBC_FLOWAROUNDCYLINDER
-// and numerical flux:
+// The following are the preprocessors that select the initial and boundary conditions.
+// We implement two different test cases. The first one is an analytical
+// solution in 2d, whereas the second is a channel flow around a cylinder as
+// described in the introduction.
+#define ICBC_ISENTROPICVORTEX
+#undef  ICBC_FLOWAROUNDCYLINDER
+// and numerical flux (Riemann solver) at the faces between cells. For this
+// program, we have implemented a modified variant of the Lax--Friedrichs
+// flux and the Harten--Lax--van Leer (HLL) flux:
 #define  NUMERICALFLUX_LAXFRIEDRICHSMODIFIED
 #undef    NUMERICALFLUX_HARTENVANLEER
 // The include files are similar to the previous matrix-free tutorial programs
@@ -75,7 +80,7 @@
 // file for this tutorial program:
 #include <deal.II/matrix_free/operators.h>
 
-// The following files include the oceano libraries
+// The following files include the oceano libraries:
 #include <time_integrator/LowStorageRungeKuttaIntegrator.h>
 #include <space_discretization/EulerDG.h>
 #include <io/CommandLineParser.h>
@@ -94,31 +99,18 @@ namespace Problem
 {
   using namespace dealii;
 
-  // Similarly to the other matrix-free tutorial programs, we collect all
-  // parameters that control the execution of the program at the top of the
-  // file. Besides the dimension and polynomial degree we want to run with, we
+  // We collect some parameters that control the execution of the program at the top of the
+  // file. These are parameters that the user should not change for operational 
+  // simuations. They can be thus considered known at compile time leading, I guess,
+  // to some optimization. Besides the dimension and polynomial degree we want to run with, we
   // also specify a number of points in the Gaussian quadrature formula we
-  // want to use for the nonlinear terms in the Euler equations. Furthermore,
-  // we specify the time interval for the time-dependent problem, and
-  // implement two different test cases. The first one is an analytical
-  // solution in 2d, whereas the second is a channel flow around a cylinder as
-  // described in the introduction. Depending on the test case, we also change
-  // the final time up to which we run the simulation, and a variable
-  // `output_tick` that specifies in which intervals we want to write output
-  // (assuming that the tick is larger than the time step size).
-  //constexpr unsigned int testcase             = 0;
+  // want to use for the nonlinear terms in the Euler equations.
   constexpr unsigned int dimension            = 2;
   constexpr unsigned int n_variables          = dimension + 2;  
-  //constexpr unsigned int n_global_refinements = 0;
   constexpr unsigned int fe_degree            = 1;
   constexpr unsigned int n_q_points_1d        = fe_degree + 2;
-  //const     char*        mshfile              = "isentropicVortex.msh";
 
   using Number = double;
-
-  //constexpr double gamma       = 1.4;
-  //constexpr double final_time  = testcase == 0 ? 10 : 2.0;
-  //constexpr double output_tick = testcase == 0 ? 1 : 0.05;
 
   // Next off are some details of the time integrator, namely a Courant number
   // that scales the time step size in terms of the formula $\Delta t =
