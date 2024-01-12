@@ -46,13 +46,15 @@ namespace ICBC
   // @sect3{Equation data}
 
   // The class `ExactSolution` defines analytical functions that can be useful
-  // to define initial and boundary conditions.
-  template <int dim>  
+  // to define initial and boundary conditions. Apart for the template for the
+  // dimension which is in common with the base `Function` class, we have added
+  // the number of variables. 
+  template <int dim, int n_vars>  
   class ExactSolution : public Function<dim>
   {
   public:
     ExactSolution(const double time)
-      : Function<dim>(dim + 2, time)
+      : Function<dim>(n_vars, time)
     {}
 
     virtual double value(const Point<dim> & p,
@@ -74,9 +76,9 @@ namespace ICBC
   // corresponds to a speed of sound of 1.3 measured against the background
   // velocity field, computed from the relation $E = \frac{c^2}{\gamma (\gamma
   // -1)} + \frac 12 \rho \|u\|^2$.
-  template <int dim>
-  double ExactSolution<dim>::value(const Point<dim> & x,
-                                   const unsigned int component) const
+  template <int dim, int n_vars>
+  double ExactSolution<dim, n_vars>::value(const Point<dim> & x,
+                                           const unsigned int component) const
   {
     const double t = this->get_time();
 
@@ -117,12 +119,12 @@ namespace ICBC
   // This is realized here thanks to a derived class of `ExactSolution` that 
   // overload the the constructor of the base class providing automatically 
   // a zero time
-  template <int dim>  
-  class Ic : public ExactSolution<dim>
+  template <int dim, int n_vars>  
+  class Ic : public ExactSolution<dim, n_vars>
   {
   public:
     Ic()
-      : ExactSolution<dim>(0.)
+      : ExactSolution<dim, n_vars>(0.)
     {}
   };
 
@@ -146,7 +148,7 @@ namespace ICBC
   void BcIsentropicVortex<dim, n_vars>::set_boundary_conditions()
   {
      this->set_inflow_boundary(
-       0, std::make_unique<ExactSolution<dim>>(0));
+       0, std::make_unique<ExactSolution<dim, n_vars>>(0));
   }         
 
 

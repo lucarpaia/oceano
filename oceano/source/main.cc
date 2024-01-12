@@ -33,8 +33,8 @@
 // and to define just the classes actually used.
 
 // The following are the preprocessors that select the initial and boundary conditions
-#define  ICBC_ISENTROPICVORTEX
-#undef   ICBC_FLOWAROUNDCYLINDER
+#undef ICBC_ISENTROPICVORTEX
+#define   ICBC_FLOWAROUNDCYLINDER
 // and numerical flux:
 #define  NUMERICALFLUX_LAXFRIEDRICHSMODIFIED
 #undef    NUMERICALFLUX_HARTENVANLEER
@@ -407,7 +407,9 @@ namespace Problem
   void EulerProblem<dim, n_vars>::make_grid_and_dofs()
   {
 
-    euler_operator.bc->set_body_force(std::make_unique<ICBC::BodyForce<dim>>());
+    euler_operator.bc->set_body_force(
+      std::make_unique<Functions::ConstantFunction<dim>>(
+        std::vector<double>({0., 0.})));
 
     // The class GridIn can read many different mesh formats from a 
     // file from disk. In order to read a grid from a file, we generate an object 
@@ -515,9 +517,9 @@ namespace Problem
     const unsigned int  result_number)
   {
     const std::array<double, 3> errors =
-      euler_operator.compute_errors(ICBC::ExactSolution<dimension>(time), solution);
-//      euler_operator.compute_errors(
-//        euler_operator.icbc->set_initial_conditions(time), solution);
+      euler_operator.compute_errors(
+        ICBC::ExactSolution<dimension, n_variables>(time), solution);
+
     const std::string quantity_name =
       postprocessor.do_error == 1 ? "error" : "norm";
 
@@ -564,7 +566,8 @@ namespace Problem
       if (postprocessor.do_error && dim == 2)
         {
           reference.reinit(solution);
-          euler_operator.project(ICBC::ExactSolution<dimension>(time), reference);
+          euler_operator.project(
+            ICBC::ExactSolution<dimension, n_variables>(time), reference);
           reference.sadd(-1., 1, solution);
           std::vector<std::string> names;
           names.emplace_back("error_density");
@@ -644,7 +647,7 @@ namespace Problem
     rk_register_1.reinit(solution);
     rk_register_2.reinit(solution);
 
-    euler_operator.project(ICBC::Ic<dimension>(), solution);
+    euler_operator.project(ICBC::Ic<dimension, n_variables>(), solution);
 
     double min_vertex_distance = std::numeric_limits<double>::max();
     for (const auto &cell : triangulation.active_cell_iterators())
