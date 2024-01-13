@@ -88,12 +88,6 @@ namespace Model
  
     double gamma;
 
-    // This function returns the number of variables
-    /*inline unsigned int get_nvar() const 
-    {
-      return n_vars;
-    }*/
-
     // The next function computes the velocity from the vector of conserved
     // variables
     template <int dim, int n_vars, typename Number>
@@ -107,7 +101,7 @@ namespace Model
     // velocity from the `velocity()` function. Note that we need to
     // specify the first template argument `dim` here because the compiler is
     // not able to deduce it from the arguments of the tensor, whereas the
-    // second argument (number type) can be automatically deduced.
+    // third argument (number type) can be automatically deduced.
     template <int dim, int n_vars, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Number
@@ -130,9 +124,22 @@ namespace Model
       source(const Tensor<1, n_vars, Number> &conserved_variables,
              const Tensor<1, dim, Number>    &body_force) const;
 
-  protected:
-    // This is the number of variables
-    //unsigned int n_vars; 
+    // The next function computes an estimate of the square of the speed from the vector of conserved
+    // variables, using the formula $\lambda^2 =  \|\mathbf{u}\|^2+c^2$. The estimate 
+    // instead of the the true formula is justyfied by efficiency arguments (one evaluation of the square root 
+    // instead of four). Moroever for low Mach applications, the error committed is very small.
+    template <int dim, int n_vars, typename Number>
+    inline DEAL_II_ALWAYS_INLINE //
+      Number
+      square_speed_estimate(
+        const Tensor<1, n_vars, Number> &conserved_variables) const;
+
+    // The next function computes an the square of the speed of sound:
+    template <int dim, int n_vars, typename Number>
+    inline DEAL_II_ALWAYS_INLINE //
+      Number
+      square_wavespeed(
+        const Tensor<1, n_vars, Number> &conserved_variables) const;
     
   };
   
@@ -221,6 +228,28 @@ namespace Model
         source[dim + 1] += body_force[d] * conserved_variables[d + 1];
 
     return source;
+  }
+
+  template <int dim, int n_vars, typename Number>
+  inline DEAL_II_ALWAYS_INLINE //
+    Number
+    Euler::square_speed_estimate(
+      const Tensor<1, n_vars, Number> &conserved_variables) const
+  {
+    const auto v = velocity<dim, n_vars>(conserved_variables);
+    const auto p = pressure<dim, n_vars>(conserved_variables);
+    
+    return v.norm_square() + gamma * p * (1. / conserved_variables[0]);
+  }
+
+  template <int dim, int n_vars, typename Number>
+  inline DEAL_II_ALWAYS_INLINE //
+    Number
+    Euler::square_wavespeed(const Tensor<1, n_vars, Number> &conserved_variables) const
+  {
+    const auto p = pressure<dim, n_vars>(conserved_variables);
+    
+    return gamma * p * (1. / conserved_variables[0]);
   }
 
 } // namespace Model

@@ -101,20 +101,19 @@ namespace NumericalFlux
       const Tensor<1, n_vars, Number>  &u_p,
       const Tensor<1, dim, Number> &     normal) const
   {
-    const auto velocity_m = euler.velocity<dim>(u_m);
-    const auto velocity_p = euler.velocity<dim>(u_p);
+    const auto velocity_m = euler.velocity<dim, n_vars>(u_m);
+    const auto velocity_p = euler.velocity<dim, n_vars>(u_p);
 
-    const auto pressure_m = euler.pressure<dim>(u_m);
-    const auto pressure_p = euler.pressure<dim>(u_p);
+    const auto csquare_m = euler.square_wavespeed<dim, n_vars>(u_m);
+    const auto csquare_p = euler.square_wavespeed<dim, n_vars>(u_p);
 
-    const auto flux_m = euler.flux<dim>(u_m);
-    const auto flux_p = euler.flux<dim>(u_p);
+    const auto flux_m = euler.flux<dim, n_vars>(u_m);
+    const auto flux_p = euler.flux<dim, n_vars>(u_p);
 
     const auto avg_velocity_normal =
       0.5 * ((velocity_m + velocity_p) * normal);
     const auto   avg_c = std::sqrt(std::abs(
-      0.5 * euler.gamma *
-      (pressure_p * (1. / u_p[0]) + pressure_m * (1. / u_m[0]))));
+      0.5 * (csquare_p + csquare_m)));
     const Number s_pos =
       std::max(Number(), avg_velocity_normal + avg_c);
     const Number s_neg =

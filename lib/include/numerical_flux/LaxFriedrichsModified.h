@@ -104,8 +104,7 @@ namespace NumericalFlux
   // parameters are stored as class members.
   // In this way they are defined/read from file in one place and then used 
   // whenever needed with `numerical_flux.param`, instead of being read/defined 
-  // multiple times. I hope this does not add much overhead. The physical parameter
-  // `gamma` is also passed to construct the model class.
+  // multiple times. I hope this does not add much overhead.
   LaxFriedrichsModified::LaxFriedrichsModified(
     IO::ParameterHandler &param)
     : NumericalFluxBase(param)
@@ -119,20 +118,14 @@ namespace NumericalFlux
       const Tensor<1, n_vars, Number>  &u_p,
       const Tensor<1, dim, Number> &     normal) const
   {
-    const auto velocity_m = euler.velocity<dim, n_vars>(u_m);
-    const auto velocity_p = euler.velocity<dim, n_vars>(u_p);
-
-    const auto pressure_m = euler.pressure<dim, n_vars>(u_m);
-    const auto pressure_p = euler.pressure<dim, n_vars>(u_p);
+    const auto lambda_m = euler.square_speed_estimate<dim, n_vars>(u_m);
+    const auto lambda_p = euler.square_speed_estimate<dim, n_vars>(u_p);
 
     const auto flux_m = euler.flux<dim, n_vars>(u_m);
     const auto flux_p = euler.flux<dim, n_vars>(u_p);
 
     const auto lambda =
-      0.5 * std::sqrt(std::max(velocity_p.norm_square() +
-                                 euler.gamma * pressure_p * (1. / u_p[0]),
-                               velocity_m.norm_square() +
-                                 euler.gamma * pressure_m * (1. / u_m[0])));
+      0.5 * std::sqrt(std::max(lambda_p, lambda_m));
 
     return 0.5 * (flux_m * normal + flux_p * normal) +
            0.5 * lambda * (u_m - u_p);
