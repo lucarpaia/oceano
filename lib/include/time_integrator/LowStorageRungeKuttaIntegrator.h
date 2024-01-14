@@ -86,16 +86,6 @@ namespace TimeIntegrator
       return bi.size();
     }
 
-    template <typename Operator>
-    void perform_stage_debuggggggggg(const Operator                                   &pde_operator,
-                                     const Number                                      current_time,
-                                     const Number                                      factor_solution,
-                                     const Number                                      factor_ai,
-                                     const LinearAlgebra::distributed::Vector<Number> &current_ri,
-                                     LinearAlgebra::distributed::Vector<Number> &      vec_ki,
-                                     LinearAlgebra::distributed::Vector<Number> &      solution,
-                                     LinearAlgebra::distributed::Vector<Number> &      next_ri) const;
-
     template <typename VectorType, typename Operator>                                   
     void perform_time_step(const Operator &pde_operator,
                            const double    current_time,
@@ -173,113 +163,6 @@ namespace TimeIntegrator
     rk_integrator.get_coefficients(ai, bi, ci);
   }
   
-  // Let us move to the function that does an entire stage of a Runge--Kutta
-  // update. It calls EulerOperator::apply() followed by some updates
-  // to the vectors, namely `next_ri = solution + factor_ai * k_i` and
-  // `solution += factor_solution * k_i`. Rather than performing these
-  // steps through the vector interfaces, we here present an alternative
-  // strategy that is faster on cache-based architectures. As the memory
-  // consumed by the vectors is often much larger than what fits into caches,
-  // the data has to effectively come from the slow RAM memory. The situation
-  // can be improved by loop fusion, i.e., performing both the updates to
-  // `next_ki` and `solution` within a single sweep. In that case, we would
-  // read the two vectors `rhs` and `solution` and write into `next_ki` and
-  // `solution`, compared to at least 4 reads and two writes in the baseline
-  // case. Here, we go one step further and perform the loop immediately when
-  // the mass matrix inversion has finished on a part of the
-  // vector. MatrixFree::cell_loop() provides a mechanism to attach an
-  // `std::function` both before the loop over cells first touches a vector
-  // entry (which we do not use here, but is e.g. used for zeroing the vector)
-  // and a second `std::function` to be called after the loop last touches
-  // an entry. The callback is in form of a range over the given vector (in
-  // terms of the local index numbering in the MPI universe) that can be
-  // addressed by `local_element()` functions.
-  //
-  // For this second callback, we create a lambda that works on a range and
-  // write the respective update on this range. Ideally, we would add the
-  // `DEAL_II_OPENMP_SIMD_PRAGMA` before the local loop to suggest to the
-  // compiler to SIMD parallelize this loop (which means in practice that we
-  // ensure that there is no overlap, also called aliasing, between the index
-  // ranges of the pointers we use inside the loops). It turns out that at the
-  // time of this writing, GCC 7.2 fails to compile an OpenMP pragma inside a
-  // lambda function, so we comment this pragma out below. If your compiler is
-  // newer, you should be able to uncomment these lines again.
-  //
-  // Note that we select a different code path for the last
-  // Runge--Kutta stage when we do not need to update the `next_ri`
-  // vector. This strategy gives a considerable speedup. Whereas the inverse
-  // mass matrix and vector updates take more than 60% of the computational
-  // time with default vector updates on a 40-core machine, the percentage is
-  // around 35% with the more optimized variant. In other words, this is a
-  // speedup of around a third.
-  template <typename Operator>
-  void LowStorageRungeKuttaIntegrator::perform_stage_debuggggggggg(
-                                   const Operator                                   &pde_operator,
-                                   const Number                                      current_time,
-                                   const Number                                      factor_solution,
-                                   const Number                                      factor_ai,
-                                   const LinearAlgebra::distributed::Vector<Number> &current_ri,
-                                   LinearAlgebra::distributed::Vector<Number> &      vec_ki,
-                                   LinearAlgebra::distributed::Vector<Number> &      solution,
-                                   LinearAlgebra::distributed::Vector<Number> &      next_ri) const
-  {
-    {
-      TimerOutput::Scope t(pde_operator.timer, "rk_stage - integrals L_h");
-      
-      for (auto &i : pde_operator.inflow_boundaries)
-        i.second->set_time(current_time);
-      for (auto &i : pde_operator.subsonic_outflow_boundaries)
-        i.second->set_time(current_time);
-      
-/*        pde_operator.data.loop(&EulerOperator::local_apply_cell,
-                               &EulerOperator::local_apply_face,
-                               &EulerOperator::local_apply_boundary_face,
-                               this,
-                               vec_ki,
-                               current_ri,
-                               true,
-                               MatrixFree<dim, Number>::DataAccessOnFaces::values,
-                               MatrixFree<dim, Number>::DataAccessOnFaces::values);*/
-
-    }
-
-
-    {   
-      TimerOutput::Scope t(pde_operator.timer, "rk_stage - inv mass + vec upd");
-      pde_operator.data.cell_loop(
-        pde_operator.local_apply_inverse_mass_matrix,
-        pde_operator,
-        next_ri,
-        vec_ki,   
-        std::function<void(const unsigned int, const unsigned int)>(),
-        [&](const unsigned int start_range, const unsigned int end_range) {
-          const Number ai = factor_ai;
-          const Number bi = factor_solution;
-          if (ai == Number())
-            {     
-              /* DEAL_II_OPENMP_SIMD_PRAGMA */
-              for (unsigned int i = start_range; i < end_range; ++i)
-                {
-                  const Number k_i          = next_ri.local_element(i);
-                  const Number sol_i        = solution.local_element(i);
-                  solution.local_element(i) = sol_i + bi * k_i;
-                }
-            }
-          else
-            {
-              /* DEAL_II_OPENMP_SIMD_PRAGMA */
-              for (unsigned int i = start_range; i < end_range; ++i)
-                {
-                  const Number k_i          = next_ri.local_element(i);
-                  const Number sol_i        = solution.local_element(i);
-                  solution.local_element(i) = sol_i + bi * k_i;
-                  next_ri.local_element(i)  = sol_i + ai * k_i;
-                }
-            }
-        });
-    }
-  }
-
   // The main function of the time integrator is to go through the stages,
   // evaluate the operator, prepare the $\mathbf{r}_i$ vector for the next
   // evaluation, and update the solution vector $\mathbf{w}$. We hand off
@@ -315,14 +198,6 @@ namespace TimeIntegrator
                                vec_ri,
                                solution,
                                vec_ri);
-/*       perform_stage_debuggggggggg(pde_operator,
-                                 current_time,
-                                 bi[0] * time_step,
-                                 ai[0] * time_step,
-                                 solution,
-                                 vec_ri,
-                                 solution,
-                                 vec_ri);*/
 
     for (unsigned int stage = 1; stage < bi.size(); ++stage)
       {
