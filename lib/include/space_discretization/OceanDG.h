@@ -122,7 +122,7 @@ namespace SpaceDiscretization
 
   // @sect3{The OceanoOperation class}
 
-  // This class implements the evaluators for the Euler problem, in analogy to
+  // This class implements the evaluators for the ocean problem, in analogy to
   // the `LaplaceOperator` class of step-37 or step-59. Since the present
   // operator is non-linear and does not require a matrix interface (to be
   // handed over to preconditioners), we skip the various `vmult` functions
@@ -252,7 +252,7 @@ namespace SpaceDiscretization
 
 
 
-  // For the initialization of the Euler operator, we set up the MatrixFree
+  // For the initialization of the ocean operator, we set up the MatrixFree
   // variable contained in the class. This can be done given a mapping to
   // describe possible curved boundaries as well as a DoFHandler object
   // describing the degrees of freedom. Since we use a discontinuous Galerkin
@@ -264,7 +264,7 @@ namespace SpaceDiscretization
   // based on a template parameter `n_points_1d` (that will be assigned the
   // `n_points_1d` value specified at the top of this file). More accurate
   // integration is necessary to avoid the aliasing problem due to the
-  // variable coefficients in the Euler operator. The second less accurate
+  // variable coefficients in the ocean operator. The second less accurate
   // quadrature formula is a tight one based on `degree+1` and needed for
   // the inverse mass matrix. While that formula provides an exact inverse
   // only on affine element shapes and not on deformed elements, it enables
@@ -311,7 +311,7 @@ namespace SpaceDiscretization
 
   // @sect4{Local evaluators}
 
-  // Now we proceed to the local evaluators for the Euler problem. The
+  // Now we proceed to the local evaluators for the ocean problem. The
   // evaluators are relatively simple and follow what has been presented in
   // step-37, step-48, or step-59. The first notable difference is the fact
   // that we use an FEEvaluation with a non-standard number of quadrature
@@ -330,7 +330,7 @@ namespace SpaceDiscretization
   // previously. The matrix-free framework provides several ways to handle the
   // multi-component case. The variant shown here utilizes an FEEvaluation
   // object with multiple components embedded into it, specified by the fourth
-  // template argument `n_vars` for the components in the Euler system. As a
+  // template argument `n_vars` for the components in the shallow water system. As a
   // consequence, the return type of FEEvaluation::get_value() is not a scalar
   // any more (that would return a VectorizedArray type, collecting data from
   // several elements), but a Tensor of `n_vars` components. The functionality
@@ -359,7 +359,7 @@ namespace SpaceDiscretization
   // in the general case is not a constant, we must call it inside the loop over
   // quadrature point data, which of course is quite expensive.
   // Once the body force has been computed we compute the body force term associated
-  // the right-hand side of the Euler equation inside the `source()` function,
+  // the right-hand side of the shallow water equation inside the `source()` function,
   // a member function of the model class.
   //
   //
@@ -370,7 +370,7 @@ namespace SpaceDiscretization
   // `phi.get_value(q)`, and tell the FEEvaluation object to queue the flux
   // for testing it by the gradients of the shape functions (which is a Tensor
   // of outer `n_vars` components, each holding a tensor of `dim` components
-  // for the $x,y,z$ component of the Euler flux). One final thing worth
+  // for the $x,y,z$ component of the shallow water flux). One final thing worth
   // mentioning is the order in which we queue the data for testing by the
   // value of the test function, `phi.submit_value()`, in case we are given an
   // external function: We must do this after calling `phi.get_value(q)`,
@@ -692,7 +692,7 @@ namespace SpaceDiscretization
 
   // @sect4{The apply() and related functions}
 
-  // We now come to the function which implements the evaluation of the Euler
+  // We now come to the function which implements the evaluation of the ocean
   // operator as a whole, i.e., $\mathcal M^{-1} \mathcal L(t, \mathbf{w})$,
   // calling into the local evaluators presented above. The steps should be
   // clear from the previous code. One thing to note is that we need to adjust
@@ -1016,7 +1016,7 @@ namespace SpaceDiscretization
 
   // This final function of the OceanoOperator class is used to estimate the
   // transport speed, scaled by the mesh size, that is relevant for setting
-  // the time step size in the explicit time integrator. In the Euler
+  // the time step size in the explicit time integrator. In the shallow water
   // equations, there are two speeds of transport, namely the convective
   // velocity $\mathbf{u}$ and the propagation of sound waves with sound
   // speed $c = \sqrt{\gamma p/\rho}$ relative to the medium moving at

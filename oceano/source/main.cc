@@ -89,7 +89,7 @@
 
 // The following files include the oceano libraries:
 #include <time_integrator/LowStorageRungeKuttaIntegrator.h>
-#include <space_discretization/EulerDG.h>
+#include <space_discretization/OceanDG.h>
 #include <io/CommandLineParser.h>
 // The following files are included depending on
 // the Preprocessor keys. This is necessary because 
