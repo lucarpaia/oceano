@@ -113,7 +113,7 @@ namespace Problem
   // simuations. They can be thus considered known at compile time leading, I guess,
   // to some optimization. Besides the dimension and polynomial degree we want to run with, we
   // also specify a number of points in the Gaussian quadrature formula we
-  // want to use for the nonlinear terms in the Euler equations.
+  // want to use for the nonlinear terms in the shallow water equations.
   constexpr unsigned int dimension            = 2;
   constexpr unsigned int fe_degree            = 1;
   constexpr unsigned int n_q_points_1d        = fe_degree + 2;
@@ -138,16 +138,16 @@ namespace Problem
 
 
 
-  // @sect3{The EulerProblem class}
+  // @sect3{The OceanoProblem class}
 
-  // This class combines the EulerOperator class with the time integrator and
+  // This class combines the OceanoOperator class with the time integrator and
   // the usual global data structures such as FiniteElement and DoFHandler, to
-  // actually run the simulations of the Euler problem.
+  // actually run the simulations of the shallow water problem.
   //
   // The member variables are a triangulation, a finite element, a mapping (to
   // create high-order curved surfaces, see e.g. step-10), and a DoFHandler to
   // describe the degrees of freedom. In addition, we keep an instance of the
-  // EulerOperator described above around, which will do all heavy lifting in
+  // OceanoOperator described above around, which will do all heavy lifting in
   // terms of integrals, and some parameters for time integration like the
   // current time or the time step size.
   //
@@ -167,10 +167,10 @@ namespace Problem
   // (Tensor and Functions for example) that are defined in nested classes
   // needs to inherit `dim` and `n_vars`. 
   template <int dim, int n_vars>
-  class EulerProblem
+  class OceanoProblem
   {
   public:
-    EulerProblem(IO::ParameterHandler       &,
+    OceanoProblem(IO::ParameterHandler       &,
                  ICBC::BcBase<dim, n_vars>* bc);
 
     void run();
@@ -196,8 +196,8 @@ namespace Problem
 
     TimerOutput timer;
 
-    SpaceDiscretization::EulerOperator<dim, n_vars, fe_degree, n_q_points_1d>
-      euler_operator;
+    SpaceDiscretization::OceanoOperator<dim, n_vars, fe_degree, n_q_points_1d>
+      oceano_operator;
 
     double time, time_step;
 
@@ -241,7 +241,7 @@ namespace Problem
   // class in order to read the output parameters defined from the parameter file. These
   // parameters are stored as class members.
   template <int dim, int n_vars>
-  EulerProblem<dim, n_vars>::Postprocessor::Postprocessor(
+  OceanoProblem<dim, n_vars>::Postprocessor::Postprocessor(
     IO::ParameterHandler &prm)
     : model(prm)
   {
@@ -268,7 +268,7 @@ namespace Problem
   // For the postprocessed variables, a well defined order must be followed: first the
   // velocity vector, then all the scalars.
   template <int dim, int n_vars>
-  void EulerProblem<dim, n_vars>::Postprocessor::evaluate_vector_field(
+  void OceanoProblem<dim, n_vars>::Postprocessor::evaluate_vector_field(
     const DataPostprocessorInputs::Vector<dim> &inputs,
     std::vector<Vector<double>> &               computed_quantities) const
   {
@@ -322,7 +322,7 @@ namespace Problem
 
 
   template <int dim, int n_vars>
-  std::vector<std::string> EulerProblem<dim, n_vars>::Postprocessor::get_names() const
+  std::vector<std::string> OceanoProblem<dim, n_vars>::Postprocessor::get_names() const
   {
     std::vector<std::string> postproc_names = model.postproc_vars_name;
 
@@ -336,7 +336,7 @@ namespace Problem
   // the momentum and the velocity.
   template <int dim, int n_vars>
   std::vector<DataComponentInterpretation::DataComponentInterpretation>
-  EulerProblem<dim, n_vars>::Postprocessor::get_data_component_interpretation() const
+  OceanoProblem<dim, n_vars>::Postprocessor::get_data_component_interpretation() const
   {
     const std::vector<std::string> postproc_names = model.postproc_vars_name;
 
@@ -357,7 +357,7 @@ namespace Problem
   // all quantities but, as already said, some postprocessed variables are based on the
   // solution gradient. For now the last choise has been commented and it is not available.
   template <int dim, int n_vars>
-  UpdateFlags EulerProblem<dim, n_vars>::Postprocessor::get_needed_update_flags() const
+  UpdateFlags OceanoProblem<dim, n_vars>::Postprocessor::get_needed_update_flags() const
   {
     //if (do_schlieren_plot == true)
     //  return update_values | update_gradients;
@@ -373,7 +373,7 @@ namespace Problem
   // high-order mapping of the same degree as the underlying finite element,
   // and initialize the time and time step to zero.
   template <int dim, int n_vars>
-  EulerProblem<dim, n_vars>::EulerProblem(IO::ParameterHandler      &param,
+  OceanoProblem<dim, n_vars>::OceanoProblem(IO::ParameterHandler      &param,
                                           ICBC::BcBase<dim, n_vars>* bc)
     : prm(param)
     , pcout(std::cout, Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
@@ -384,7 +384,7 @@ namespace Problem
     , mapping(fe_degree)
     , dof_handler(triangulation)
     , timer(pcout, TimerOutput::never, TimerOutput::wall_times)
-    , euler_operator(param, bc, timer)
+    , oceano_operator(param, bc, timer)
     , time(0)
     , time_step(0)
   {}
@@ -408,12 +408,12 @@ namespace Problem
   // GridGenerator::channel_with_cylinder()), we can then perform the
   // specified number of global refinements, create the unknown numbering from
   // the DoFHandler, and hand the DoFHandler and Mapping objects to the
-  // initialization of the EulerOperator.
+  // initialization of the OceanoOperator.
   template <int dim, int n_vars>
-  void EulerProblem<dim, n_vars>::make_grid_and_dofs()
+  void OceanoProblem<dim, n_vars>::make_grid_and_dofs()
   {
 
-    euler_operator.bc->set_body_force(
+    oceano_operator.bc->set_body_force(
       std::make_unique<Functions::ConstantFunction<dim>>(
         std::vector<double>({0., 0.})));
 
@@ -442,14 +442,14 @@ namespace Problem
 
     gridin.read_msh(f);
  
-    euler_operator.bc->set_boundary_conditions();
+    oceano_operator.bc->set_boundary_conditions();
 
     triangulation.refine_global(n_global_refinements);
 
     dof_handler.distribute_dofs(fe);
 
-    euler_operator.reinit(mapping, dof_handler);
-    euler_operator.initialize_vector(solution);
+    oceano_operator.reinit(mapping, dof_handler);
+    oceano_operator.initialize_vector(solution);
 
     // In the following, we output some statistics about the problem. Because we
     // often end up with quite large numbers of cells or degrees of freedom, we
@@ -518,13 +518,13 @@ namespace Problem
   //   hand, Paraview is able to understand VTU files with higher order cells
   //   just fine.
   template <int dim, int n_vars>
-  void EulerProblem<dim, n_vars>::output_results(
+  void OceanoProblem<dim, n_vars>::output_results(
     Postprocessor      &postprocessor,
     const unsigned int  result_number)
   {
     const unsigned int n_tra = n_vars-dim-1;
     const std::array<double, n_vars-dim+1> errors =
-      euler_operator.compute_errors(
+      oceano_operator.compute_errors(
         ICBC::ExactSolution<dimension, n_variables>(time), solution);
 
     const std::string quantity_name =
@@ -573,7 +573,7 @@ namespace Problem
       if (postprocessor.do_error && dim == 2)
         {
           reference.reinit(solution);
-          euler_operator.project(
+          oceano_operator.project(
             ICBC::ExactSolution<dimension, n_variables>(time), reference);
           reference.sadd(-1., 1, solution);
           std::vector<std::string> names;
@@ -617,7 +617,7 @@ namespace Problem
 
 
 
-  // The EulerProblem::run() function puts all pieces together. It starts off
+  // The OceanoProblem::run() function puts all pieces together. It starts off
   // by calling the function that creates the mesh and sets up data structures,
   // and then initializing the time integrator and the two temporary vectors of
   // the low-storage integrator. We call these vectors `rk_register_1` and
@@ -625,13 +625,13 @@ namespace Problem
   // $\mathbf{r}_i$ and the second one for $\mathbf{k}_i$ in the formulas for
   // the Runge--Kutta scheme outlined in the introduction. Before we start the
   // time loop, we compute the time step size by the
-  // `EulerOperator::compute_cell_transport_speed()` function. For reasons of
+  // `OceanoOperator::compute_cell_transport_speed()` function. For reasons of
   // comparison, we compare the result obtained there with the minimal mesh
   // size and print them to screen. For velocities and speeds of sound close
   // to unity as in this tutorial program, the predicted effective mesh size
   // will be close, but they could vary if scaling were different.
   template <int dim, int n_vars>
-  void EulerProblem<dim, n_vars>::run()
+  void OceanoProblem<dim, n_vars>::run()
   {
     {
       const unsigned int n_vect_number = VectorizedArray<Number>::size();
@@ -656,7 +656,7 @@ namespace Problem
     rk_register_1.reinit(solution);
     rk_register_2.reinit(solution);
 
-    euler_operator.project(ICBC::Ic<dimension, n_variables>(), solution);
+    oceano_operator.project(ICBC::Ic<dimension, n_variables>(), solution);
 
     double min_vertex_distance = std::numeric_limits<double>::max();
     for (const auto &cell : triangulation.active_cell_iterators())
@@ -667,11 +667,11 @@ namespace Problem
       Utilities::MPI::min(min_vertex_distance, MPI_COMM_WORLD);
 
     time_step = courant_number * integrator.n_stages() /
-                euler_operator.compute_cell_transport_speed(solution);
+                oceano_operator.compute_cell_transport_speed(solution);
     pcout << "Time step size: " << time_step
           << ", minimal h: " << min_vertex_distance
           << ", initial transport scaling: "
-          << 1. / euler_operator.compute_cell_transport_speed(solution)
+          << 1. / oceano_operator.compute_cell_transport_speed(solution)
           << std::endl
           << std::endl;
 
@@ -711,11 +711,11 @@ namespace Problem
           time_step =
             courant_number * integrator.n_stages() /
             Utilities::truncate_to_n_digits(
-              euler_operator.compute_cell_transport_speed(solution), 3);
+              oceano_operator.compute_cell_transport_speed(solution), 3);
 
         {
           TimerOutput::Scope t(timer, "rk time stepping total");
-          integrator.perform_time_step(euler_operator,
+          integrator.perform_time_step(oceano_operator,
                                        time,
                                        time_step,
                                        solution,
@@ -763,7 +763,7 @@ int main(int argc, char **argv)
 
       // We define `ParameterHandler` and `ParameterReader` objects, and let the latter 
       // read in the parameter values from a configuration textfile. The values so
-      // read are then handed over to an instance of the EulerProblem class:
+      // read are then handed over to an instance of the OceanoProblem class:
       IO::ParameterHandler prm;
       IO::ParameterReader  param(prm);      
       param.read_parameters(argv[2]);
@@ -773,7 +773,7 @@ int main(int argc, char **argv)
       // there are defined a bunch of members that are needed for all the test cases. 
       // Next, the pointer is allocated as a derived class specific 
       // to the test-case which will override the boundary conditions. 
-      // The pointer is easily pass as argument to the `EulerProblem` class.
+      // The pointer is easily pass as argument to the `OceanoProblem` class.
       ICBC::BcBase<dimension, n_variables> *bc;
       // The switch between the different test-cases is realized with Preprocessor keys.
       // The choice to use a Preprocessor also for the boundary conditions is because we
@@ -790,12 +790,12 @@ int main(int argc, char **argv)
       return 0.;
 #endif 
       
-      // The EulerProblem class takes as argument the only two classes that have been
+      // The OceanoProblem class takes as argument the only two classes that have been
       // previously defined and that are filled at runtime. One is the pointer class
       // for the boundary conditions, the other is a reference to the parameter
       // class to read the paramteres from an external config file.     
-      EulerProblem<dimension, n_variables> euler_problem(prm, bc);
-      euler_problem.run();
+      OceanoProblem<dimension, n_variables> oceano_problem(prm, bc);
+      oceano_problem.run();
       
       delete bc;
     }

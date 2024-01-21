@@ -120,7 +120,7 @@ namespace SpaceDiscretization
   
 
 
-  // @sect3{The EulerOperation class}
+  // @sect3{The OceanoOperation class}
 
   // This class implements the evaluators for the Euler problem, in analogy to
   // the `LaplaceOperator` class of step-37 or step-59. Since the present
@@ -144,12 +144,12 @@ namespace SpaceDiscretization
   // domain boundary marked by types::boundary_id variables, as well as
   // possible body forces.
   template <int dim, int n_vars, int degree, int n_points_1d>
-  class EulerOperator
+  class OceanoOperator
   {
   public:
     static constexpr unsigned int n_quadrature_points_1d = n_points_1d;
 
-    EulerOperator(IO::ParameterHandler      &param,
+    OceanoOperator(IO::ParameterHandler      &param,
                   ICBC::BcBase<dim, n_vars> *bc,
                   TimerOutput               &timer_output);
 
@@ -240,7 +240,7 @@ namespace SpaceDiscretization
 
 
   template <int dim, int n_vars, int degree, int n_points_1d>
-  EulerOperator<dim, n_vars, degree, n_points_1d>::EulerOperator(
+  OceanoOperator<dim, n_vars, degree, n_points_1d>::OceanoOperator(
     IO::ParameterHandler             &param,
     ICBC::BcBase<dim, n_vars>        *bc,
     TimerOutput                      &timer)
@@ -271,7 +271,7 @@ namespace SpaceDiscretization
   // the fast inversion of the mass matrix by tensor product techniques,
   // necessary to ensure optimal computational efficiency overall.
   template <int dim, int n_vars, int degree, int n_points_1d>
-  void EulerOperator<dim, n_vars, degree, n_points_1d>::reinit(
+  void OceanoOperator<dim, n_vars, degree, n_points_1d>::reinit(
     const Mapping<dim> &   mapping,
     const DoFHandler<dim> &dof_handler)
   {
@@ -301,7 +301,7 @@ namespace SpaceDiscretization
 
 
   template <int dim, int n_vars, int degree, int n_points_1d>
-  void EulerOperator<dim, n_vars, degree, n_points_1d>::initialize_vector(
+  void OceanoOperator<dim, n_vars, degree, n_points_1d>::initialize_vector(
     LinearAlgebra::distributed::Vector<Number> &vector) const
   {
     data.initialize_dof_vector(vector);
@@ -389,7 +389,7 @@ namespace SpaceDiscretization
   // a member function where the MatrixFree object is already available as the
   // `data` variable, we stick with that to avoid confusion.
   template <int dim, int n_vars, int degree, int n_points_1d>
-  void EulerOperator<dim, n_vars, degree, n_points_1d>::local_apply_cell(
+  void OceanoOperator<dim, n_vars, degree, n_points_1d>::local_apply_cell(
     const MatrixFree<dim, Number> &,
     LinearAlgebra::distributed::Vector<Number> &      dst,
     const LinearAlgebra::distributed::Vector<Number> &src,
@@ -475,7 +475,7 @@ namespace SpaceDiscretization
   // and on the plus sign, with switched sign as the normal vector from the
   // plus side is exactly opposed to the one from the minus side.
   template <int dim, int n_vars, int degree, int n_points_1d>
-  void EulerOperator<dim, n_vars, degree, n_points_1d>::local_apply_face(
+  void OceanoOperator<dim, n_vars, degree, n_points_1d>::local_apply_face(
     const MatrixFree<dim, Number> &,
     LinearAlgebra::distributed::Vector<Number> &      dst,
     const LinearAlgebra::distributed::Vector<Number> &src,
@@ -561,9 +561,9 @@ namespace SpaceDiscretization
   // loop over quadrature points. However, the loss of efficiency is hardly
   // noticeable, so we opt for the simpler code here. Also note that the final
   // `else` clause will catch the case when some part of the boundary was not
-  // assigned any boundary condition via `EulerOperator::set_..._boundary(...)`.
+  // assigned any boundary condition via `OceanoOperator::set_..._boundary(...)`.
   template <int dim, int n_vars, int degree, int n_points_1d>
-  void EulerOperator<dim, n_vars, degree, n_points_1d>::local_apply_boundary_face(
+  void OceanoOperator<dim, n_vars, degree, n_points_1d>::local_apply_boundary_face(
     const MatrixFree<dim, Number> &,
     LinearAlgebra::distributed::Vector<Number> &      dst,
     const LinearAlgebra::distributed::Vector<Number> &src,
@@ -667,7 +667,7 @@ namespace SpaceDiscretization
   // matrix. This leads to square contributions to the mass matrix and ensures
   // exact integration, as explained in the introduction.
   template <int dim, int n_vars, int degree, int n_points_1d>
-  void EulerOperator<dim, n_vars, degree, n_points_1d>::local_apply_inverse_mass_matrix(
+  void OceanoOperator<dim, n_vars, degree, n_points_1d>::local_apply_inverse_mass_matrix(
     const MatrixFree<dim, Number> &,
     LinearAlgebra::distributed::Vector<Number> &      dst,
     const LinearAlgebra::distributed::Vector<Number> &src,
@@ -725,7 +725,7 @@ namespace SpaceDiscretization
   // computational time for statistics about the contributions of the various
   // parts.
   template <int dim, int n_vars, int degree, int n_points_1d>
-  void EulerOperator<dim, n_vars, degree, n_points_1d>::apply(
+  void OceanoOperator<dim, n_vars, degree, n_points_1d>::apply(
     const double                                      current_time,
     const LinearAlgebra::distributed::Vector<Number> &src,
     LinearAlgebra::distributed::Vector<Number> &      dst) const
@@ -738,9 +738,9 @@ namespace SpaceDiscretization
       for (auto &i : bc->subsonic_outflow_boundaries)
         i.second->set_time(current_time);
 
-      data.loop(&EulerOperator::local_apply_cell,
-                &EulerOperator::local_apply_face,
-                &EulerOperator::local_apply_boundary_face,
+      data.loop(&OceanoOperator::local_apply_cell,
+                &OceanoOperator::local_apply_face,
+                &OceanoOperator::local_apply_boundary_face,
                 this,
                 dst,
                 src,
@@ -752,7 +752,7 @@ namespace SpaceDiscretization
     {
       TimerOutput::Scope t(timer, "apply - inverse mass");
 
-      data.cell_loop(&EulerOperator::local_apply_inverse_mass_matrix,
+      data.cell_loop(&OceanoOperator::local_apply_inverse_mass_matrix,
                      this,
                      dst,
                      dst);
@@ -762,7 +762,7 @@ namespace SpaceDiscretization
 
 
   // Let us move to the function that does an entire stage of a Runge--Kutta
-  // update. It calls EulerOperator::apply() followed by some updates
+  // update. It calls OceanoOperator::apply() followed by some updates
   // to the vectors, namely `next_ri = solution + factor_ai * k_i` and
   // `solution += factor_solution * k_i`. Rather than performing these
   // steps through the vector interfaces, we here present an alternative
@@ -801,7 +801,7 @@ namespace SpaceDiscretization
   // around 35% with the more optimized variant. In other words, this is a
   // speedup of around a third.
   template <int dim, int n_vars, int degree, int n_points_1d>
-  void EulerOperator<dim, n_vars, degree, n_points_1d>::perform_stage(
+  void OceanoOperator<dim, n_vars, degree, n_points_1d>::perform_stage(
     const Number                                      current_time,
     const Number                                      factor_solution,
     const Number                                      factor_ai,
@@ -818,9 +818,9 @@ namespace SpaceDiscretization
       for (auto &i : bc->subsonic_outflow_boundaries)
         i.second->set_time(current_time);
 
-      data.loop(&EulerOperator::local_apply_cell,
-                &EulerOperator::local_apply_face,
-                &EulerOperator::local_apply_boundary_face,
+      data.loop(&OceanoOperator::local_apply_cell,
+                &OceanoOperator::local_apply_face,
+                &OceanoOperator::local_apply_boundary_face,
                 this,
                 vec_ki,
                 current_ri,
@@ -833,7 +833,7 @@ namespace SpaceDiscretization
     {
       TimerOutput::Scope t(timer, "rk_stage - inv mass + vec upd");
       data.cell_loop(
-        &EulerOperator::local_apply_inverse_mass_matrix,
+        &OceanoOperator::local_apply_inverse_mass_matrix,
         this,
         next_ri,
         vec_ki,
@@ -911,7 +911,7 @@ namespace SpaceDiscretization
   // this because every vector entry has contributions from only a single
   // cell for discontinuous Galerkin discretizations.
   template <int dim, int n_vars, int degree, int n_points_1d>
-  void EulerOperator<dim, n_vars, degree, n_points_1d>::project(
+  void OceanoOperator<dim, n_vars, degree, n_points_1d>::project(
     const Function<dim> &                       function,
     LinearAlgebra::distributed::Vector<Number> &solution) const
   {
@@ -968,7 +968,7 @@ namespace SpaceDiscretization
   // the momentum error and finally we loop over the tracers. The number of tracers
   // is recovered from the number of variables and the problem dimension `n_vars-dim-1`.
   template <int dim, int n_vars, int degree, int n_points_1d>
-  std::array<double, n_vars-dim+1> EulerOperator<dim, n_vars, degree, n_points_1d>::compute_errors(
+  std::array<double, n_vars-dim+1> OceanoOperator<dim, n_vars, degree, n_points_1d>::compute_errors(
     const Function<dim> &                             function,
     const LinearAlgebra::distributed::Vector<Number> &solution) const
   {
@@ -1014,7 +1014,7 @@ namespace SpaceDiscretization
 
 
 
-  // This final function of the EulerOperator class is used to estimate the
+  // This final function of the OceanoOperator class is used to estimate the
   // transport speed, scaled by the mesh size, that is relevant for setting
   // the time step size in the explicit time integrator. In the Euler
   // equations, there are two speeds of transport, namely the convective
@@ -1055,7 +1055,7 @@ namespace SpaceDiscretization
   // will be quick. Thus, we can merely hardcode 5 iterations here and be
   // confident that the result is good.
   template <int dim, int n_vars, int degree, int n_points_1d>
-  double EulerOperator<dim, n_vars, degree, n_points_1d>::compute_cell_transport_speed(
+  double OceanoOperator<dim, n_vars, degree, n_points_1d>::compute_cell_transport_speed(
     const LinearAlgebra::distributed::Vector<Number> &solution) const
   {
     TimerOutput::Scope t(timer, "compute transport speed");
