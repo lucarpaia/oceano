@@ -138,7 +138,7 @@ namespace ICBC
                            " to another type of boundary before now setting " +
                            "it as inflow"));
     AssertThrow(inflow_function->n_components == n_vars,
-                ExcMessage("Expected function with dim+2 components"));
+                ExcMessage("Expected function with n_vars components"));
 
     inflow_boundaries[boundary_id] = std::move(inflow_function);
   }
@@ -157,7 +157,7 @@ namespace ICBC
                            " to another type of boundary before now setting " +
                            "it as subsonic outflow"));
     AssertThrow(outflow_function->n_components == n_vars,
-                ExcMessage("Expected function with dim+2 components"));
+                ExcMessage("Expected function with n_vars components"));
 
     subsonic_outflow_boundaries[boundary_id] = std::move(outflow_function);
   }

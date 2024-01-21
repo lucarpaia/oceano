@@ -22,7 +22,6 @@
 
 // The following files include the oceano libraries 
 #include <numerical_flux/NumericalFluxBase.h>
-#include <model/Euler.h>
 
 /**
  * Namespace containing the numerical flux.
@@ -118,11 +117,11 @@ namespace NumericalFlux
       const Tensor<1, n_vars, Number>  &u_p,
       const Tensor<1, dim, Number> &     normal) const
   {
-    const auto lambda_m = euler.square_speed_estimate<dim, n_vars>(u_m);
-    const auto lambda_p = euler.square_speed_estimate<dim, n_vars>(u_p);
+    const auto lambda_m = model.square_speed_estimate<dim, n_vars>(u_m);
+    const auto lambda_p = model.square_speed_estimate<dim, n_vars>(u_p);
 
-    const auto flux_m = euler.flux<dim, n_vars>(u_m);
-    const auto flux_p = euler.flux<dim, n_vars>(u_p);
+    const auto flux_m = model.flux<dim, n_vars>(u_m);
+    const auto flux_p = model.flux<dim, n_vars>(u_p);
 
     const auto lambda =
       0.5 * std::sqrt(std::max(lambda_p, lambda_m));

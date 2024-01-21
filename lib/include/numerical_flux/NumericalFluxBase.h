@@ -21,7 +21,11 @@
 #define NUMERICALFLUXBASE_HPP
 
 // The following files include the oceano libraries 
+#if defined MODEL_EULER
 #include <model/Euler.h>
+#elif defined MODEL_SHALLOWWATER
+#include <model/ShallowWater.h>
+#endif
 
 /**
  * Namespace containing the numerical flux.
@@ -90,12 +94,16 @@ namespace NumericalFlux
     ~NumericalFluxBase(){};
                                     
   public:
-    Model::Euler euler;
+#if defined MODEL_EULER
+    Model::Euler model;
+#elif defined MODEL_SHALLOWWATER
+    Model::ShallowWater model;
+#endif
   };
 
   NumericalFluxBase::NumericalFluxBase(
     IO::ParameterHandler &param)
-    : euler(param)
+    : model(param)
   {} 
    
 } // namespace NumericalFlux

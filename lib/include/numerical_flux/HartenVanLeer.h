@@ -21,8 +21,7 @@
 #define HARTENVANLEER_HPP
 
 // The following files include the oceano libraries
-#include <numerical_flux/NumericalFluxBase.h> 
-#include <model/Euler.h>
+#include <numerical_flux/NumericalFluxBase.h>
 
 /**
  * Namespace containing the numerical flux.
@@ -101,14 +100,14 @@ namespace NumericalFlux
       const Tensor<1, n_vars, Number>  &u_p,
       const Tensor<1, dim, Number> &     normal) const
   {
-    const auto velocity_m = euler.velocity<dim, n_vars>(u_m);
-    const auto velocity_p = euler.velocity<dim, n_vars>(u_p);
+    const auto velocity_m = model.velocity<dim, n_vars>(u_m);
+    const auto velocity_p = model.velocity<dim, n_vars>(u_p);
 
-    const auto csquare_m = euler.square_wavespeed<dim, n_vars>(u_m);
-    const auto csquare_p = euler.square_wavespeed<dim, n_vars>(u_p);
+    const auto csquare_m = model.square_wavespeed<dim, n_vars>(u_m);
+    const auto csquare_p = model.square_wavespeed<dim, n_vars>(u_p);
 
-    const auto flux_m = euler.flux<dim, n_vars>(u_m);
-    const auto flux_p = euler.flux<dim, n_vars>(u_p);
+    const auto flux_m = model.flux<dim, n_vars>(u_m);
+    const auto flux_p = model.flux<dim, n_vars>(u_p);
 
     const auto avg_velocity_normal =
       0.5 * ((velocity_m + velocity_p) * normal);

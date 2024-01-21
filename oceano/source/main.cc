@@ -38,11 +38,18 @@
 // described in the introduction.
 #define ICBC_ISENTROPICVORTEX
 #undef  ICBC_FLOWAROUNDCYLINDER
-// and numerical flux (Riemann solver) at the faces between cells. For this
+#undef  ICBC_IMPULSIVEWAVE
+// The following change the numerical flux (Riemann solver) at the faces between cells. For this
 // program, we have implemented a modified variant of the Lax--Friedrichs
 // flux and the Harten--Lax--van Leer (HLL) flux:
-#define  NUMERICALFLUX_LAXFRIEDRICHSMODIFIED
-#undef    NUMERICALFLUX_HARTENVANLEER
+#define NUMERICALFLUX_LAXFRIEDRICHSMODIFIED
+#undef  NUMERICALFLUX_HARTENVANLEER
+// Finally we have two models: a non-hydrostatic Euler model for perfect gas which was the
+// original model coded in the deal.II example and the shallow water model. The Euler model
+// is only used for debugging, to check consistency with the original deal.II example.
+#define MODEL_EULER
+#undef  MODEL_SHALLOWWATER
+
 // The include files are similar to the previous matrix-free tutorial programs
 // step-37, step-48, and step-59
 #include <deal.II/base/conditional_ostream.h>
@@ -93,6 +100,8 @@
 #include <icbc/Icbc_IsentropicVortex.h>
 #elif defined ICBC_FLOWAROUNDCYLINDER
 #include <icbc/Icbc_FlowAroundCylinder.h>
+#elif defined ICBC_IMPULSIVEWAVE
+#include <icbc/Icbc_ImpulsiveWave.h>
 #endif
 
 namespace Problem
@@ -106,9 +115,14 @@ namespace Problem
   // also specify a number of points in the Gaussian quadrature formula we
   // want to use for the nonlinear terms in the Euler equations.
   constexpr unsigned int dimension            = 2;
-  constexpr unsigned int n_variables          = dimension + 2;  
   constexpr unsigned int fe_degree            = 1;
   constexpr unsigned int n_q_points_1d        = fe_degree + 2;
+#if defined MODEL_EULER
+  constexpr unsigned int n_variables          = dimension + 2;
+#elif defined MODEL_SHALLOWWATER
+  constexpr unsigned int n_variables          = dimension + 1;
+#endif
+
 
   using Number = double;
 
@@ -141,8 +155,8 @@ namespace Problem
   // information to the output file, in similarity to what was done in
   // step-33. The interface of the DataPostprocessor class is intuitive,
   // requiring us to provide information about what needs to be evaluated
-  // (typically only the values of the solution, except for the Schlieren plot
-  // that we only enable in 2d where it makes sense), and the names of what
+  // (typically only the values of the solution, but for vorticity we need 
+  // also the gradients of the solution), and the names of what
   // gets evaluated. Note that it would also be possible to extract most
   // information by calculator tools within visualization programs such as
   // ParaView, but it is so much more convenient to do it already when writing
@@ -205,15 +219,15 @@ namespace Problem
 
       virtual UpdateFlags get_needed_update_flags() const override;
 
-    private:
-      const bool do_schlieren_plot;
-
-    public:
       bool do_error;
       double output_tick;
       std::string output_filename;
 
-      Model::Euler euler;
+#if defined MODEL_EULER
+      Model::Euler model;
+#elif defined MODEL_SHALLOWWATER
+      Model::ShallowWater model;
+#endif
     };
 
    private:
@@ -229,8 +243,7 @@ namespace Problem
   template <int dim, int n_vars>
   EulerProblem<dim, n_vars>::Postprocessor::Postprocessor(
     IO::ParameterHandler &prm)
-    : do_schlieren_plot(dim == 2)
-    , euler(prm)
+    : model(prm)
   {
     prm.enter_subsection("Output parameters");
     do_error = prm.get_double("Output_error");
@@ -246,27 +259,31 @@ namespace Problem
   // `2*dim+5` are derived from the sizes of the names we specify in the
   // get_names() function below). Then we loop over all evaluation points and
   // fill the respective information: First we fill the primal solution
-  // variables of density $\rho$, momentum $\rho \mathbf{u}$ and energy $E$,
-  // then we compute the derived velocity $\mathbf u$, the pressure $p$, the
-  // speed of sound $c=\sqrt{\gamma p / \rho}$, as well as the Schlieren plot
-  // showing $s = |\nabla \rho|^2$ in case it is enabled. (See step-69 for
-  // another example where we create a Schlieren plot.)
+  // variables, the so called prognostic variables.
+  // Then we compute derived variables such as the velocity $\mathbf u$ or
+  // the pressure $p$. These variables are defined in the model class and they can
+  // change from model to model. For now these variables can depend only on the solution.
+  // In general they can also depend on the solution gradient (think for example to the
+  // vorticity) but this part has been commented part for now, see `do_schlieren_plot`.
+  // For the postprocessed variables, a well defined order must be followed: first the
+  // velocity vector, then all the scalars.
   template <int dim, int n_vars>
   void EulerProblem<dim, n_vars>::Postprocessor::evaluate_vector_field(
     const DataPostprocessorInputs::Vector<dim> &inputs,
     std::vector<Vector<double>> &               computed_quantities) const
   {
     const unsigned int n_evaluation_points = inputs.solution_values.size();
-    
-    if (do_schlieren_plot == true)
-      Assert(inputs.solution_gradients.size() == n_evaluation_points,
-             ExcInternalError());
+    const std::vector<std::string> postproc_names = model.postproc_vars_name;
+
+    //if (do_schlieren_plot == true)
+    //  Assert(inputs.solution_gradients.size() == n_evaluation_points,
+    //         ExcInternalError());
 
     Assert(computed_quantities.size() == n_evaluation_points,
            ExcInternalError());
     Assert(inputs.solution_values[0].size() == n_vars, ExcInternalError());
     Assert(computed_quantities[0].size() ==
-             n_vars + (do_schlieren_plot == true ? 1 : 0),
+             postproc_names.size(),
            ExcInternalError());
 
     for (unsigned int p = 0; p < n_evaluation_points; ++p)
@@ -275,18 +292,30 @@ namespace Problem
         for (unsigned int d = 0; d < n_vars; ++d)
           solution[d] = inputs.solution_values[p](d);
 
-        const double         density  = solution[0];
-        const Tensor<1, dim> velocity = euler.velocity<dim, n_vars>(solution);
-        const double         pressure = euler.pressure<dim, n_vars>(solution);
+        const Tensor<1, dim> velocity = model.velocity<dim, n_vars>(solution);
+        const double         pressure = model.pressure<dim, n_vars>(solution);
 
         for (unsigned int d = 0; d < dim; ++d)
           computed_quantities[p](d) = velocity[d];
-        computed_quantities[p](dim)     = pressure;
-        computed_quantities[p](dim + 1) = std::sqrt(euler.gamma * pressure / density);
+        for (unsigned int v = 0; v < postproc_names.size()-dim; ++v)
+          {
+            if (postproc_names[dim+v] == "pressure")
+              computed_quantities[p](v+dim) = pressure;
+            else if (postproc_names[dim+v] == "speed_of_sound")
+              computed_quantities[p](v+dim) =
+                std::sqrt(model.square_wavespeed<dim, n_vars>(solution));
+            else
+              {
+                std::cout << "Postprocessing variable " << postproc_names[dim+v]
+                          << " does not exist. Consider to code it in your model"
+                          << std::endl;
+                 Assert(false, ExcNotImplemented());
+              }
+          }
 
-        if (do_schlieren_plot == true)
-          computed_quantities[p](n_vars) =
-            inputs.solution_gradients[p][0] * inputs.solution_gradients[p][0];
+        //if (do_schlieren_plot == true)
+        //  computed_quantities[p](n_vars) =
+        //    inputs.solution_gradients[p][0] * inputs.solution_gradients[p][0];
       }
   }
 
@@ -295,38 +324,29 @@ namespace Problem
   template <int dim, int n_vars>
   std::vector<std::string> EulerProblem<dim, n_vars>::Postprocessor::get_names() const
   {
-    std::vector<std::string> names;
-    for (unsigned int d = 0; d < dim; ++d)
-      names.emplace_back("velocity");
-    names.emplace_back("pressure");
-    names.emplace_back("speed_of_sound");
+    std::vector<std::string> postproc_names = model.postproc_vars_name;
 
-    if (do_schlieren_plot == true)
-      names.emplace_back("schlieren_plot");
-
-    return names;
+    return postproc_names;
   }
 
 
 
-  // For the interpretation of quantities, we have scalar density, energy,
-  // pressure, speed of sound, and the Schlieren plot, and vectors for the
-  // momentum and the velocity.
+  // For the interpretation of quantities, we have first the scalar depth and
+  // a number of postprocessed variables specified in the model class. As vectors we have
+  // the momentum and the velocity.
   template <int dim, int n_vars>
   std::vector<DataComponentInterpretation::DataComponentInterpretation>
   EulerProblem<dim, n_vars>::Postprocessor::get_data_component_interpretation() const
   {
+    const std::vector<std::string> postproc_names = model.postproc_vars_name;
+
     std::vector<DataComponentInterpretation::DataComponentInterpretation>
       interpretation;
     for (unsigned int d = 0; d < dim; ++d)
       interpretation.push_back(
         DataComponentInterpretation::component_is_part_of_vector);
-    interpretation.push_back(DataComponentInterpretation::component_is_scalar);
-    interpretation.push_back(DataComponentInterpretation::component_is_scalar);
-
-    if (do_schlieren_plot == true)
-      interpretation.push_back(
-        DataComponentInterpretation::component_is_scalar);
+    for (unsigned int v = 0; v < postproc_names.size()-dim; ++v)
+      interpretation.push_back(DataComponentInterpretation::component_is_scalar);
 
     return interpretation;
   }
@@ -334,15 +354,15 @@ namespace Problem
 
 
   // With respect to the necessary update flags, we only need the values for
-  // all quantities but the Schlieren plot, which is based on the density
-  // gradient.
+  // all quantities but, as already said, some postprocessed variables are based on the
+  // solution gradient. For now the last choise has been commented and it is not available.
   template <int dim, int n_vars>
   UpdateFlags EulerProblem<dim, n_vars>::Postprocessor::get_needed_update_flags() const
   {
-    if (do_schlieren_plot == true)
-      return update_values | update_gradients;
-    else
-      return update_values;
+    //if (do_schlieren_plot == true)
+    //  return update_values | update_gradients;
+    //else
+    return update_values;
   }
 
 
@@ -502,19 +522,25 @@ namespace Problem
     Postprocessor      &postprocessor,
     const unsigned int  result_number)
   {
-    const std::array<double, 3> errors =
+    const unsigned int n_tra = n_vars-dim-1;
+    const std::array<double, n_vars-dim+1> errors =
       euler_operator.compute_errors(
         ICBC::ExactSolution<dimension, n_variables>(time), solution);
 
     const std::string quantity_name =
       postprocessor.do_error == 1 ? "error" : "norm";
 
+    std::vector<std::string> vars_names = postprocessor.model.vars_name;
+
     pcout << "Time:" << std::setw(8) << std::setprecision(3) << time
           << ", dt: " << std::setw(8) << std::setprecision(2) << time_step
-          << ", " << quantity_name << " rho: " << std::setprecision(4)
-          << std::setw(10) << errors[0] << ", rho * u: " << std::setprecision(4)
-          << std::setw(10) << errors[1] << ", energy:" << std::setprecision(4)
-          << std::setw(10) << errors[2] << std::endl;
+          << ", " << quantity_name  << " " + vars_names[0] + ": "
+          << std::setprecision(4) << std::setw(10) << errors[0] << ", " + vars_names[1]
+          + ": " << std::setprecision(4) << std::setw(10) << errors[1];
+
+    for (unsigned int t = 0; t < n_tra; ++t)
+      pcout << ", "+ vars_names[dim+t+1] + ":" << std::setprecision(4)
+            << std::setw(10) << errors[t+2] << std::endl;
 
     {
       TimerOutput::Scope t(timer, "output");
@@ -527,12 +553,6 @@ namespace Problem
 
       data_out.attach_dof_handler(dof_handler);
       {
-        std::vector<std::string> names;
-        names.emplace_back("density");
-        for (unsigned int d = 0; d < dim; ++d)
-          names.emplace_back("momentum");
-        names.emplace_back("energy");
-
         std::vector<DataComponentInterpretation::DataComponentInterpretation>
           interpretation;
         interpretation.push_back(
@@ -540,10 +560,11 @@ namespace Problem
         for (unsigned int d = 0; d < dim; ++d)
           interpretation.push_back(
             DataComponentInterpretation::component_is_part_of_vector);
-        interpretation.push_back(
-          DataComponentInterpretation::component_is_scalar);
+        for (unsigned int t = 0; t < n_tra; ++t)
+          interpretation.push_back(
+            DataComponentInterpretation::component_is_scalar);
 
-        data_out.add_data_vector(dof_handler, solution, names, interpretation);
+        data_out.add_data_vector(dof_handler, solution, vars_names, interpretation);
       }
       data_out.add_data_vector(solution, postprocessor);
 
@@ -556,10 +577,11 @@ namespace Problem
             ICBC::ExactSolution<dimension, n_variables>(time), reference);
           reference.sadd(-1., 1, solution);
           std::vector<std::string> names;
-          names.emplace_back("error_density");
+          names.emplace_back("error_"+ vars_names[0]);
           for (unsigned int d = 0; d < dim; ++d)
-            names.emplace_back("error_momentum");
-          names.emplace_back("error_energy");
+            names.emplace_back("error_"+ vars_names[d+1]);
+          for (unsigned int t = 0; t < n_tra; ++t)
+            names.emplace_back("error_"+ vars_names[t+dim+1]);
 
           std::vector<DataComponentInterpretation::DataComponentInterpretation>
             interpretation;
@@ -568,8 +590,9 @@ namespace Problem
           for (unsigned int d = 0; d < dim; ++d)
             interpretation.push_back(
               DataComponentInterpretation::component_is_part_of_vector);
-          interpretation.push_back(
-            DataComponentInterpretation::component_is_scalar);
+          for (unsigned int t = 0; t < n_tra; ++t)
+            interpretation.push_back(
+              DataComponentInterpretation::component_is_scalar);
 
           data_out.add_data_vector(dof_handler,
                                    reference,
@@ -662,7 +685,7 @@ namespace Problem
     output_results(postprocessor, 0);
 
     // Now we are ready to start the time loop, which we run until the time
-    // has reached the desired end time. Every 5 time steps, we compute a new
+    // has reached the desired end time. Every 5 time steps, we compute a new    
     // estimate for the time step -- since the solution is nonlinear, it is
     // most effective to adapt the value during the course of the
     // simulation. In case the Courant number was chosen too aggressively, the
@@ -756,10 +779,12 @@ int main(int argc, char **argv)
       // The choice to use a Preprocessor also for the boundary conditions is because we
       // use it for the initial condition and we have mantained the same directive 
       // to easily switch both initial and boundary conditions depending on the test-case.
-#if defined ICBC_ISENTROPICVORTEX          
+#if defined ICBC_ISENTROPICVORTEX
       bc = new ICBC::BcIsentropicVortex<dimension, n_variables>;
-#elif defined ICBC_FLOWAROUNDCYLINDER          
+#elif defined ICBC_FLOWAROUNDCYLINDER
       bc = new ICBC::BcFlowAroundCylinder<dimension, n_variables>;
+#elif defined ICBC_IMPULSIVEWAVE
+      bc = new ICBC::BcImpulsiveWave<dimension, n_variables>;
 #else          
       Assert(false, ExcNotImplemented());
       return 0.;

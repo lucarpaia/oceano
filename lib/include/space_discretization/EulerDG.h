@@ -55,7 +55,11 @@
 #include <deal.II/matrix_free/operators.h>
 
 // The following files include the oceano libraries
+#if defined MODEL_EULER
 #include <model/Euler.h>
+#elif defined MODEL_SHALLOWWATER
+#include <model/ShallowWater.h>
+#endif
 #include <numerical_flux/LaxFriedrichsModified.h>
 #include <numerical_flux/HartenVanLeer.h>
 #include <icbc/IcbcBase.h>
@@ -168,7 +172,7 @@ namespace SpaceDiscretization
     void project(const Function<dim> &                       function,
                  LinearAlgebra::distributed::Vector<Number> &solution) const;
 
-    std::array<double, 3> compute_errors(
+    std::array<double, n_vars-dim+1> compute_errors(
       const Function<dim> &                             function,
       const LinearAlgebra::distributed::Vector<Number> &solution) const;
 
@@ -185,14 +189,23 @@ namespace SpaceDiscretization
 
     TimerOutput &timer;
 
-    Model::Euler euler;
+    // The switch between the different model is realized with
+    // Preprocessor keys. As already explained we have avoided pointers to 
+    // interface classes. The Euler and the Shallow Water class must expose
+    // the same interfaces with identical member functions.
+#if defined MODEL_EULER
+    Model::Euler model;
+#elif defined MODEL_SHALLOWWATER
+    Model::ShallowWater model;
+#else
+    Assert(false, ExcNotImplemented());
+    return 0.;
+#endif
 
-    // The switch between the different numerical flux is realized with
-    // Preprocessor keys. This is beacause we have avoided pointers to 
-    // interface classes.
+    // Similarly the switch between the different numerical flux:
 #if defined NUMERICALFLUX_LAXFRIEDRICHSMODIFIED
     NumericalFlux::LaxFriedrichsModified num_flux;
-#elif defined NUMERICALFLUX_HARTENVANLEER         
+#elif defined NUMERICALFLUX_HARTENVANLEER
     NumericalFlux::HartenVanLeer         num_flux;
 #else
     Assert(false, ExcNotImplemented());
@@ -233,7 +246,7 @@ namespace SpaceDiscretization
     TimerOutput                      &timer)
     : bc(bc)
     , timer(timer)
-    , euler(param)
+    , model(param)
     , num_flux(param)
   {}
 
@@ -351,7 +364,7 @@ namespace SpaceDiscretization
   //
   //
   // The rest follows the other tutorial programs. Since we have implemented
-  // all physics for the Euler equations in the separate `euler.flux()`
+  // all physics for the governing equations in the separate `model.flux()`
   // function, all we have to do here is to call this function
   // given the current solution evaluated at quadrature points, returned by
   // `phi.get_value(q)`, and tell the FEEvaluation object to queue the flux
@@ -387,17 +400,30 @@ namespace SpaceDiscretization
     for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
       {
         phi.reinit(cell);
-        phi.gather_evaluate(src, EvaluationFlags::values);
+        phi.gather_evaluate(src, EvaluationFlags::values
+                              | EvaluationFlags::gradients);
 
         for (unsigned int q = 0; q < phi.n_q_points; ++q)
           {
             const auto w_q = phi.get_value(q);
-            phi.submit_gradient(euler.flux<dim, n_vars>(w_q), q);
+            const auto dzeta_q = phi.get_gradient(q);
 
+            phi.submit_gradient(model.flux<dim, n_vars>(w_q), q);
+
+//            std::cout << "Press grad " << q << ", " << dzeta_q[0] << std::endl;
+#if defined MODEL_EULER
             const Tensor<1, dim, VectorizedArray<Number>> body_force_q =
               evaluate_function<dim, Number, dim>(
                 *bc->body_force, phi.quadrature_point(q));
-            phi.submit_value(euler.source<dim, n_vars>(w_q, body_force_q), q);
+#endif
+            phi.submit_value(model.source<dim, n_vars>(
+              w_q,
+#if defined MODEL_EULER
+              body_force_q
+#elif defined MODEL_SHALLOWWATER
+              dzeta_q[0]
+#endif
+              ), q);
           }
 
         phi.integrate_scatter(((bc->body_force.get() != nullptr) ?
@@ -568,7 +594,8 @@ namespace SpaceDiscretization
                 w_p[0] = w_m[0];
                 for (unsigned int d = 0; d < dim; ++d)
                   w_p[d + 1] = w_m[d + 1] - 2. * rho_u_dot_n * normal[d];
-                w_p[dim + 1] = w_m[dim + 1];
+                for (unsigned int t = 0; t < n_vars-dim-1; ++t)
+                  w_p[dim + 1 + t] = w_m[dim + 1 + t];
               }
             else if (bc->inflow_boundaries.find(boundary_id) !=
                      bc->inflow_boundaries.end())
@@ -932,20 +959,29 @@ namespace SpaceDiscretization
   // number of lanes with valid data. It equals VectorizedArray::size() on
   // most cells, but can be less on the last cell batch if the number of cells
   // has a remainder compared to the SIMD width.
+  // 
+  // Pay also attention to the implementation of the error formula. The error has
+  // dimension `n_vars-(dim-1)` because we compute only one error for all the
+  // momentum components. Also, the formula implies that the variables are stored
+  // in the following order $(h,\, hu^i,\, T^j)$ with $i=1,...dim$ and $j=0,...N_T$
+  // the number of tracers. First the error we compute the error on the depth,
+  // the momentum error and finally we loop over the tracers. The number of tracers
+  // is recovered from the number of variables and the problem dimension `n_vars-dim-1`.
   template <int dim, int n_vars, int degree, int n_points_1d>
-  std::array<double, 3> EulerOperator<dim, n_vars, degree, n_points_1d>::compute_errors(
+  std::array<double, n_vars-dim+1> EulerOperator<dim, n_vars, degree, n_points_1d>::compute_errors(
     const Function<dim> &                             function,
     const LinearAlgebra::distributed::Vector<Number> &solution) const
   {
     TimerOutput::Scope t(timer, "compute errors");
-    double             errors_squared[3] = {};
+    const unsigned int n_err = n_vars-dim+1;
+    double             errors_squared[n_err] = {};
     FEEvaluation<dim, degree, n_points_1d, n_vars, Number> phi(data, 0, 0);
 
     for (unsigned int cell = 0; cell < data.n_cell_batches(); ++cell)
       {
         phi.reinit(cell);
         phi.gather_evaluate(solution, EvaluationFlags::values);
-        VectorizedArray<Number> local_errors_squared[3] = {};
+        VectorizedArray<Number> local_errors_squared[n_err] = {};
         for (unsigned int q = 0; q < phi.n_q_points; ++q)
           {
             const auto error =
@@ -958,18 +994,19 @@ namespace SpaceDiscretization
             local_errors_squared[0] += error[0] * error[0] * JxW;
             for (unsigned int d = 0; d < dim; ++d)
               local_errors_squared[1] += (error[d + 1] * error[d + 1]) * JxW;
-            local_errors_squared[2] += (error[dim + 1] * error[dim + 1]) * JxW;
+            for (unsigned int t = 0; t < n_vars-dim-1; ++t)
+              local_errors_squared[t+dim] += (error[t + dim + 1] * error[t + dim + 1]) * JxW;
           }
         for (unsigned int v = 0; v < data.n_active_entries_per_cell_batch(cell);
              ++v)
-          for (unsigned int d = 0; d < 3; ++d)
+          for (unsigned int d = 0; d < n_err; ++d)
             errors_squared[d] += local_errors_squared[d][v];
       }
 
     Utilities::MPI::sum(errors_squared, MPI_COMM_WORLD, errors_squared);
 
-    std::array<double, 3> errors;
-    for (unsigned int d = 0; d < 3; ++d)
+    std::array<double, n_err> errors;
+    for (unsigned int d = 0; d < n_err; ++d)
       errors[d] = std::sqrt(errors_squared[d]);
 
     return errors;
@@ -1033,8 +1070,7 @@ namespace SpaceDiscretization
         for (unsigned int q = 0; q < phi.n_q_points; ++q)
           {
             const auto solution = phi.get_value(q);
-            const auto velocity = euler.velocity<dim, n_vars>(solution);
-            const auto pressure = euler.pressure<dim, n_vars>(solution);
+            const auto velocity = model.velocity<dim, n_vars>(solution);
 
             const auto inverse_jacobian = phi.inverse_jacobian(q);
             const auto convective_speed = inverse_jacobian * velocity;
@@ -1044,7 +1080,7 @@ namespace SpaceDiscretization
                 std::max(convective_limit, std::abs(convective_speed[d]));
 
             const auto speed_of_sound =
-              std::sqrt(euler.gamma * pressure * (1. / solution[0]));
+              std::sqrt(model.square_wavespeed<dim, n_vars>(solution));
 
             Tensor<1, dim, VectorizedArray<Number>> eigenvector;
             for (unsigned int d = 0; d < dim; ++d)

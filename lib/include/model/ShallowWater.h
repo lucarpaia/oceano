@@ -14,11 +14,10 @@
  * ---------------------------------------------------------------------
 
  *
- * Author: Martin Kronbichler, 2020
- *         Luca Arpaia,        2023
+ * Author: Luca Arpaia,        2023
  */
-#ifndef EULER_HPP
-#define EULER_HPP
+#ifndef SHALLOWWATER_HPP
+#define SHALLOWWATER_HPP
 
 // The following files include the oceano libraries
 #include <io/ParameterReader.h>
@@ -32,15 +31,15 @@ namespace Model
 
   using namespace dealii;
 
-  // @sect3{Implementation of point-wise operations of the Euler equations}
+  // @sect3{Implementation of point-wise operations of the Shallow Water equations}
 
   // In the following functions, we implement the various problem-specific
-  // operators pertaining to the Euler equations. Each function acts on the
-  // vector of conserved variables $[\rho, \rho\mathbf{u}, E]$ that we hold in
+  // operators pertaining to the Shallow Water equations. Each function acts on the
+  // vector of conserved variables $[\zeta, h\mathbf{u}]$ that we hold in
   // the solution vectors, and computes various derived quantities.
   //
   // First out is the computation of the velocity, that we derive from the
-  // momentum variable $\rho \mathbf{u}$ by division by $\rho$. One thing to
+  // momentum variable $h \mathbf{u}$ by division by $h$. One thing to
   // note here is that we decorate all those functions with the keyword
   // `DEAL_II_ALWAYS_INLINE`. This is a special macro that maps to a
   // compiler-specific keyword that tells the compiler to never create a
@@ -61,8 +60,8 @@ namespace Model
   // may not have figured it out by themselves but where we know for sure that
   // inlining is a win.)
   //
-  // Another trick we apply is a separate variable for the inverse density
-  // $\frac{1}{\rho}$. This enables the compiler to only perform a single
+  // Another trick we apply is a separate variable for the inverse depth
+  // $\frac{1}{h}$. This enables the compiler to only perform a single
   // division for the flux, despite the division being used at several
   // places. As divisions are around ten to twenty times as expensive as
   // multiplications or additions, avoiding redundant divisions is crucial for
@@ -80,13 +79,13 @@ namespace Model
   // I would have liked to template the model class with <int dim, typename Number>
   // which would have been cleaner. But I was not able to compile a templated 
   // numerical flux class. For now I have left both classes without template  
-  class Euler
+  class ShallowWater
   {
   public:
-    Euler(IO::ParameterHandler &prm);
-    ~Euler(){};
+    ShallowWater(IO::ParameterHandler &prm);
+    ~ShallowWater(){};
  
-    double gamma;
+    double g;
 
     std::vector<std::string> vars_name;
     std::vector<std::string> postproc_vars_name;
@@ -99,8 +98,7 @@ namespace Model
       velocity(const Tensor<1, n_vars, Number> &conserved_variables) const;
 
     // The next function computes the pressure from the vector of conserved
-    // variables, using the formula $p = (\gamma - 1) \left(E - \frac 12 \rho
-    // \mathbf{u}\cdot \mathbf{u}\right)$. As explained above, we use the
+    // variables, using the formula $p = g \frac{h^2}{2}$. As explained above, we use the
     // velocity from the `velocity()` function. Note that we need to
     // specify the first template argument `dim` here because the compiler is
     // not able to deduce it from the arguments of the tensor, whereas the
@@ -110,17 +108,26 @@ namespace Model
       Number
       pressure(const Tensor<1, n_vars, Number> &conserved_variables) const;
 
-    // Here is the definition of the Euler flux function, i.e., the definition
-    // of the actual equation. Given the velocity and pressure (that the
-    // compiler optimization will make sure are done only once), this is 
-    // straight-forward given the equation stated in the introduction.
+    // Here is the definition of the Shallow Water flux function, i.e., the definition
+    // of the actual equation. We use only advective flux. Given the velocity
+    // (that the compiler optimization will make sure are done only once),
+    // this is straight-forward given the equation stated in the introduction.
+    // The hydrostatic pressure in the flux is treated in a non-conservative fashion
+    // and added into the source term. For smooth problems in the low Froude regime,
+    // at the scales typical of the coastal ocean, the two formulations are equivalent.
+    // The non conservative treatment of the pressure avoids all togheter the well-balanced
+    // issue which typically involves less complicated numerical fluxes.
     template <int dim, int n_vars, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, n_vars, Tensor<1, dim, Number>>
       flux(const Tensor<1, n_vars, Number> &conserved_variables) const;
 
-    // Here is the definition of the Euler source function. In the source
-    // term we have coded only a body force ...
+    // Here is the definition of the Shallow Water source function. For now we have coded
+    // only the pressure force and the bathymetry force. The computation of the source
+    // term involves the conserved variables and non-constant functions (e.g. the bathymetry), that
+    // means that the source term must be recomputed at each time step and can add a significant overhead.
+    // Note that the pressure and bathyemtry terms are sum into a single term where only the gradient
+    // of the free-surface must be computed.
     template <int dim, int n_vars, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, n_vars, Number>
@@ -128,8 +135,8 @@ namespace Model
              const Tensor<1, dim, Number>    &body_force) const;
 
     // The next function computes an estimate of the square of the speed from the vector of conserved
-    // variables, using the formula $\lambda^2 =  \|\mathbf{u}\|^2+c^2$. The estimate 
-    // instead of the the true formula is justyfied by efficiency arguments (one evaluation of the square root 
+    // variables, using the formula $\lambda^2 =  \|\mathbf{u}\|^2+c^2$. The estimate
+    // instead of the the true formula is justyfied by efficiency arguments (one evaluation of the square root
     // instead of four). Moroever for low Mach applications, the error committed is very small.
     template <int dim, int n_vars, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
@@ -137,13 +144,13 @@ namespace Model
       square_speed_estimate(
         const Tensor<1, n_vars, Number> &conserved_variables) const;
 
-    // The next function computes an the square of the speed of sound:
+    // The next function computes an the square of the gravity wave speed speed:
     template <int dim, int n_vars, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Number
       square_wavespeed(
         const Tensor<1, n_vars, Number> &conserved_variables) const;
-    
+
   };
   
   
@@ -158,27 +165,27 @@ namespace Model
   // parameters are stored as class members. In this way they are defined/read 
   // from file in one place and then used whenever needed  with `model.param`, 
   // instead of being read/defined multiple times.
-  Euler::Euler(
+  ShallowWater::ShallowWater(
     IO::ParameterHandler &prm)
   {
     prm.enter_subsection("Physical constants");
-    gamma = prm.get_double("g");
+    g = prm.get_double("g");
     prm.leave_subsection();
 
-    vars_name = {"density", "momentum", "momentum", "energy"};
-    postproc_vars_name = {"velocity", "velocity", "pressure", "speed_of_sound"};
+    vars_name = {"depth", "momentum", "momentum"};
+    postproc_vars_name = {"velocity", "velocity", "pressure"};
   }
   
   template <int dim, int n_vars, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
-    Euler::velocity(const Tensor<1, n_vars, Number> &conserved_variables) const
+    ShallowWater::velocity(const Tensor<1, n_vars, Number> &conserved_variables) const
   {
-    const Number inverse_density = Number(1.) / conserved_variables[0];
+    const Number inverse_depth = Number(1.) / conserved_variables[0];
 
     Tensor<1, dim, Number> velocity;
     for (unsigned int d = 0; d < dim; ++d)
-      velocity[d] = conserved_variables[1 + d] * inverse_density;
+      velocity[d] = conserved_variables[1 + d] * inverse_depth;
 
     return velocity;
   }
@@ -186,26 +193,18 @@ namespace Model
   template <int dim, int n_vars, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Number
-    Euler::pressure(const Tensor<1, n_vars, Number> &conserved_variables) const
+    ShallowWater::pressure(const Tensor<1, n_vars, Number> &conserved_variables) const
   {
-    const Tensor<1, dim, Number> v =
-      velocity<dim, n_vars>(conserved_variables);
-
-    Number rho_u_dot_u = conserved_variables[1] * v[0];
-    for (unsigned int d = 1; d < dim; ++d)
-      rho_u_dot_u += conserved_variables[1 + d] * v[d];
-
-    return (gamma - 1.) * (conserved_variables[dim + 1] - 0.5 * rho_u_dot_u);
+    return 0.5 * g * conserved_variables[0]*conserved_variables[0];
   }
 
   template <int dim, int n_vars, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, n_vars, Tensor<1, dim, Number>>
-    Euler::flux(const Tensor<1, n_vars, Number> &conserved_variables) const
+    ShallowWater::flux(const Tensor<1, n_vars, Number> &conserved_variables) const
   {
     const Tensor<1, dim, Number> v =
       velocity<dim, n_vars>(conserved_variables);
-    const Number p = pressure<dim, n_vars>(conserved_variables);
 
     Tensor<1, n_vars, Tensor<1, dim, Number>> flux;
     for (unsigned int d = 0; d < dim; ++d)
@@ -213,9 +212,6 @@ namespace Model
         flux[0][d] = conserved_variables[1 + d];
         for (unsigned int e = 0; e < dim; ++e)
           flux[e + 1][d] = conserved_variables[e + 1] * v[d];
-        flux[d + 1][d] += p;
-        flux[dim + 1][d] =
-          v[d] * (conserved_variables[dim + 1] + p);
       }
 
     return flux;
@@ -224,14 +220,13 @@ namespace Model
   template <int dim, int n_vars, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, n_vars, Number>
-    Euler::source(const Tensor<1, n_vars, Number> &conserved_variables,
-                  const Tensor<1, dim, Number>    &body_force) const
+    ShallowWater::source(const Tensor<1, n_vars, Number> &conserved_variables,
+                         const Tensor<1, dim, Number>    &body_force) const
   {
     Tensor<1, n_vars, Number> source;
+    source[0] = 0.;
     for (unsigned int d = 0; d < dim; ++d)
-        source[d + 1] = conserved_variables[0] * body_force[d];
-    for (unsigned int d = 0; d < dim; ++d)
-        source[dim + 1] += body_force[d] * conserved_variables[d + 1];
+        source[d + 1] = - g * conserved_variables[0] * body_force[d];
 
     return source;
   }
@@ -239,24 +234,21 @@ namespace Model
   template <int dim, int n_vars, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Number
-    Euler::square_speed_estimate(
+    ShallowWater::square_speed_estimate(
       const Tensor<1, n_vars, Number> &conserved_variables) const
   {
     const auto v = velocity<dim, n_vars>(conserved_variables);
-    const auto p = pressure<dim, n_vars>(conserved_variables);
-    
-    return v.norm_square() + gamma * p * (1. / conserved_variables[0]);
+
+    return v.norm_square() + g * conserved_variables[0];
   }
 
   template <int dim, int n_vars, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Number
-    Euler::square_wavespeed(const Tensor<1, n_vars, Number> &conserved_variables) const
+    ShallowWater::square_wavespeed(const Tensor<1, n_vars, Number> &conserved_variables) const
   {
-    const auto p = pressure<dim, n_vars>(conserved_variables);
-    
-    return gamma * p * (1. / conserved_variables[0]);
+    return g * conserved_variables[0];
   }
 
 } // namespace Model
-#endif //EULER_HPP
+#endif //SHALLOWWATER_HPP
