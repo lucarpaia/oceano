@@ -62,7 +62,8 @@ namespace ICBC
     // Deal.II `Function<dim>` which can design vector functions of the space and time.
     // The first three members associate with a map each boundary id with the
     // corresponding function for the boundary condition. The fourth member is used   
-    // for the accelleration parameter of the body force (e.g. gravity). 
+    // for the problem spatially and time varying parameters, such as friction, bathymetry
+    // or wind. 
     // Actually we use pointers to Function, but note that we do not use regular 
     // pointers but `unique_ptr`. These are particular pointers that 
     // destroy the object to which they point, after use. This avoids
@@ -75,7 +76,7 @@ namespace ICBC
                                    subsonic_outflow_boundaries;
     std::set<types::boundary_id>   wall_boundaries;
 
-    std::unique_ptr<Function<dim>> body_force;
+    std::unique_ptr<Function<dim>> problem_data;
     
     // The subsequent four member functions are the ones that fill the boundary 
     // containers. They must be called from outside to specify the various types 
@@ -103,7 +104,7 @@ namespace ICBC
  
     void set_wall_boundary(const types::boundary_id boundary_id);
 
-    void set_body_force(std::unique_ptr<Function<dim>> body_force);
+    void set_problem_data(std::unique_ptr<Function<dim>> problem_data);
 
     // The next member compose the different boundary conditions for each test case. 
     // It is overridden by the derived classes specific to each test case. 
@@ -180,12 +181,12 @@ namespace ICBC
   }
 
   template <int dim, int n_vars>
-  void BcBase<dim, n_vars>::set_body_force(
-    std::unique_ptr<Function<dim>> body_force)
+  void BcBase<dim, n_vars>::set_problem_data(
+    std::unique_ptr<Function<dim>> problem_data)
   {
-    AssertDimension(body_force->n_components, dim);
+    AssertDimension(problem_data->n_components, dim);
 
-    this->body_force = std::move(body_force);
+    this->problem_data = std::move(problem_data);
   }
 
 } // namespace ICBC

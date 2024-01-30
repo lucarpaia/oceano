@@ -149,12 +149,15 @@ namespace ICBC
 
 
 
-  // This should become the `Bathymetry` class ... defines the bathymetry function specific to the test-case.
+  // This should become the `Data` class ... where all the spatial data specific to
+  // the test-case are defined. This data are piled up into a vector.
+  // Up to now there are two functions. The bathymetry at the first component and the
+  // friction coefficient at the second component.
   // Also in this case we use as base class the deal.II `Function` class.
   // We consider a flat bottom bassin with a depth of $1m$. We have put the vertical
   // reference framework attached to the bottom, so the first conserved variable results
   // the sum of the free-surface plus the bathymetry (+1m). We can safely use a zero
-  // bathymetry here.
+  // bathymetry here. This test case is also frictionless.
   template <int dim>
   class BodyForce : public Function<dim>
   {
@@ -172,10 +175,10 @@ namespace ICBC
                                const unsigned int component) const
   {
     (void)x;
-    if (component == 1)
-      return 0.;
+    if (component == 0)
+      return 0.0;
     else
-      return 0.;
+      return 0.0;
   }
     
 } // namespace ICBC

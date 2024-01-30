@@ -132,7 +132,8 @@ namespace Model
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, n_vars, Number>
       source(const Tensor<1, n_vars, Number> &conserved_variables,
-             const Tensor<1, dim, Number>    &body_force) const;
+             const Tensor<1, dim, Number>    &gradient_conserved_variables,
+             const Tensor<1, dim, Number>    &parameters) const;
 
     // The next function computes an estimate of the square of the speed from the vector of conserved
     // variables, using the formula $\lambda^2 =  \|\mathbf{u}\|^2+c^2$. The estimate
@@ -221,12 +222,17 @@ namespace Model
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, n_vars, Number>
     ShallowWater::source(const Tensor<1, n_vars, Number> &conserved_variables,
-                         const Tensor<1, dim, Number>    &body_force) const
+                         const Tensor<1, dim, Number>    &gradient_conserved_variables,
+                         const Tensor<1, dim, Number>    &parameters) const
   {
+    const Tensor<1, dim, Number> v =
+      velocity<dim, n_vars>(conserved_variables);
+
     Tensor<1, n_vars, Number> source;
     source[0] = 0.;
     for (unsigned int d = 0; d < dim; ++d)
-        source[d + 1] = - g * conserved_variables[0] * body_force[d];
+      source[d + 1] = - g * conserved_variables[0] * gradient_conserved_variables[d]
+        - parameters[1] * v[d];
 
     return source;
   }

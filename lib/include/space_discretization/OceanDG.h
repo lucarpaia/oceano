@@ -406,27 +406,20 @@ namespace SpaceDiscretization
         for (unsigned int q = 0; q < phi.n_q_points; ++q)
           {
             const auto w_q = phi.get_value(q);
-            const auto dzeta_q = phi.get_gradient(q);
+            const auto dw_q = phi.get_gradient(q);
 
             phi.submit_gradient(model.flux<dim, n_vars>(w_q), q);
 
-//            std::cout << "Press grad " << q << ", " << dzeta_q[0] << std::endl;
-#if defined MODEL_EULER
-            const Tensor<1, dim, VectorizedArray<Number>> body_force_q =
+            const Tensor<1, dim, VectorizedArray<Number>> data_q =
               evaluate_function<dim, Number, dim>(
-                *bc->body_force, phi.quadrature_point(q));
-#endif
-            phi.submit_value(model.source<dim, n_vars>(
-              w_q,
-#if defined MODEL_EULER
-              body_force_q
-#elif defined MODEL_SHALLOWWATER
-              dzeta_q[0]
-#endif
-              ), q);
+                *bc->problem_data, phi.quadrature_point(q));
+
+            phi.submit_value(
+              model.source<dim, n_vars>(w_q, dw_q[0], data_q),
+              q);
           }
 
-        phi.integrate_scatter(((bc->body_force.get() != nullptr) ?
+        phi.integrate_scatter(((bc->problem_data.get() != nullptr) ?
                                  EvaluationFlags::values :
                                  EvaluationFlags::nothing) |
                                 EvaluationFlags::gradients,
@@ -474,6 +467,15 @@ namespace SpaceDiscretization
   // introduction. The flux is then queued for testing both on the minus sign
   // and on the plus sign, with switched sign as the normal vector from the
   // plus side is exactly opposed to the one from the minus side.
+  //
+  // The numerical fluxes are consistent with advective fluxes only (recall that we
+  // are using pressure force in a non-conservative form). The pressure force is
+  // computed in `local_apply_cell()` as a source term with the cellwise gradient
+  // of the free-surface. For piecewise constant functions such gradient is
+  // zero and we have to recover the pressure force in another way. We have considered
+  // an additional face integral as in (Vazquez and Cendon, 1994) that reconstructs
+  // the free-surface gradient from neighnouring cell values, in the form of
+  // a correction term.
   template <int dim, int n_vars, int degree, int n_points_1d>
   void OceanoOperator<dim, n_vars, degree, n_points_1d>::local_apply_face(
     const MatrixFree<dim, Number> &,
@@ -496,12 +498,26 @@ namespace SpaceDiscretization
 
         for (unsigned int q = 0; q < phi_m.n_q_points; ++q)
           {
-            const auto numerical_flux =
+            auto numerical_flux_p =
               num_flux.euler_numerical_flux<dim, n_vars>(phi_m.get_value(q),
                                                          phi_p.get_value(q),
                                                          phi_m.normal_vector(q));
-            phi_m.submit_value(-numerical_flux, q);
-            phi_p.submit_value(numerical_flux, q);
+            auto numerical_flux_m = -numerical_flux_p;
+
+#if defined MODEL_SHALLOWWATER
+            if (degree == 0)
+              {
+                const auto correction =
+                  num_flux.euler_correction<dim, n_vars>(phi_m.get_value(q),
+                                                         phi_p.get_value(q),
+                                                         phi_m.normal_vector(q));
+                 numerical_flux_m -= correction;
+                 numerical_flux_p -= correction;
+              }
+#endif
+
+            phi_m.submit_value(numerical_flux_m, q);
+            phi_p.submit_value(numerical_flux_p, q);
           }
 
         phi_p.integrate_scatter(EvaluationFlags::values, dst);
@@ -607,10 +623,11 @@ namespace SpaceDiscretization
                      bc->subsonic_outflow_boundaries.end())
               {
                 w_p          = w_m;
-                w_p[dim + 1] = evaluate_function(
-                  *bc->subsonic_outflow_boundaries.find(boundary_id)->second,
-                  phi.quadrature_point(q),
-                  dim + 1);
+                for (unsigned int t = 0; t < n_vars-dim-1; ++t)
+                  w_p[dim + 1 + t] = evaluate_function(
+                    *bc->subsonic_outflow_boundaries.find(boundary_id)->second,
+                    phi.quadrature_point(q),
+                    dim + 1 + t);
                 at_outflow = true;
               }
             else

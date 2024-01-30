@@ -36,9 +36,9 @@
 // We implement two different test cases. The first one is an analytical
 // solution in 2d, whereas the second is a channel flow around a cylinder as
 // described in the introduction.
-#define ICBC_ISENTROPICVORTEX
+#undef  ICBC_ISENTROPICVORTEX
 #undef  ICBC_FLOWAROUNDCYLINDER
-#undef  ICBC_IMPULSIVEWAVE
+#define ICBC_IMPULSIVEWAVE
 // The following change the numerical flux (Riemann solver) at the faces between cells. For this
 // program, we have implemented a modified variant of the Lax--Friedrichs
 // flux and the Harten--Lax--van Leer (HLL) flux:
@@ -47,8 +47,8 @@
 // Finally we have two models: a non-hydrostatic Euler model for perfect gas which was the
 // original model coded in the deal.II example and the shallow water model. The Euler model
 // is only used for debugging, to check consistency with the original deal.II example.
-#define MODEL_EULER
-#undef  MODEL_SHALLOWWATER
+#undef  MODEL_EULER
+#define MODEL_SHALLOWWATER
 
 // The include files are similar to the previous matrix-free tutorial programs
 // step-37, step-48, and step-59
@@ -133,8 +133,8 @@ namespace Problem
   // methods. We specify the Courant number per stage of the Runge--Kutta
   // scheme, as this gives a more realistic expression of the numerical cost
   // for schemes of various numbers of stages.
-  const double courant_number = 0.15 / std::pow(fe_degree, 1.5);
-  constexpr TimeIntegrator::LowStorageRungeKuttaScheme lsrk_scheme = TimeIntegrator::stage_5_order_4;
+  const double courant_number = 0.15 / std::pow(std::max<int>(1,fe_degree), 1.5);
+  constexpr TimeIntegrator::LowStorageRungeKuttaScheme lsrk_scheme = TimeIntegrator::stage_3_order_3;
 
 
 
@@ -370,8 +370,10 @@ namespace Problem
   // The constructor for this class is unsurprising: We set up a parallel
   // triangulation based on the `MPI_COMM_WORLD` communicator, a vector finite
   // element with `n_vars` components for density, momentum, and energy, a
-  // high-order mapping of the same degree as the underlying finite element,
-  // and initialize the time and time step to zero.
+  // first-order mapping and initialize the time and time step to zero.
+  // Deal.ii supports also high order mappings, in principle of the same degree
+  // as the underlying finite element, but for ocean applications the use of such
+  // high order elements is questionable.
   template <int dim, int n_vars>
   OceanoProblem<dim, n_vars>::OceanoProblem(IO::ParameterHandler      &param,
                                           ICBC::BcBase<dim, n_vars>* bc)
@@ -381,7 +383,7 @@ namespace Problem
     , triangulation(MPI_COMM_WORLD)
 #endif
     , fe(FE_DGQ<dim>(fe_degree), n_vars)
-    , mapping(fe_degree)
+    , mapping(1)
     , dof_handler(triangulation)
     , timer(pcout, TimerOutput::never, TimerOutput::wall_times)
     , oceano_operator(param, bc, timer)
@@ -403,8 +405,13 @@ namespace Problem
   // mixed meshes first. Gmsh can generate unstructured 2d quad meshes.
   //
   // Furthermore,
-  // we also add a gravity force in vertical direction. Having the base mesh
-  // in place (including the manifolds set by
+  // we also add a friction force.  Friction force, as other terms coming from
+  // boundary conditions, depends on an external and given data, e.g the friction coefficient.
+  // More in general these data may be spatially and time varying. Wind forcing or bathymetry
+  // can be other examples. Time and space functions are represented in deal.II with a Function
+  // class. Here we set a pointer to Functions that defines such external data, both for
+  // the boundary conditions and for data associated to it.
+  // Having the base mesh in place (including the manifolds set by
   // GridGenerator::channel_with_cylinder()), we can then perform the
   // specified number of global refinements, create the unknown numbering from
   // the DoFHandler, and hand the DoFHandler and Mapping objects to the
@@ -412,23 +419,22 @@ namespace Problem
   template <int dim, int n_vars>
   void OceanoProblem<dim, n_vars>::make_grid_and_dofs()
   {
-
-    oceano_operator.bc->set_body_force(
-      std::make_unique<Functions::ConstantFunction<dim>>(
-        std::vector<double>({0., 0.})));
+    oceano_operator.bc->set_problem_data(std::make_unique<ICBC::BodyForce<dim>>());
 
     // The class GridIn can read many different mesh formats from a 
     // file from disk. In order to read a grid from a file, we generate an object 
     // of data type GridIn and associate the triangulation to it (i.e. we tell 
     // it to fill our triangulation object when we ask it to read the file). 
     // Then we open the respective file and initialize the triangulation with 
-    // the data in the file
+    // the data in the file. The path to the file is reconstructed from the current
+    // directory, that means that the mesh file must exist in the same directory where
+    // the executable is lunched.
     GridIn<dim> gridin;
     gridin.attach_triangulation(triangulation);
   
     char cwd[1024];
-    Assert(getcwd(cwd, sizeof(cwd)) != NULL,
-           ExcInternalError());   
+    if (getcwd(cwd, sizeof(cwd)) == NULL)
+      ExcInternalError();
     std::string current_working_directory(cwd);
     std::string slash("/");
 
@@ -439,7 +445,7 @@ namespace Problem
          
     std::ifstream f(current_working_directory+slash+file_msh);
     pcout << "Reading mesh file: " << file_msh << std::endl;
-
+    pcout << "Reading mesh file: " << current_working_directory+slash+file_msh << std::endl;
     gridin.read_msh(f);
  
     oceano_operator.bc->set_boundary_conditions();
@@ -540,7 +546,8 @@ namespace Problem
 
     for (unsigned int t = 0; t < n_tra; ++t)
       pcout << ", "+ vars_names[dim+t+1] + ":" << std::setprecision(4)
-            << std::setw(10) << errors[t+2] << std::endl;
+            << std::setw(10) << errors[t+2];
+    pcout << std::endl;
 
     {
       TimerOutput::Scope t(timer, "output");

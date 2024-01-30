@@ -125,7 +125,8 @@ namespace Model
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, n_vars, Number>
       source(const Tensor<1, n_vars, Number> &conserved_variables,
-             const Tensor<1, dim, Number>    &body_force) const;
+             const Tensor<1, dim, Number>    &gradient_conserved_variables,
+             const Tensor<1, dim, Number>    &parameters) const;
 
     // The next function computes an estimate of the square of the speed from the vector of conserved
     // variables, using the formula $\lambda^2 =  \|\mathbf{u}\|^2+c^2$. The estimate 
@@ -225,13 +226,15 @@ namespace Model
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, n_vars, Number>
     Euler::source(const Tensor<1, n_vars, Number> &conserved_variables,
-                  const Tensor<1, dim, Number>    &body_force) const
+                  const Tensor<1, dim, Number>    &gradient_conserved_variables,
+                  const Tensor<1, dim, Number>    &parameters) const
   {
     Tensor<1, n_vars, Number> source;
+    (void)gradient_conserved_variables;
     for (unsigned int d = 0; d < dim; ++d)
-        source[d + 1] = conserved_variables[0] * body_force[d];
+        source[d + 1] = conserved_variables[0] * parameters[d];
     for (unsigned int d = 0; d < dim; ++d)
-        source[dim + 1] += body_force[d] * conserved_variables[d + 1];
+        source[dim + 1] += parameters[d] * conserved_variables[d + 1];
 
     return source;
   }

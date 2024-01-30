@@ -70,7 +70,13 @@ namespace NumericalFlux
       euler_numerical_flux(const Tensor<1, n_vars, Number> &u_m,
                            const Tensor<1, n_vars, Number> &u_p,
                            const Tensor<1, dim, Number> &    normal) const;
-                           
+
+    template <int dim, int n_vars, typename Number>
+    inline DEAL_II_ALWAYS_INLINE //
+      Tensor<1, n_vars, Number>
+      euler_correction(const Tensor<1, n_vars, Number> &u_m,
+                       const Tensor<1, n_vars, Number> &u_p,
+                       const Tensor<1, dim, Number> &    normal) const;
   };
 
  
@@ -123,7 +129,32 @@ namespace NumericalFlux
            ((s_pos * (flux_m * normal) - s_neg * (flux_p * normal)) -
            s_pos * s_neg * (u_m - u_p));
   }
-   
+
+#if defined MODEL_SHALLOWWATER
+  // The function `euler_correction()` implements a correction for the pressure
+  // term in the form $g \frac{1}{2}\frac{h^++h^-}{2}\left(\zeta^+-\zeta^-\right)$,
+  // see (Vazquez and Cendon, 1994) for first order Finite Volume and (Hubbard and
+  // Garcia Navarro, 2000) for the higher order case. This correction corresponds
+  // to the cellwise integral of the pressure forces. With the non-conservative
+  // form of the pressure that we are using, the correction term
+  // is necessary for zero degree polyniomals to accounts for pressure force.
+  template <int dim, int n_vars, typename Number>
+  inline DEAL_II_ALWAYS_INLINE //
+    Tensor<1, n_vars, Number>
+    HartenVanLeer::euler_correction(
+      const Tensor<1, n_vars, Number>  &u_m,
+      const Tensor<1, n_vars, Number>  &u_p,
+      const Tensor<1, dim, Number> &     normal) const
+  {
+    Tensor<1, n_vars, Number> corr;
+
+    for (unsigned int d = 0; d < dim; ++d)
+      corr[d + 1] = 0.25 * model.g * (u_p[0] + u_m[0]) *
+        (u_p[0] - u_m[0]) * normal[d];
+
+    return corr;
+  }
+#endif
 } // namespace NumericalFlux
 
 #endif //HARTENVANLEER_HPP
