@@ -34,6 +34,49 @@ namespace NumericalFlux
   
   
   
+  // For the model class we do not use an implementation file. This
+  // is because of the fact the all the function called are templated
+  // or inlined. Both templated and inlined functions are hard to be separated
+  // between declaration and implementation. We keep them in the header file.
+  //
+  // I would have liked to template the numerical flux class with
+  // <int dim, typename Number> which would have been cleaner. But I was not able
+  // to compile the call to the function `numerical_flux_weak()` which take
+  // as argument `Tensor<1, n_vars, Number>` while is receiving
+  // `Tensor<1, n_vars, VectorizedArray<Number>>`. I don't know why, without
+  // a template class, everything works. I leave this for future work.
+  //
+  // In this and the following functions, we use variable suffixes `_m` and
+  // `_p` to indicate quantities derived from $\mathbf{w}^-$ and $\mathbf{w}^+$,
+  // i.e., values "here" and "there" relative to the current cell when looking
+  // at a neighbor cell.
+  class LaxFriedrichsModified : public NumericalFluxBase
+  {
+  public:
+    LaxFriedrichsModified(IO::ParameterHandler &param);
+    ~LaxFriedrichsModified(){};
+
+    template <int dim, int n_vars, typename Number>
+    inline DEAL_II_ALWAYS_INLINE //
+      Tensor<1, n_vars, Number>
+      numerical_flux_weak(const Tensor<1, n_vars, Number> &u_m,
+                          const Tensor<1, n_vars, Number> &u_p,
+                          const Tensor<1, dim, Number> &    normal) const;
+  };
+
+
+
+  // The constructor of the numerical flux class takes as arguments the
+  // numerical parameters which may be test-case/user dependent. These
+  // parameters are stored as class members.
+  // In this way they are defined/read from file in one place and then used
+  // whenever needed with `numerical_flux.param`, instead of being read/defined
+  // multiple times. I hope this does not add much overhead.
+  LaxFriedrichsModified::LaxFriedrichsModified(
+    IO::ParameterHandler &param)
+    : NumericalFluxBase(param)
+  {}
+
   // For the local Lax--Friedrichs flux, the definition is $\hat{\mathbf{F}}
   // =\frac{\mathbf{F}(\mathbf{w}^-)+\mathbf{F}(\mathbf{w}^+)}{2} +
   // \frac{\lambda}{2}\left[\mathbf{w}^--\mathbf{w}^+\right]\otimes
@@ -64,61 +107,10 @@ namespace NumericalFlux
   // form, we multiply by the result by the normal vector for all terms in the
   // equation. In these multiplications, the `operator*` defined above enables
   // a compact notation similar to the mathematical definition.
-  //
-  // In this and the following functions, we use variable suffixes `_m` and
-  // `_p` to indicate quantities derived from $\mathbf{w}^-$ and $\mathbf{w}^+$,
-  // i.e., values "here" and "there" relative to the current cell when looking
-  // at a neighbor cell.
-  //
-  // I would have liked to template the numerical flux class with 
-  // <int dim, typename Number> which would have been cleaner. But I was not able 
-  // to compile the call to the function `euler_numerical_flux()` which take
-  // as argument `Tensor<1, n_vars, Number>` while is receiving 
-  // `Tensor<1, n_vars, VectorizedArray<Number>>`. I don't know why, without
-  // a template class, everything works. I leave this for future work.
-  class LaxFriedrichsModified : public NumericalFluxBase
-  {
-  public:
-    LaxFriedrichsModified(IO::ParameterHandler &param); 
-    ~LaxFriedrichsModified(){};
-
-    template <int dim, int n_vars, typename Number>
-    inline DEAL_II_ALWAYS_INLINE //
-      Tensor<1, n_vars, Number>
-      euler_numerical_flux(const Tensor<1, n_vars, Number> &u_m,
-                           const Tensor<1, n_vars, Number> &u_p,
-                           const Tensor<1, dim, Number> &    normal) const;
-
-    template <int dim, int n_vars, typename Number>
-    inline DEAL_II_ALWAYS_INLINE //
-      Tensor<1, n_vars, Number>
-      euler_correction(const Tensor<1, n_vars, Number> &u_m,
-                       const Tensor<1, n_vars, Number> &u_p,
-                       const Tensor<1, dim, Number> &    normal) const;
-  };
-
- 
- 
-  // For the model class we do not use an implementation file. This
-  // is because of the fact the all the function called are templated
-  // or inlined. Both templated and inlined functions are hard to be separated
-  // between declaration and implementation. We keep them in the header file.
-  //
-  // The constructor of the numerical flux class takes as arguments the 
-  // numerical parameters which may be test-case/user dependent. These
-  // parameters are stored as class members.
-  // In this way they are defined/read from file in one place and then used 
-  // whenever needed with `numerical_flux.param`, instead of being read/defined 
-  // multiple times. I hope this does not add much overhead.
-  LaxFriedrichsModified::LaxFriedrichsModified(
-    IO::ParameterHandler &param)
-    : NumericalFluxBase(param)
-  {} 
-  
   template <int dim, int n_vars, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, n_vars, Number>
-    LaxFriedrichsModified::euler_numerical_flux(
+    LaxFriedrichsModified::numerical_flux_weak(
       const Tensor<1, n_vars, Number>  &u_m,
       const Tensor<1, n_vars, Number>  &u_p,
       const Tensor<1, dim, Number> &     normal) const
@@ -135,32 +127,6 @@ namespace NumericalFlux
     return 0.5 * (flux_m * normal + flux_p * normal) +
            0.5 * lambda * (u_m - u_p);
   }
-
-#if defined MODEL_SHALLOWWATER
-  // The function `euler_correction()` implements a correction for the pressure
-  // term in the form $g \frac{1}{2}\frac{h^++h^-}{2}\left(\zeta^+-\zeta^-\right)$,
-  // see (Vazquez and Cendon, 1994) for first order Finite Volume and (Hubbard and
-  // Garcia Navarro, 2000) for the higher order case. This correction corresponds
-  // to the cellwise integral of the pressure forces. With the non-conservative
-  // form of the pressure that we are using, the correction term
-  // is necessary for zero degree polyniomals to accounts for pressure force.
-  template <int dim, int n_vars, typename Number>
-  inline DEAL_II_ALWAYS_INLINE //
-    Tensor<1, n_vars, Number>
-    LaxFriedrichsModified::euler_correction(
-      const Tensor<1, n_vars, Number>  &u_m,
-      const Tensor<1, n_vars, Number>  &u_p,
-      const Tensor<1, dim, Number> &     normal) const
-  {
-    Tensor<1, n_vars, Number> corr;
-
-    for (unsigned int d = 0; d < dim; ++d)
-      corr[d + 1] = 0.25 * model.g * (u_p[0] + u_m[0]) *
-        (u_p[0] - u_m[0]) * normal[d];
-
-    return corr;
-  }
-#endif
 } // namespace NumericalFlux
 
 #endif //LAXFRIEDRICHSMODIFIED_HPP

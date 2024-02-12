@@ -365,7 +365,7 @@ namespace SpaceDiscretization
   //
   // The rest follows the other tutorial programs. Since we have implemented
   // all physics for the governing equations in the separate `model.flux()`
-  // function, all we have to do here is to call this function
+  // and `model.source()` functions, all we have to do here is to call this function
   // given the current solution evaluated at quadrature points, returned by
   // `phi.get_value(q)`, and tell the FEEvaluation object to queue the flux
   // for testing it by the gradients of the shape functions (which is a Tensor
@@ -382,6 +382,10 @@ namespace SpaceDiscretization
   // setups, one has to first copy out e.g. both the value and gradient at a
   // quadrature point and then queue results again by
   // FEEvaluationBase::submit_value() and FEEvaluationBase::submit_gradient().
+  // Note that the flux term contains mass-flux and non-linear advection flux
+  // while the pressure flux appears in the source term, where it is written
+  // in a non-conservative form $h\nabla\zeta$. This why the `model.source()`
+  // function take as argument the gradient of the free-surface.
   //
   // As a final note, we mention that we do not use the first MatrixFree
   // argument of this function, which is a call-back from MatrixFree::loop().
@@ -458,24 +462,27 @@ namespace SpaceDiscretization
   // the cell evaluation. We again use the more accurate (over-)integration
   // scheme due to the nonlinear terms, specified as the third template
   // argument in the list. At the quadrature points, we then go to our
-  // free-standing function for the numerical flux. It receives the solution
+  // free-standing functions for the numerical flux. They receives the solution
   // evaluated at quadrature points from both sides (i.e., $\mathbf{w}^-$ and
-  // $\mathbf{w}^+$), as well as the normal vector onto the minus side. As
-  // explained above, the numerical flux is already multiplied by the normal
+  // $\mathbf{w}^+$), as well as the normal vector onto the minus side. 
+  // We separate numerical fluxes coming from terms written in weak form from
+  // terms written in strong form.
+  //
+  // For the shallow water equations mass-flux
+  // and non-linear advection terms are coded in weak form while pressure force
+  // appears in strong form. For instance, the weak form for the pressure term
+  // has proved to preserve easily the lake at rest solution. Depending on weak/strong
+  // formulation, the flux term has different forms. We cumulate numerical flux
+  // in two different arrays for both sided.
+  // As explained above, the weak numerical flux is already multiplied by the normal
   // vector from the minus side. We need to switch the sign because the
   // boundary term comes with a minus sign in the weak form derived in the
   // introduction. The flux is then queued for testing both on the minus sign
   // and on the plus sign, with switched sign as the normal vector from the
-  // plus side is exactly opposed to the one from the minus side.
+  // plus side is exactly opposed to the one from the minus side.  The strong
+  // form goes with the same sign on both sides. For this reason we have used
+  // another function to compute it.
   //
-  // The numerical fluxes are consistent with advective fluxes only (recall that we
-  // are using pressure force in a non-conservative form). The pressure force is
-  // computed in `local_apply_cell()` as a source term with the cellwise gradient
-  // of the free-surface. For piecewise constant functions such gradient is
-  // zero and we have to recover the pressure force in another way. We have considered
-  // an additional face integral as in (Vazquez and Cendon, 1994) that reconstructs
-  // the free-surface gradient from neighnouring cell values, in the form of
-  // a correction term.
   template <int dim, int n_vars, int degree, int n_points_1d>
   void OceanoOperator<dim, n_vars, degree, n_points_1d>::local_apply_face(
     const MatrixFree<dim, Number> &,
@@ -499,21 +506,18 @@ namespace SpaceDiscretization
         for (unsigned int q = 0; q < phi_m.n_q_points; ++q)
           {
             auto numerical_flux_p =
-              num_flux.euler_numerical_flux<dim, n_vars>(phi_m.get_value(q),
-                                                         phi_p.get_value(q),
-                                                         phi_m.normal_vector(q));
+              num_flux.numerical_flux_weak<dim, n_vars>(phi_m.get_value(q),
+                                                        phi_p.get_value(q),
+                                                        phi_m.normal_vector(q));
             auto numerical_flux_m = -numerical_flux_p;
 
 #if defined MODEL_SHALLOWWATER
-            if (degree == 0)
-              {
-                const auto correction =
-                  num_flux.euler_correction<dim, n_vars>(phi_m.get_value(q),
-                                                         phi_p.get_value(q),
-                                                         phi_m.normal_vector(q));
-                 numerical_flux_m -= correction;
-                 numerical_flux_p -= correction;
-              }
+            auto pressure_numerical_flux =
+              num_flux.numerical_flux_strong<dim, n_vars>(phi_m.get_value(q),
+                                                          phi_p.get_value(q),
+                                                          phi_m.normal_vector(q));
+            numerical_flux_m -= pressure_numerical_flux;
+            numerical_flux_p -= pressure_numerical_flux;
 #endif
 
             phi_m.submit_value(numerical_flux_m, q);
@@ -636,7 +640,13 @@ namespace SpaceDiscretization
                                      "you set a boundary condition for "
                                      "this part of the domain boundary?"));
 
-            auto flux = num_flux.euler_numerical_flux<dim, n_vars>(w_m, w_p, normal);
+            auto flux = num_flux.numerical_flux_weak<dim, n_vars>(w_m, w_p, normal);
+
+#if defined MODEL_SHALLOWWATER
+            auto pressure_numerical_fluxes =
+              num_flux.numerical_flux_strong<dim, n_vars>(w_m, w_p, normal);
+            flux -= pressure_numerical_fluxes;
+#endif
 
             if (at_outflow)
               for (unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v)

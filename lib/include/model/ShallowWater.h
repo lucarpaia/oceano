@@ -206,7 +206,7 @@ namespace Model
   {
     const Tensor<1, dim, Number> v =
       velocity<dim, n_vars>(conserved_variables);
-
+    
     Tensor<1, n_vars, Tensor<1, dim, Number>> flux;
     for (unsigned int d = 0; d < dim; ++d)
       {

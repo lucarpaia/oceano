@@ -142,9 +142,6 @@ namespace ICBC
   void BcImpulsiveWave<dim, n_vars>::set_boundary_conditions()
   {
     this->set_wall_boundary(0);
-    this->set_wall_boundary(1);
-    this->set_wall_boundary(2);
-    this->set_wall_boundary(3);
   }
 
 

@@ -55,7 +55,7 @@ namespace NumericalFlux
     return result;
   }
     
-  // This function implements the numerical flux (Riemann solver). It gets the
+  // This class implements the numerical flux (Riemann solver). It gets the
   // state from the two sides of an interface and the normal vector, oriented
   // from the side of the solution $\mathbf{w}^-$ towards the solution
   // $\mathbf{w}^+$. In finite volume methods which rely on piece-wise
@@ -69,8 +69,8 @@ namespace NumericalFlux
   // important to realize that a numerical flux alone cannot stabilize a
   // high-order DG method in the presence of shocks, and thus any DG method
   // must be combined with further shock-capturing techniques to handle those
-  // cases. In this tutorial, we focus on wave-like solutions of the Euler
-  // equations in the subsonic regime without strong discontinuities where our
+  // cases. In this tutorial, we focus on wave-like solutions in the
+  // subsonic regime without strong discontinuities where our
   // basic scheme is sufficient.
   //
   // Nonetheless, the numerical flux is decisive in terms of the numerical
@@ -78,12 +78,11 @@ namespace NumericalFlux
   // size with explicit Runge--Kutta methods. We consider two choices, a
   // modified Lax--Friedrichs scheme and the widely used Harten--Lax--van Leer
   // (HLL) flux. For both variants, we first need to get the velocities and
-  // pressures from both sides of the interface and evaluate the physical
-  // Euler flux.
+  // pressures from both sides of the interface and evaluate the physical flux.
   //
   // I would have liked to template the numerical flux class with 
   // <int dim, typename Number> which would have been cleaner. But I was not able 
-  // to compile the call to the function `euler_numerical_flux()` which take
+  // to compile the call to the function `numerical_flux_weak()` which take
   // as argument `Tensor<1, n_vars, Number>` while is receiving 
   // `Tensor<1, n_vars, VectorizedArray<Number>>`. I don't know why, without
   // a template class, everything works. I leave this for future work.  
@@ -92,8 +91,14 @@ namespace NumericalFlux
   public:
     NumericalFluxBase(IO::ParameterHandler &param);
     ~NumericalFluxBase(){};
-                                    
-  public:
+
+    template <int dim, int n_vars, typename Number>
+    inline DEAL_II_ALWAYS_INLINE //
+      Tensor<1, n_vars, Number>
+      numerical_flux_strong(const Tensor<1, n_vars, Number> &u_m,
+                            const Tensor<1, n_vars, Number> &u_p,
+                            const Tensor<1, dim, Number> &    normal) const;
+
 #if defined MODEL_EULER
     Model::Euler model;
 #elif defined MODEL_SHALLOWWATER
@@ -105,6 +110,30 @@ namespace NumericalFlux
     IO::ParameterHandler &param)
     : model(param)
   {} 
+
+#if defined MODEL_SHALLOWWATER
+  // We implement the contribution to the numerical flux coming from the terms that
+  // have been approximated with the strong formulation of discontinuos Galerkin.
+  // This is the case for the pressure term in the shallow water equations.
+  template <int dim, int n_vars, typename Number>
+  inline DEAL_II_ALWAYS_INLINE //
+    Tensor<1, n_vars, Number>
+    NumericalFluxBase::numerical_flux_strong(
+      const Tensor<1, n_vars, Number>  &u_m,
+      const Tensor<1, n_vars, Number>  &u_p,
+      const Tensor<1, dim, Number> &     normal) const
+  {
+    Tensor<1, n_vars, Number> corr;
+
+    const auto p_m = model.pressure<dim, n_vars>(u_m);
+    const auto p_p = model.pressure<dim, n_vars>(u_p);
+
+    for (unsigned int d = 0; d < dim; ++d)
+      corr[d + 1] = ( 0.5 * (p_p + p_m) - p_m ) * normal[d];
+
+    return corr;
+  }
+#endif
    
 } // namespace NumericalFlux
 
