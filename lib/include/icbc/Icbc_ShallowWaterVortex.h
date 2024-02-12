@@ -30,18 +30,18 @@
 namespace ICBC
 {
 
-  // The first test case is a shallow water travelling compact vortex 
+  // The first test case is a compact shallow water travelling vortex (shortly RB-vortex)
   // (Ricchiuto and Bollerman, 2008) which fulfills the shallow water equations 
   // with zero force term on the right hand side. 
-  // The RB vortex which is $C^4$ in the depth but only $C^1$ 
+  // The RB-vortex is $C^4$ in the depth but only $C^1$ 
   // in the velocity. According to the classical interpolation estimate
   // of finite element theory, we can expect only second order of convergence for
   // the variables, included momentum. This vortex is thus suited to test second order schemes.
   // For an extension of the RB-vortex to an arbitrary degree of smoothness, 
-  // see Ricchiuto and Torlo, 2021 arXiv:2109.10183v1. The implementation followed here
-  // is the the same provided in the last reference for the lowest degree of smoothness (p=1).  
+  // see (Ricchiuto and Torlo, 2021 arXiv:2109.10183v1). The implementation followed here
+  // is the same provided in the last reference for the lowest degree of smoothness (p=1).  
   // The iterative corrections to improve the vortex smoothness and 
-  // tests higher then second order schemes can be readily implemented.
+  // test higher then second order schemes can be readily implemented.
   
   using namespace dealii;
   
@@ -49,8 +49,8 @@ namespace ICBC
   // and boundary conditions. In  this case $g$ is defined also in the main 
   // program and we could have recoverd it from there. We redefine $g$ here for now.
   constexpr double g       = 1.0;
-  // The others are the parameters of the vortex, the undisturbed water depth and velocity.
-  // Wee choose a shallow channel $[0,1]\times[0,2]$ with depth of 0.1. The vortex have a 
+  // The parameters of the vortex such as the undisturbed water depth and the free-strem velocity.
+  // follows. We choose a shallow channel $[0,1]\times[0,2]$ with depth of 0.1. The vortex have a 
   // small amplitude of 0.01 and radius slightly less than half of the channel width.
   constexpr double h0      = 1.0;
   constexpr double uoo     = 1.0;  
@@ -113,7 +113,7 @@ namespace ICBC
     
     //double H_pi_half = 0.091145833*cos2x + 0.182291667*pi_half*sin2x 
     //  + std::pow(cosx,6)* (0.015625*cosx2 + 0.024305556) + 0.011393229*cos2x2 
-    //  + 0.13671875*x2 + 0.045572917*pi_half*cos2x*sin2x + 0.125*pi_half*std::pow(cosx,5)*sinx*(cosx2 + 1.166666667); !p=2
+    //  + 0.13671875*x2 + 0.045572917*pi_half*cos2x*sin2x + 0.125*pi_half*std::pow(cosx,5)*sinx*(cosx2 + 1.166666667); !this is for p=2
     double H_pi_half = 0.125*cos2x + 0.25*pi_half*sin2x 
       + 0.015625*cos2x2 + 0.1875*x2 + 0.0625*pi_half*cos2x*sin2x;
 
@@ -128,12 +128,12 @@ namespace ICBC
 
     //double H_rho_half = 0.091145833*cos2x + 0.182291667*rho_half*sin2x 
     //  + std::pow(cosx,6)* (0.015625*cosx2 + 0.024305556) + 0.011393229*cos2x2 
-    //  + 0.13671875*x2 + 0.045572917*rho_half*cos2x*sin2x + 0.125*rho_half*std::pow(cosx,5)*sinx*(cosx2 + 1.166666667); !p=2
+    //  + 0.13671875*x2 + 0.045572917*rho_half*cos2x*sin2x + 0.125*rho_half*std::pow(cosx,5)*sinx*(cosx2 + 1.166666667); !this is for p=2
     double H_rho_half = 0.125*cos2x + 0.25*rho_half*sin2x 
       + 0.015625*cos2x2 + 0.1875*x2 + 0.0625*rho_half*cos2x*sin2x;
 
     const double inv_gpi = 1./(g * M_PI * M_PI);
-    const double omega = twoPowp * Gamma * cosx2; //* std::pow(cosx2,p); !p=2
+    const double omega = twoPowp * Gamma * cosx2; //* std::pow(cosx2,p); !this is for p=2
     const double num = twoPowp * 2. * Gamma * radius0;
         
     const double depth =
@@ -182,7 +182,10 @@ namespace ICBC
 
   }; 
 
-  // Dirichlet boundary conditions (inflow) are specified all around the domain.
+  // Dirichlet boundary conditions (inflow) are specified on the left boundary of the domain.
+  // The right boundary is for outflow. Top and bottom boundaries are wall. Please note that,
+  // for the vortex parameters given above, the flow is supercritical and the choice of 
+  // boundary conditions seems appropriate.
   template <int dim, int n_vars>
   void BcShallowWaterVortex<dim, n_vars>::set_boundary_conditions()
   {
