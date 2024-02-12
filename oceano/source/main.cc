@@ -38,7 +38,8 @@
 // described in the introduction.
 #undef  ICBC_ISENTROPICVORTEX
 #undef  ICBC_FLOWAROUNDCYLINDER
-#define ICBC_IMPULSIVEWAVE
+#undef  ICBC_IMPULSIVEWAVE
+#define ICBC_SHALLOWWATERVORTEX
 // The following change the numerical flux (Riemann solver) at the faces between cells. For this
 // program, we have implemented a modified variant of the Lax--Friedrichs
 // flux and the Harten--Lax--van Leer (HLL) flux:
@@ -102,6 +103,8 @@
 #include <icbc/Icbc_FlowAroundCylinder.h>
 #elif defined ICBC_IMPULSIVEWAVE
 #include <icbc/Icbc_ImpulsiveWave.h>
+#elif defined ICBC_SHALLOWWATERVORTEX
+#include <icbc/Icbc_ShallowWaterVortex.h>
 #endif
 
 namespace Problem
@@ -792,6 +795,8 @@ int main(int argc, char **argv)
       bc = new ICBC::BcFlowAroundCylinder<dimension, n_variables>;
 #elif defined ICBC_IMPULSIVEWAVE
       bc = new ICBC::BcImpulsiveWave<dimension, n_variables>;
+#elif defined ICBC_SHALLOWWATERVORTEX
+      bc = new ICBC::BcShallowWaterVortex<dimension, n_variables>;
 #else          
       Assert(false, ExcNotImplemented());
       return 0.;
