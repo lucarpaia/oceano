@@ -180,11 +180,15 @@ namespace ICBC
     wall_boundaries.insert(boundary_id);
   }
 
+  // The size of the data is fixed to five scalar quantities. The first component is the bathymetry.
+  // The second is the bottom friction coefficient. The third and fourth components
+  // are the cartesian components of the wind velocity (in order, eastward and northward).
+  // The fifth one is the Coriolis parameter.
   template <int dim, int n_vars>
   void BcBase<dim, n_vars>::set_problem_data(
     std::unique_ptr<Function<dim>> problem_data)
   {
-    AssertDimension(problem_data->n_components, dim);
+    AssertDimension(problem_data->n_components, dim+3);
 
     this->problem_data = std::move(problem_data);
   }

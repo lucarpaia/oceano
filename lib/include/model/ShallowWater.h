@@ -21,6 +21,9 @@
 
 // The following files include the oceano libraries
 #include <io/ParameterReader.h>
+#include <physics/BottomFriction.h>
+#include <physics/WindStress.h>
+#include <physics/Coriolis.h>
 
 /**
  * Namespace containing the model equations.
@@ -90,6 +93,26 @@ namespace Model
     std::vector<std::string> vars_name;
     std::vector<std::string> postproc_vars_name;
 
+#if defined PHYSICS_BOTTOMFRICTIONLINEAR
+    Physics::BottomFrictionLinear bottom_friction;
+#elif defined PHYSICS_BOTTOMFRICTIONMANNING
+    Physics::BottomFrictionManning bottom_friction;
+#else
+    Assert(false, ExcNotImplemented());
+    return 0.;
+#endif
+
+#if defined PHYSICS_WINDSTRESSGENERAL
+    Physics::WindStressGeneral wind_stress;
+#elif defined PHYSICS_WINDSTRESSQUADRATIC
+    Physics::WindStressQuadratic wind_stress;
+#else
+    Assert(false, ExcNotImplemented());
+    return 0.;
+#endif
+
+    Physics::CoriolisBeta coriolis_force;
+
     // The next function computes the velocity from the vector of conserved
     // variables
     template <int dim, int n_vars, typename Number>
@@ -133,7 +156,7 @@ namespace Model
       Tensor<1, n_vars, Number>
       source(const Tensor<1, n_vars, Number> &conserved_variables,
              const Tensor<1, dim, Number>    &gradient_conserved_variables,
-             const Tensor<1, dim, Number>    &parameters) const;
+             const Tensor<1, dim+3, Number>  &parameters) const;
 
     // The next function computes an estimate of the square of the speed from the vector of conserved
     // variables, using the formula $\lambda^2 =  \|\mathbf{u}\|^2+c^2$. The estimate
@@ -168,6 +191,9 @@ namespace Model
   // instead of being read/defined multiple times.
   ShallowWater::ShallowWater(
     IO::ParameterHandler &prm)
+    : bottom_friction(prm)
+    , wind_stress(prm)
+    , coriolis_force()
   {
     prm.enter_subsection("Physical constants");
     g = prm.get_double("g");
@@ -223,16 +249,26 @@ namespace Model
     Tensor<1, n_vars, Number>
     ShallowWater::source(const Tensor<1, n_vars, Number> &conserved_variables,
                          const Tensor<1, dim, Number>    &gradient_conserved_variables,
-                         const Tensor<1, dim, Number>    &parameters) const
+                         const Tensor<1, dim+3, Number>  &parameters) const
   {
     const Tensor<1, dim, Number> v =
       velocity<dim, n_vars>(conserved_variables);
 
     Tensor<1, n_vars, Number> source;
     source[0] = 0.;
+
+    const Tensor<1, dim, Number> bottomfric =
+      bottom_friction.source<dim, Number>(v, parameters[1], conserved_variables[0]);
+    const Tensor<1, dim, Number> windstress =
+      wind_stress.source<dim, Number>(&parameters[2]);
+    const Tensor<1, dim, Number> coriolis =
+      coriolis_force.source<dim, n_vars, Number>(conserved_variables, parameters[4]);
+
     for (unsigned int d = 0; d < dim; ++d)
       source[d + 1] = - g * conserved_variables[0] * gradient_conserved_variables[d]
-        - parameters[1] * v[d];
+	- bottomfric[d]
+        + windstress[d]
+        + coriolis[d];
 
     return source;
   }

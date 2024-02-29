@@ -414,8 +414,8 @@ namespace SpaceDiscretization
 
             phi.submit_gradient(model.flux<dim, n_vars>(w_q), q);
 
-            const Tensor<1, dim, VectorizedArray<Number>> data_q =
-              evaluate_function<dim, Number, dim>(
+            const Tensor<1, dim+3, VectorizedArray<Number>> data_q =
+              evaluate_function<dim, Number, dim+3>(
                 *bc->problem_data, phi.quadrature_point(q));
 
             phi.submit_value(

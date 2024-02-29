@@ -156,20 +156,26 @@ namespace ICBC
   // the sum of the free-surface plus the bathymetry (+1m). We can safely use a zero
   // bathymetry here. This test case is also frictionless.
   template <int dim>
-  class BodyForce : public Function<dim>
+  class ProblemData : public Function<dim>
   {
   public:
-    BodyForce()
-      : Function<dim>(dim)
-    {}
+    ProblemData(IO::ParameterHandler &prm);
+    ~ProblemData(){};
 
     virtual double value(const Point<dim> & p,
                          const unsigned int component = 0) const override;
   };
 
   template <int dim>
-  double BodyForce<dim>::value(const Point<dim> & x,
-                               const unsigned int component) const
+  ProblemData<dim>::ProblemData(IO::ParameterHandler &/*prm*/)
+    : Function<dim>(dim+3)
+  {}
+  
+  
+
+  template <int dim>
+  double ProblemData<dim>::value(const Point<dim> & x,
+                                 const unsigned int component) const
   {
     (void)x;
     if (component == 0)

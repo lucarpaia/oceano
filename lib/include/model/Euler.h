@@ -126,7 +126,7 @@ namespace Model
       Tensor<1, n_vars, Number>
       source(const Tensor<1, n_vars, Number> &conserved_variables,
              const Tensor<1, dim, Number>    &gradient_conserved_variables,
-             const Tensor<1, dim, Number>    &parameters) const;
+             const Tensor<1, dim+3, Number>  &parameters) const;
 
     // The next function computes an estimate of the square of the speed from the vector of conserved
     // variables, using the formula $\lambda^2 =  \|\mathbf{u}\|^2+c^2$. The estimate 
@@ -227,7 +227,7 @@ namespace Model
     Tensor<1, n_vars, Number>
     Euler::source(const Tensor<1, n_vars, Number> &conserved_variables,
                   const Tensor<1, dim, Number>    &gradient_conserved_variables,
-                  const Tensor<1, dim, Number>    &parameters) const
+                  const Tensor<1, dim+3, Number>  &parameters) const
   {
     Tensor<1, n_vars, Number> source;
     (void)gradient_conserved_variables;

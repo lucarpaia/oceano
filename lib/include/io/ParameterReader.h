@@ -28,8 +28,8 @@ namespace IO
 
   using namespace dealii;
 
-																																																																																																																																																																																																																																																
-    
+
+ 
   // The next class is responsible for preparing the `ParameterHandler` 
   // object and reading parameters from an input file. It includes a 
   // function `declare_parameters` that declares all the necessary 
@@ -93,26 +93,52 @@ namespace IO
     prm.leave_subsection();
 
     // The next subsection is devoted to the physical parameters appearing 
-    // in the equation, which for now is only the real gas constant $\gamma$. 
-    // Again, it need to lie in the half-open interval $[0,\infty)$ 
+    // in the equation. These are the gravitational acceleration $g$, the air and
+    // water density, $\rho_{air}$ and $\rho_0$.
+    // They need to lie in the half-open interval $[0,\infty)$
     // represented by calling the `Patterns::Double` class with only the 
-    // left end-point as argument: 
+    // left end-point as argument 
     prm.enter_subsection("Physical constants");
     {
-      prm.declare_entry("g", "1.4", Patterns::Double(0), "Real gas constant");
+      prm.declare_entry("g", "9.81", Patterns::Double(0), "Gravity");
+
+      prm.declare_entry("water_density",
+                        "1025.",
+                        Patterns::Double(0),
+                        "Reference water density");
+
+      prm.declare_entry("air_density",
+                        "1.225",
+                        Patterns::Double(0),
+                        "Air density");
+
+      prm.declare_entry("wind_drag",
+                        "0.0025",
+                        Patterns::Double(0),
+                        "Wind drag coefficient");
+
+      prm.declare_entry("coriolis_f0",
+                        "1e-4",
+                        Patterns::Double(0),
+                        "Wind drag coefficient");
+
+      prm.declare_entry("coriolis_beta",
+                        "2e-11",
+                        Patterns::Double(0),
+                        "Wind drag coefficient");
     }
     prm.leave_subsection();
- 
-    // Last but not least we would like to be able to change some properties 
-    // of the output, like output filename and time interval, through entries in the 
-    // configuration file, which is the purpose of the last subsection: 
+
+    // Last but not least we would like to be able to change some properties
+    // of the output, like output filename and time interval, through entries in the
+    // configuration file, which is the purpose of the last subsection:
     prm.enter_subsection("Output parameters");
     {
       prm.declare_entry("Output_filename",
                         "solution",
                         Patterns::Anything(),
                         "Name of the output file (without extension)");
-                        
+
       prm.declare_entry("Output_tick",
                         "10000000000.",
                         Patterns::Double(0),
@@ -123,13 +149,13 @@ namespace IO
                         Patterns::Integer(0),
                         "Flag to append also the error field to the output file");
 
-      // Since different output formats may require different parameters for 
-      // generating output, it would be cumbersome if we had to declare all these 
-      // parameters by hand for every possible output format supported in the library. 
-      // Instead, each output format has a `FormatFlags::declare_parameters` function, 
-      // which declares all the parameters specific to that format in an own subsection. 
-      // The following call of `DataOutInterface<1>::declare_parameters` executes 
-      // declare_parameters for all available output formats, so that for each format 
+      // Since different output formats may require different parameters for
+      // generating output, it would be cumbersome if we had to declare all these
+      // parameters by hand for every possible output format supported in the library.
+      // Instead, each output format has a `FormatFlags::declare_parameters` function,
+      // which declares all the parameters specific to that format in an own subsection.
+      // The following call of `DataOutInterface<1>::declare_parameters` executes
+      // declare_parameters for all available output formats, so that for each format
       // an own subsection will be created with parameters declared for that particular
       // output format.
       DataOutInterface<1>::declare_parameters(prm);
@@ -139,9 +165,9 @@ namespace IO
  
   // This is the main function in the ParameterReader class. It gets called
   // from outside, first declares all the parameters, and then reads them from
-  // the input file whose filename is provided by the caller. After the call 
-  // to this function is complete, the prm object can be used to retrieve the 
-  // values of the parameters read in from the file : 
+  // the input file whose filename is provided by the caller. After the call
+  // to this function is complete, the prm object can be used to retrieve the
+  // values of the parameters read in from the file :
   void ParameterReader::read_parameters(const std::string &parameter_file)
   {
     declare_parameters();

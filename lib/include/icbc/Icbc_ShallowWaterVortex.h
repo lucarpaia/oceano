@@ -42,6 +42,8 @@ namespace ICBC
   // is the same provided in the last reference for the lowest degree of smoothness (p=1).  
   // The iterative corrections to improve the vortex smoothness and 
   // test higher then second order schemes can be readily implemented.
+#undef REGULARITY_P1
+#define  REGULARITY_P2
   
   using namespace dealii;
   
@@ -93,12 +95,19 @@ namespace ICBC
     x0[0] = 0.5 + uoo *t; 
     x0[1] = 0.5;
 
-    //const unsigned int p = 1; ! we code only p=1 case
-    const double twoPowp = 2; //std::pow(2,p);
-    
-    //const double Gamma = M_PI/(twoPowp*radius0) * std::sqrt( g*(h0-hmin)/(0.034179687*M_PI*M_PI-0.222222222)); !p=2
-    const double Gamma = M_PI/(twoPowp*radius0) * std::sqrt( g*(h0-hmin)/(4.*(0.046875*M_PI*M_PI-0.25)));
+#if defined REGULARITY_P1
+    const unsigned int p = 1;
+#elif defined REGULARITY_P2
+    const unsigned int p = 2;
+#endif
+    const double corr = 4.;
+    const double twoPowp = std::pow(2,p);
 
+#if defined REGULARITY_P1
+    const double Gamma = M_PI/(twoPowp*radius0) * std::sqrt( 1./corr* g*(h0-hmin)/(0.046875*M_PI*M_PI-0.25));
+#elif defined REGULARITY_P2
+    const double Gamma = M_PI/(twoPowp*radius0) * std::sqrt( 1./corr* g*(h0-hmin)/(0.034179687*M_PI*M_PI-0.222222222));
+#endif
         
     const double radius = (x - x0).norm();
 
@@ -110,12 +119,17 @@ namespace ICBC
     double cosx2 = cosx*cosx;
     double cos2x2 = cos2x*cos2x;
     double x2 = pi_half*pi_half;
-    
-    //double H_pi_half = 0.091145833*cos2x + 0.182291667*pi_half*sin2x 
-    //  + std::pow(cosx,6)* (0.015625*cosx2 + 0.024305556) + 0.011393229*cos2x2 
-    //  + 0.13671875*x2 + 0.045572917*pi_half*cos2x*sin2x + 0.125*pi_half*std::pow(cosx,5)*sinx*(cosx2 + 1.166666667); !this is for p=2
+
+#if defined REGULARITY_P1
     double H_pi_half = 0.125*cos2x + 0.25*pi_half*sin2x 
       + 0.015625*cos2x2 + 0.1875*x2 + 0.0625*pi_half*cos2x*sin2x;
+#elif defined REGULARITY_P2
+    double sinx = std::sin(pi_half);
+    double H_pi_half = 0.091145833*cos2x + 0.182291667*pi_half*sin2x 
+      + std::pow(cosx,6)* (0.015625*cosx2 + 0.024305556) + 0.011393229*cos2x2 
+      + 0.13671875*x2 + 0.045572917*pi_half*cos2x*sin2x + 0.125*pi_half*std::pow(cosx,5)*sinx*(cosx2 + 1.166666667);
+#endif
+    H_pi_half *= corr;
 
     const double rho_half = 0.5*M_PI*radius/radius0; 
 
@@ -126,15 +140,20 @@ namespace ICBC
     cos2x2 = cos2x*cos2x;
     x2 = rho_half*rho_half;
 
-    //double H_rho_half = 0.091145833*cos2x + 0.182291667*rho_half*sin2x 
-    //  + std::pow(cosx,6)* (0.015625*cosx2 + 0.024305556) + 0.011393229*cos2x2 
-    //  + 0.13671875*x2 + 0.045572917*rho_half*cos2x*sin2x + 0.125*rho_half*std::pow(cosx,5)*sinx*(cosx2 + 1.166666667); !this is for p=2
+#if defined REGULARITY_P1
     double H_rho_half = 0.125*cos2x + 0.25*rho_half*sin2x 
       + 0.015625*cos2x2 + 0.1875*x2 + 0.0625*rho_half*cos2x*sin2x;
+#elif defined REGULARITY_P2
+    sinx = std::sin(rho_half);
+    double H_rho_half = 0.091145833*cos2x + 0.182291667*rho_half*sin2x 
+      + std::pow(cosx,6)* (0.015625*cosx2 + 0.024305556) + 0.011393229*cos2x2 
+      + 0.13671875*x2 + 0.045572917*rho_half*cos2x*sin2x + 0.125*rho_half*std::pow(cosx,5)*sinx*(cosx2 + 1.166666667);
+#endif
+    H_rho_half *= corr;
 
     const double inv_gpi = 1./(g * M_PI * M_PI);
-    const double omega = twoPowp * Gamma * cosx2; //* std::pow(cosx2,p); !this is for p=2
-    const double num = twoPowp * 2. * Gamma * radius0;
+    const double omega = twoPowp * Gamma * std::pow(cosx2,p);
+    const double num = twoPowp * Gamma * radius0;
         
     const double depth =
       radius < radius0 ? h0 - inv_gpi * num * num * (H_pi_half - H_rho_half) : h0;
@@ -199,29 +218,30 @@ namespace ICBC
 
 
 
-  // The `BodyForce` class define the body force for the test-case.
-  // In this case it is null.
+  // We do not have any source term and no associated data values.
   template <int dim>  
-  class BodyForce : public Function<dim>
+  class ProblemData : public Function<dim>
   {
   public:
-    BodyForce()
-      : Function<dim>(dim)
-    {}
+    ProblemData(IO::ParameterHandler &prm);
+    ~ProblemData(){};
 
     virtual double value(const Point<dim> & p,
                          const unsigned int component = 0) const override;
   };
 
   template <int dim>
-  double BodyForce<dim>::value(const Point<dim> & x,
-                               const unsigned int component) const
+  ProblemData<dim>::ProblemData(IO::ParameterHandler &/*prm*/)
+    : Function<dim>(dim+3)
+  {}
+
+
+  
+  template <int dim>
+  double ProblemData<dim>::value(const Point<dim> & /*x*/,
+                                 const unsigned int /*component*/) const
   {
-    (void)x;
-    if (component == 1)
-      return 0.;
-    else
-      return 0.;
+    return 0.0;
   }
     
 } // namespace ICBC

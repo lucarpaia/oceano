@@ -40,17 +40,30 @@
 #undef  ICBC_FLOWAROUNDCYLINDER
 #undef  ICBC_IMPULSIVEWAVE
 #define ICBC_SHALLOWWATERVORTEX
+#undef  ICBC_STOMMELGYRE
 // The following change the numerical flux (Riemann solver) at the faces between cells. For this
 // program, we have implemented a modified variant of the Lax--Friedrichs
 // flux and the Harten--Lax--van Leer (HLL) flux:
 #define NUMERICALFLUX_LAXFRIEDRICHSMODIFIED
 #undef  NUMERICALFLUX_HARTENVANLEER
-// Finally we have two models: a non-hydrostatic Euler model for perfect gas which was the
+// We have two models: a non-hydrostatic Euler model for perfect gas which was the
 // original model coded in the deal.II example and the shallow water model. The Euler model
 // is only used for debugging, to check consistency with the original deal.II example.
-#undef  MODEL_EULER
 #define MODEL_SHALLOWWATER
-
+#undef  MODEL_EULER
+// Next come the physics. With the following cpp keys one can switch between the different
+// formulations of a given term in the right-hand side of the shallow water equations.
+// For the bottom friction one has two formulations: a simple linear bottom friction and
+// a non-linear Manning bottom friction. In both cases, in the icbc class must appear the
+// definition of the drag coefficient, either the linear drag coefficient or the Manning
+// number.
+#define PHYSICS_BOTTOMFRICTIONLINEAR
+#undef  PHYSICS_BOTTOMFRICTIONMANNING
+// The followig key is for the wind stress. Either you can specify directly wind stress components
+// or you can compute the wind stress with a quadratic formula
+// For the wind stress either
+#define PHYSICS_WINDSTRESSGENERAL
+#undef  PHYSICS_WINDSTRESSQUADRATIC
 // The include files are similar to the previous matrix-free tutorial programs
 // step-37, step-48, and step-59
 #include <deal.II/base/conditional_ostream.h>
@@ -105,6 +118,8 @@
 #include <icbc/Icbc_ImpulsiveWave.h>
 #elif defined ICBC_SHALLOWWATERVORTEX
 #include <icbc/Icbc_ShallowWaterVortex.h>
+#elif defined ICBC_STOMMELGYRE
+#include <icbc/Icbc_StommelGyre.h>
 #endif
 
 namespace Problem
@@ -406,23 +421,23 @@ namespace Problem
   // of the features deal.II offers for quadrilateral and hexahedral meshes for several 
   // versions following the 9.3 release that introduced support for simplicial and 
   // mixed meshes first. Gmsh can generate unstructured 2d quad meshes.
-  //
-  // Furthermore,
-  // we also add a friction force.  Friction force, as other terms coming from
-  // boundary conditions, depends on an external and given data, e.g the friction coefficient.
-  // More in general these data may be spatially and time varying. Wind forcing or bathymetry
-  // can be other examples. Time and space functions are represented in deal.II with a Function
-  // class. Here we set a pointer to Functions that defines such external data, both for
-  // the boundary conditions and for data associated to it.
   // Having the base mesh in place (including the manifolds set by
   // GridGenerator::channel_with_cylinder()), we can then perform the
   // specified number of global refinements, create the unknown numbering from
   // the DoFHandler, and hand the DoFHandler and Mapping objects to the
   // initialization of the OceanoOperator.
+  //
+  // Furthermore, the shallow water equations may have a source term, which contains bottom
+  // friction, wind stress ... Friction force, as other terms coming from
+  // boundary conditions, depends on an external and given data, e.g the friction coefficient.
+  // More in general these data may be spatially and time varying. Wind forcing or bathymetry
+  // can be other examples. Time and space functions are represented in deal.II with a Function
+  // class. Here we set a pointer to Functions that defines such external data, both for
+  // the boundary conditions and for data associated to it.
   template <int dim, int n_vars>
   void OceanoProblem<dim, n_vars>::make_grid_and_dofs()
   {
-    oceano_operator.bc->set_problem_data(std::make_unique<ICBC::BodyForce<dim>>());
+    oceano_operator.bc->set_problem_data(std::make_unique<ICBC::ProblemData<dim>>(prm));
 
     // The class GridIn can read many different mesh formats from a 
     // file from disk. In order to read a grid from a file, we generate an object 
@@ -797,7 +812,9 @@ int main(int argc, char **argv)
       bc = new ICBC::BcImpulsiveWave<dimension, n_variables>;
 #elif defined ICBC_SHALLOWWATERVORTEX
       bc = new ICBC::BcShallowWaterVortex<dimension, n_variables>;
-#else          
+#elif defined ICBC_STOMMELGYRE
+      bc = new ICBC::BcStommelGyre<dimension, n_variables>; 
+#else
       Assert(false, ExcNotImplemented());
       return 0.;
 #endif 
