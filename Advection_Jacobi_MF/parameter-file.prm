@@ -1,0 +1,32 @@
+subsection Physical data
+  # In this subsection we declare the physical data
+  # The initial and final time
+  set initial_time = 0.0
+  set final_time   = 6.28318530718
+end
+
+subsection Time step data
+  # In this subsection we declare the data that is to be used for time discretization,
+  # i.e. the time step dt
+  set dt = 0.012566370614360
+end
+
+subsection Space discretization
+  # In this subsection we declare the data that is relevant to the space discretization
+  # we set the number of global refines the triangulation must have
+  set n_of_refines = 3
+end
+
+subsection Data solve
+  # In this section we declare the parameters that are going to control the solution process.
+  set max_iterations = 30000 # maximal number of iterations that linear solvers must make
+  set eps            = 1e-12 # stopping criterion
+end
+
+set saving directory = Advection_Jacobi_MF
+
+#The output frequency
+set output_interval = 500
+
+#Finally we set the verbosity level
+set verbose = true

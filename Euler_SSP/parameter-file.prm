@@ -1,0 +1,33 @@
+subsection Physical data
+  # In this subsection we declare the physical data
+  # The initial and final time, and the Mach number
+  set initial_time = 0.0
+  set final_time   = 10.0
+  set Mach         = 1.0
+end
+
+subsection Time step data
+  # In this subsection we declare the data that is to be used for time discretization,
+  # i.e. the time step dt
+  set dt = 0.0025
+end
+
+subsection Space discretization
+  # In this subsection we declare the data that is relevant to the space discretization
+  # we set the number of global refines the triangulation must have
+  set n_of_refines = 3
+end
+
+subsection Data solve
+  # In this section we declare the parameters that are going to control the solution process.
+  set max_iterations = 10000 # maximal number of iterations
+  set eps            = 1e-9  # stopping criterion
+end
+
+set saving directory = 80x80
+
+#The output frequency
+set output_interval = 4000
+
+#Finally we set the verbosity level
+set verbose = true
