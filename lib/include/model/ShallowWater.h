@@ -118,7 +118,8 @@ namespace Model
     template <int dim, int n_vars, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Number>
-      velocity(const Tensor<1, n_vars, Number> &conserved_variables) const;
+      velocity(const Tensor<1, n_vars, Number> &conserved_variables,
+               const Number                     bathymetry) const;
 
     // The next function computes the pressure from the vector of conserved
     // variables, using the formula $p = g \frac{h^2}{2}$. As explained above, we use the
@@ -129,7 +130,8 @@ namespace Model
     template <int dim, int n_vars, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Number
-      pressure(const Tensor<1, n_vars, Number> &conserved_variables) const;
+      pressure(const Tensor<1, n_vars, Number> &conserved_variables,
+               const Number                     bathymetry) const;
 
     // Here is the definition of the Shallow Water flux function, i.e., the definition
     // of the actual equation. We use only advective flux. Given the velocity
@@ -143,7 +145,8 @@ namespace Model
     template <int dim, int n_vars, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, n_vars, Tensor<1, dim, Number>>
-      flux(const Tensor<1, n_vars, Number> &conserved_variables) const;
+      flux(const Tensor<1, n_vars, Number> &conserved_variables,
+           const Number                     bathymetry) const;
 
     // Here is the definition of the Shallow Water source function. For now we have coded
     // only the pressure force and the bathymetry force. The computation of the source
@@ -166,15 +169,34 @@ namespace Model
     inline DEAL_II_ALWAYS_INLINE //
       Number
       square_speed_estimate(
-        const Tensor<1, n_vars, Number> &conserved_variables) const;
+        const Tensor<1, n_vars, Number> &conserved_variables,
+        const Number                     bathymetry) const;
 
     // The next function computes an the square of the gravity wave speed speed:
     template <int dim, int n_vars, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Number
       square_wavespeed(
-        const Tensor<1, n_vars, Number> &conserved_variables) const;
+        const Tensor<1, n_vars, Number> &conserved_variables,
+        const Number                     bathymetry) const;
 
+    // The next function computes the outgoing Riemann invariant:
+    template <int dim, int n_vars, typename Number>
+    inline DEAL_II_ALWAYS_INLINE //
+      Number
+      riemann_invariant_p(
+        const Tensor<1, n_vars, Number> &conserved_variables,
+        const Tensor<1, dim, Number>    &normal,
+        const Number                     bathymetry) const;
+
+    // The next function computes the ingoing Riemann invariant:
+    template <int dim, int n_vars, typename Number>
+    inline DEAL_II_ALWAYS_INLINE //
+      Number
+      riemann_invariant_m(
+        const Tensor<1, n_vars, Number> &conserved_variables,
+        const Tensor<1, dim, Number>    &normal,
+        const Number                     bathymetry) const;
   };
   
   
@@ -199,16 +221,18 @@ namespace Model
     g = prm.get_double("g");
     prm.leave_subsection();
 
-    vars_name = {"depth", "momentum", "momentum"};
-    postproc_vars_name = {"velocity", "velocity", "pressure"};
+    vars_name = {"free_surface", "momentum", "momentum"};
+    postproc_vars_name = {"velocity", "velocity", "pressure", "depth"};
   }
   
   template <int dim, int n_vars, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
-    ShallowWater::velocity(const Tensor<1, n_vars, Number> &conserved_variables) const
+    ShallowWater::velocity(const Tensor<1, n_vars, Number> &conserved_variables,
+                           const Number                     bathymetry) const
   {
-    const Number inverse_depth = Number(1.) / conserved_variables[0];
+    const Number inverse_depth
+      = Number(1.) / (conserved_variables[0] + bathymetry);
 
     Tensor<1, dim, Number> velocity;
     for (unsigned int d = 0; d < dim; ++d)
@@ -220,18 +244,21 @@ namespace Model
   template <int dim, int n_vars, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Number
-    ShallowWater::pressure(const Tensor<1, n_vars, Number> &conserved_variables) const
+    ShallowWater::pressure(const Tensor<1, n_vars, Number> &conserved_variables,
+                           const Number                     bathymetry) const
   {
-    return 0.5 * g * conserved_variables[0]*conserved_variables[0];
+    const Number depth = conserved_variables[0] + bathymetry;
+    return 0.5 * g * depth*depth;
   }
 
   template <int dim, int n_vars, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, n_vars, Tensor<1, dim, Number>>
-    ShallowWater::flux(const Tensor<1, n_vars, Number> &conserved_variables) const
+    ShallowWater::flux(const Tensor<1, n_vars, Number> &conserved_variables,
+                       const Number                     bathymetry) const
   {
     const Tensor<1, dim, Number> v =
-      velocity<dim, n_vars>(conserved_variables);
+      velocity<dim, n_vars>(conserved_variables, bathymetry);
     
     Tensor<1, n_vars, Tensor<1, dim, Number>> flux;
     for (unsigned int d = 0; d < dim; ++d)
@@ -252,7 +279,7 @@ namespace Model
                          const Tensor<1, dim+3, Number>  &parameters) const
   {
     const Tensor<1, dim, Number> v =
-      velocity<dim, n_vars>(conserved_variables);
+      velocity<dim, n_vars>(conserved_variables, parameters[0]);
 
     Tensor<1, n_vars, Number> source;
     source[0] = 0.;
@@ -265,7 +292,8 @@ namespace Model
       coriolis_force.source<dim, n_vars, Number>(conserved_variables, parameters[4]);
 
     for (unsigned int d = 0; d < dim; ++d)
-      source[d + 1] = - g * conserved_variables[0] * gradient_conserved_variables[d]
+      source[d + 1] =
+        - g * (conserved_variables[0] + parameters[0]) * gradient_conserved_variables[d]
 	- bottomfric[d]
         + windstress[d]
         + coriolis[d];
@@ -277,19 +305,58 @@ namespace Model
   inline DEAL_II_ALWAYS_INLINE //
     Number
     ShallowWater::square_speed_estimate(
-      const Tensor<1, n_vars, Number> &conserved_variables) const
+      const Tensor<1, n_vars, Number> &conserved_variables,
+      const Number                     bathymetry) const
   {
-    const auto v = velocity<dim, n_vars>(conserved_variables);
+    const auto v = velocity<dim, n_vars>(conserved_variables, bathymetry);
 
-    return v.norm_square() + g * conserved_variables[0];
+    return v.norm_square() + g * (conserved_variables[0] + bathymetry);
   }
 
   template <int dim, int n_vars, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Number
-    ShallowWater::square_wavespeed(const Tensor<1, n_vars, Number> &conserved_variables) const
+    ShallowWater::square_wavespeed(
+      const Tensor<1, n_vars, Number> &conserved_variables,
+      const Number                     bathymetry) const
   {
-    return g * conserved_variables[0];
+    return g * (conserved_variables[0] + bathymetry);
+  }
+
+  template <int dim, int n_vars, typename Number>
+  inline DEAL_II_ALWAYS_INLINE //
+    Number
+    ShallowWater::riemann_invariant_p(
+      const Tensor<1, n_vars, Number> &conserved_variables,
+      const Tensor<1, dim, Number>    &normal,
+      const Number                     bathymetry) const
+  {
+    const auto v = velocity<dim, n_vars>(conserved_variables, bathymetry);
+    const auto c = std::sqrt(
+      square_wavespeed<dim, n_vars>(conserved_variables, bathymetry));
+    Number u = 0.;
+    for (unsigned int d = 0; d < dim; ++d)
+      u += v[d] * normal[d];
+
+    return u + 2. * c;
+  }
+
+  template <int dim, int n_vars, typename Number>
+  inline DEAL_II_ALWAYS_INLINE //
+    Number
+    ShallowWater::riemann_invariant_m(
+      const Tensor<1, n_vars, Number> &conserved_variables,
+      const Tensor<1, dim, Number>    &normal,
+      const Number                     bathymetry) const
+  {
+    const auto v = velocity<dim, n_vars>(conserved_variables, bathymetry);
+    const auto c = std::sqrt(
+      square_wavespeed<dim, n_vars>(conserved_variables, bathymetry));
+    Number u = 0.;
+    for (unsigned int d = 0; d < dim; ++d)
+      u += v[d] * normal[d];
+
+    return u - 2. * c;
   }
 
 } // namespace Model

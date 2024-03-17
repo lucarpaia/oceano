@@ -17,8 +17,8 @@
  * Author: Martin Kronbichler, 2020
  *         Luca Arpaia,        2023
  */
-#ifndef ICBC_ISENTROPICVORTEX_HPP
-#define ICBC_ISENTROPICVORTEX_HPP
+#ifndef ICBC_LAKEATREST_HPP
+#define ICBC_LAKEATREST_HPP
 
 #include <deal.II/base/function.h>
 // The following files include the oceano libraries
@@ -30,17 +30,22 @@
 namespace ICBC
 {
 
-  // The first test case is an isentropic vortex case (see e.g. the book by Hesthaven
-  // and Warburton, Example 6.1 in Section 6.6 on page 209) which fulfills the
-  // Euler equations with zero force term on the right hand side. 
-
+  // This test case is small perturbation af a two-dimensional lake-at-rest state.
+  // The lake is 1m deep with a bathymetry composed of a double-peaked smooth exponential. 
+  // We add a 1cm small perturbation confined in a narrow band. Two small amplitude waves 
+  // generate: the left-propagating one goes out from the left boundary thank to an outflow
+  // boundary condition. The right-propagating wave travels over the uneven bathymetry and
+  // transforms. This test allows to check the ability of the a numerical scheme to catch
+  // smooth wave patterns and the lake at rest state in the unperturbed regions.
+  
   using namespace dealii;
   
   // We define global parameters that help in the definition of the initial
-  // and boundary conditions. In  this case $gamma$ is defined also in the main 
-  // program and we could have recoverd it from there. We redefine $gamma$ here for now.
-  constexpr double gamma       = 1.4;
-
+  // and boundary conditions. The only two parameters that are needed for this test are 
+  // the bassin depth:
+  constexpr double h0      = 1.0;
+  // and the amplitude of the perturbation:
+  constexpr double a0      = 0.01;   
 
 
   // @sect3{Equation data}
@@ -61,55 +66,20 @@ namespace ICBC
                          const unsigned int component = 0) const override;
   };  
 
-  // We return either the density, the momentum, or the energy
-  // depending on which component is requested. Note that the original
-  // definition of the density involves the $\frac{1}{\gamma -1}$-th power of
-  // some expression. Since `std::pow()` has pretty slow implementations on
-  // some systems, we replace it by logarithm followed by exponentiation (of
-  // base 2), which is mathematically equivalent but usually much better
-  // optimized. This formula might lose accuracy in the last digits
-  // for very small numbers compared to `std::pow()`, but we are happy with
-  // it anyway, since small numbers map to data close to 1.
-  //
-  // For the channel test case, we simply select a density of 1, a velocity of
-  // 0.4 in $x$ direction and zero in the other directions, and an energy that
-  // corresponds to a speed of sound of 1.3 measured against the background
-  // velocity field, computed from the relation $E = \frac{c^2}{\gamma (\gamma
-  // -1)} + \frac 12 \rho \|u\|^2$.
+  // We return either the water depth or the momentum
+  // depending on which component is requested. We check that the test runs
+  // in two-dimensions (you cannot run this test in one dimension).
   template <int dim, int n_vars>
-  double ExactSolution<dim, n_vars>::value(const Point<dim> & x,
+  double ExactSolution<dim, n_vars>::value(const Point<dim> & /*x*/,
                                            const unsigned int component) const
   {
-    const double t = this->get_time();
-
     Assert(dim == 2, ExcNotImplemented());
-    const double beta = 5;
-
-    Point<dim> x0;
-    x0[0] = 5.;
-    const double radius_sqr =
-      (x - x0).norm_square() - 2. * (x[0] - x0[0]) * t + t * t;
-    const double factor =
-      beta / (numbers::PI * 2) * std::exp(1. - radius_sqr);
-    const double density_log = std::log2(
-      std::abs(1. - (gamma - 1.) / gamma * 0.25 * factor * factor));
-    const double density = std::exp2(density_log * (1. / (gamma - 1.)));
-    const double u       = 1. - factor * (x[1] - x0[1]);
-    const double v       = factor * (x[0] - t - x0[0]);
-
     if (component == 0)
-      return density;
+      return 0.;
     else if (component == 1)
-      return density * u;
-    else if (component == 2)
-      return density * v;
+      return 0.;
     else
-      {
-        const double pressure =
-          std::exp2(density_log * (gamma / (gamma - 1.)));
-        return pressure / (gamma - 1.) +
-               0.5 * (density * u * u + density * v * v);
-      }
+      return 0.;
   }
 
 
@@ -118,37 +88,64 @@ namespace ICBC
   // In this case it is recovered from the exact solution at time zero.
   // This is realized here thanks to a derived class of `ExactSolution` that 
   // overload the the constructor of the base class providing automatically 
-  // a zero time
-  template <int dim, int n_vars>  
-  class Ic : public ExactSolution<dim, n_vars>
+  // a zero time. 
+  template <int dim, int n_vars>
+  class Ic : public Function<dim>
   {
   public:
     Ic()
-      : ExactSolution<dim, n_vars>(0.)
+      : Function<dim>(n_vars, 0.)
     {}
+
+    virtual double value(const Point<dim> & p,
+                         const unsigned int component = 0) const override;
   };
+
+  // We return either the water depth or the momentum
+  // depending on which component is requested. Two sanity checks have been added. One is to
+  // control that the space dimension is two (you cannot run this test in one dimension) and
+  // another one on the number of variables, that for two-dimensional shallow water equation 
+  // is three.
+  template <int dim, int n_vars>
+  double Ic<dim, n_vars>::value(const Point<dim>  &x,
+                                const unsigned int component) const
+  {
+    Assert(dim == 2, ExcNotImplemented());
+    Assert(n_vars == 3, ExcNotImplemented());
+
+    if (component == 0)
+      if ((0.05 < x[0]) && (x[0] < 0.15))
+        return a0;
+      else
+        return 0.;
+    else
+      return 0.;
+  }
 
 
 
   // The `Bc` class define the boundary conditions for the test-case.
   template <int dim, int n_vars>  
-  class BcIsentropicVortex : public BcBase<dim, n_vars>
+  class BcLakeAtRest : public BcBase<dim, n_vars>
   {
   public:
   
-    BcIsentropicVortex(){};
-    ~BcIsentropicVortex(){};
+    BcLakeAtRest(){};
+    ~BcLakeAtRest(){};
          
     void set_boundary_conditions() override;
 
-  }; 
-
-  // Dirichlet boundary conditions (inflow) are specified all around the domain.
+  };
+  
+  // Subcritical outflow boundary conditions are specified on the left and 
+  // right boundary of the domain. In this way we let the wave smoothly go out from the
+  // the domain. Top and bottom boundaries are wall.
   template <int dim, int n_vars>
-  void BcIsentropicVortex<dim, n_vars>::set_boundary_conditions()
+  void BcLakeAtRest<dim, n_vars>::set_boundary_conditions()
   {
-     this->set_inflow_boundary(
-       0, std::make_unique<ExactSolution<dim, n_vars>>(0));
+    this->set_subcritical_outflow_boundary(
+      1, std::make_unique<ExactSolution<dim, n_vars>>(0));
+    this->set_wall_boundary(0);
   }         
 
 
@@ -170,13 +167,15 @@ namespace ICBC
   // in you data may be easily recovered from the configuration file. More important file 
   // names which contains the may be imported too. 
   //
-  // In this case it is null.
+  // For this case we need to define the bathyemtry data values.
   template <int dim>  
   class ProblemData : public Function<dim>
   {
   public:
     ProblemData(IO::ParameterHandler &prm);
     ~ProblemData(){};
+
+    inline double lakeAtRest_bathymetry(const Point<dim> & p) const;
 
     virtual double value(const Point<dim> & p,
                          const unsigned int component = 0) const override;
@@ -186,19 +185,29 @@ namespace ICBC
   ProblemData<dim>::ProblemData(IO::ParameterHandler &/*prm*/)
     : Function<dim>(dim+3)
   {}
-  
-  
+
+
+
+  template <int dim>
+  inline double ProblemData<dim>::lakeAtRest_bathymetry(
+    const Point<dim> & x) const
+  {
+    double pot = -5. * (x[0] - 0.9) * (x[0] - 0.9) - 50. * (x[1] - 0.5) * (x[1] - 0.5);
+    return h0 - 0.8 * std::exp(pot);
+  }
+
+
   
   template <int dim>
-  double ProblemData<dim>::value(const Point<dim> & /*x*/,
+  double ProblemData<dim>::value(const Point<dim>  &x,
                                  const unsigned int component) const
   {
-    if (component == 1)
-      return 0.;
+    if (component == 0)
+      return lakeAtRest_bathymetry(x);
     else
-      return 0.;
+      return 0.0;
   }
     
 } // namespace ICBC
 
-#endif //ICBC_ISENTROPICVORTEX_HPP
+#endif //ICBC_LAKEATREST_HPP

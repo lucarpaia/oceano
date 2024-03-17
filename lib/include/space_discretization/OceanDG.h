@@ -78,7 +78,7 @@ namespace SpaceDiscretization
   // This and the next function are helper functions to provide compact
   // evaluation calls as multiple points get batched together via a
   // VectorizedArray argument (see the step-37 tutorial for details). This
-  // function is used for the subsonic outflow boundary conditions where we
+  // function is used for the supercritical outflow boundary conditions where we
   // need to set the energy component to a prescribed value. The next one
   // requests the solution on all components and is used for inflow boundaries
   // where all components of the solution are set.
@@ -412,11 +412,11 @@ namespace SpaceDiscretization
             const auto w_q = phi.get_value(q);
             const auto dw_q = phi.get_gradient(q);
 
-            phi.submit_gradient(model.flux<dim, n_vars>(w_q), q);
-
-            const Tensor<1, dim+3, VectorizedArray<Number>> data_q =
+            Tensor<1, dim+3, VectorizedArray<Number>> data_q =
               evaluate_function<dim, Number, dim+3>(
                 *bc->problem_data, phi.quadrature_point(q));
+
+            phi.submit_gradient(model.flux<dim, n_vars>(w_q, data_q[0]), q);
 
             phi.submit_value(
               model.source<dim, n_vars>(w_q, dw_q[0], data_q),
@@ -505,17 +505,23 @@ namespace SpaceDiscretization
 
         for (unsigned int q = 0; q < phi_m.n_q_points; ++q)
           {
+            const VectorizedArray<Number> data_q =
+              evaluate_function<dim, Number>(
+                *bc->problem_data, phi_m.quadrature_point(q), 0);
+
             auto numerical_flux_p =
               num_flux.numerical_flux_weak<dim, n_vars>(phi_m.get_value(q),
                                                         phi_p.get_value(q),
-                                                        phi_m.normal_vector(q));
+                                                        phi_m.normal_vector(q),
+                                                        data_q);
             auto numerical_flux_m = -numerical_flux_p;
 
 #if defined MODEL_SHALLOWWATER
             auto pressure_numerical_flux =
               num_flux.numerical_flux_strong<dim, n_vars>(phi_m.get_value(q),
                                                           phi_p.get_value(q),
-                                                          phi_m.normal_vector(q));
+                                                          phi_m.normal_vector(q),
+                                                          data_q);
             numerical_flux_m -= pressure_numerical_flux;
             numerical_flux_p -= pressure_numerical_flux;
 #endif
@@ -533,8 +539,7 @@ namespace SpaceDiscretization
 
   // For faces located at the boundary, we need to impose the appropriate
   // boundary conditions. In this tutorial program, we implement four cases as
-  // mentioned above. (A fifth case, for supersonic outflow conditions is
-  // discussed in the "Results" section below.) The discontinuous Galerkin
+  // mentioned above. The discontinuous Galerkin
   // method imposes boundary conditions not as constraints, but only
   // weakly. Thus, the various conditions are imposed by finding an appropriate
   // <i>exterior</i> quantity $\mathbf{w}^+$ that is then handed to the
@@ -556,7 +561,7 @@ namespace SpaceDiscretization
   // so-called mirror principle.
   //
   // The imposition of outflow is essentially a Neumann condition, i.e.,
-  // setting $\mathbf{w}^+ = \mathbf{w}^-$. For the case of subsonic outflow,
+  // setting $\mathbf{w}^+ = \mathbf{w}^-$. For the case of supercritical outflow,
   // we still need to impose a value for the energy, which we derive from the
   // respective function. A special step is needed for the case of
   // <i>backflow</i>, i.e., the case where there is a momentum flux into the
@@ -570,7 +575,18 @@ namespace SpaceDiscretization
   // variables. We do this in a post-processing step, and only for the case
   // when we both are at an outflow boundary and the dot product between the
   // normal vector and the momentum (or, equivalently, velocity) is
-  // negative. As we work on data of several quadrature points at once for
+  // negative.
+  //
+  // The fourth boundary conditions is very important in coastal ocean and
+  // hydraulic simulation since the flow conditions are essentially
+  // subcritical. The above outflow condition assume that all the eigenvalues
+  // are outgoing which cannot be true in the subcritical regime.
+  // We have implemented another outflow imposition where we recover the
+  // information coming from the ingoing eigenvalue. We compute a
+  // boundary state from a far-field state (typically a flow at rest) from
+  // the theory of characteristics, that is by equating at the boundary location,
+  // the outgoing Riemann invariant with the ingoing one.
+  // As we work on data of several quadrature points at once for
   // SIMD vectorizations, we here need to explicitly loop over the array
   // entries of the SIMD array.
   //
@@ -600,6 +616,9 @@ namespace SpaceDiscretization
           {
             const auto w_m    = phi.get_value(q);
             const auto normal = phi.normal_vector(q);
+            const VectorizedArray<Number> data_q =
+              evaluate_function<dim, Number>(
+                *bc->problem_data, phi.quadrature_point(q), 0);
 
             auto rho_u_dot_n = w_m[1] * normal[0];
             for (unsigned int d = 1; d < dim; ++d)
@@ -623,29 +642,56 @@ namespace SpaceDiscretization
                 evaluate_function<dim, Number, n_vars>(
                 		  *bc->inflow_boundaries.find(boundary_id)->second,
                                   phi.quadrature_point(q));
-            else if (bc->subsonic_outflow_boundaries.find(boundary_id) !=
-                     bc->subsonic_outflow_boundaries.end())
+            else if (bc->supercritical_outflow_boundaries.find(boundary_id) !=
+                     bc->supercritical_outflow_boundaries.end())
               {
                 w_p          = w_m;
                 for (unsigned int t = 0; t < n_vars-dim-1; ++t)
                   w_p[dim + 1 + t] = evaluate_function(
-                    *bc->subsonic_outflow_boundaries.find(boundary_id)->second,
+                    *bc->supercritical_outflow_boundaries.find(boundary_id)->second,
                     phi.quadrature_point(q),
                     dim + 1 + t);
                 at_outflow = true;
               }
+#if defined MODEL_SHALLOWWATER
+            else if (bc->subcritical_outflow_boundaries.find(boundary_id) !=
+                     bc->subcritical_outflow_boundaries.end())
+              {
+                w_p =
+                  evaluate_function<dim, Number, n_vars>(
+                    *bc->subcritical_outflow_boundaries.find(boundary_id)->second,
+                      phi.quadrature_point(q));
+                const auto r_p
+                  = model.riemann_invariant_p<dim, n_vars>(w_m, normal, data_q);
+                const auto r_m
+                  = model.riemann_invariant_m<dim, n_vars>(w_p, normal, data_q);
+                const auto c_b = 0.25 * (r_p - r_m);
+                const auto h_b = c_b * c_b / model.g;
+                const auto u_b = 0.5 * (r_p + r_m);
+
+                w_p[0] = h_b - data_q;
+                const auto norm = 1./normal.norm_square();
+                for (unsigned int d = 0; d < dim; ++d)
+                  w_p[d + 1] =  u_b * h_b * norm * normal[d];
+                for (unsigned int t = 0; t < n_vars-dim-1; ++t)
+                  w_p[dim + 1 + t] = evaluate_function(
+                    *bc->subcritical_outflow_boundaries.find(boundary_id)->second,
+                    phi.quadrature_point(q),
+                    dim + 1 + t);
+              }
+#endif
             else
               AssertThrow(false,
                           ExcMessage("Unknown boundary id, did "
                                      "you set a boundary condition for "
                                      "this part of the domain boundary?"));
 
-            auto flux = num_flux.numerical_flux_weak<dim, n_vars>(w_m, w_p, normal);
+            auto flux = num_flux.numerical_flux_weak<dim, n_vars>(w_m, w_p, normal, data_q);
 
 #if defined MODEL_SHALLOWWATER
             auto pressure_numerical_fluxes =
-              num_flux.numerical_flux_strong<dim, n_vars>(w_m, w_p, normal);
-            flux -= pressure_numerical_fluxes;
+              num_flux.numerical_flux_strong<dim, n_vars>(w_m, w_p, normal, data_q);
+            flux += pressure_numerical_fluxes;
 #endif
 
             if (at_outflow)
@@ -762,7 +808,7 @@ namespace SpaceDiscretization
 
       for (auto &i : bc->inflow_boundaries)
         i.second->set_time(current_time);
-      for (auto &i : bc->subsonic_outflow_boundaries)
+      for (auto &i : bc->supercritical_outflow_boundaries)
         i.second->set_time(current_time);
 
       data.loop(&OceanoOperator::local_apply_cell,
@@ -842,7 +888,7 @@ namespace SpaceDiscretization
 
       for (auto &i : bc->inflow_boundaries)
         i.second->set_time(current_time);
-      for (auto &i : bc->subsonic_outflow_boundaries)
+      for (auto &i : bc->supercritical_outflow_boundaries)
         i.second->set_time(current_time);
 
       data.loop(&OceanoOperator::local_apply_cell,
@@ -1096,8 +1142,11 @@ namespace SpaceDiscretization
         VectorizedArray<Number> local_max = 0.;
         for (unsigned int q = 0; q < phi.n_q_points; ++q)
           {
+            const VectorizedArray<Number> data_q =
+              evaluate_function<dim, Number>(
+                *bc->problem_data, phi.quadrature_point(q), 0);
             const auto solution = phi.get_value(q);
-            const auto velocity = model.velocity<dim, n_vars>(solution);
+            const auto velocity = model.velocity<dim, n_vars>(solution, data_q);
 
             const auto inverse_jacobian = phi.inverse_jacobian(q);
             const auto convective_speed = inverse_jacobian * velocity;
@@ -1107,7 +1156,7 @@ namespace SpaceDiscretization
                 std::max(convective_limit, std::abs(convective_speed[d]));
 
             const auto speed_of_sound =
-              std::sqrt(model.square_wavespeed<dim, n_vars>(solution));
+              std::sqrt(model.square_wavespeed<dim, n_vars>(solution, data_q));
 
             Tensor<1, dim, VectorizedArray<Number>> eigenvector;
             for (unsigned int d = 0; d < dim; ++d)

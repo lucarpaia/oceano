@@ -89,6 +89,9 @@ namespace IO
     {
       prm.declare_entry("Final_time", "0.0", Patterns::Double(0),
                         "Final time of the simulation");
+
+      prm.declare_entry("CFL", "1.0", Patterns::Double(0),
+                        "courant number");
      }
     prm.leave_subsection();
 

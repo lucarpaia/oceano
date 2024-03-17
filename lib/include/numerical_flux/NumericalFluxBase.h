@@ -97,7 +97,8 @@ namespace NumericalFlux
       Tensor<1, n_vars, Number>
       numerical_flux_strong(const Tensor<1, n_vars, Number> &u_m,
                             const Tensor<1, n_vars, Number> &u_p,
-                            const Tensor<1, dim, Number> &    normal) const;
+                            const Tensor<1, dim, Number>    &normal,
+                            const Number                     data) const;
 
 #if defined MODEL_EULER
     Model::Euler model;
@@ -121,12 +122,13 @@ namespace NumericalFlux
     NumericalFluxBase::numerical_flux_strong(
       const Tensor<1, n_vars, Number>  &u_m,
       const Tensor<1, n_vars, Number>  &u_p,
-      const Tensor<1, dim, Number> &     normal) const
+      const Tensor<1, dim, Number>     &normal,
+      const Number                      data) const
   {
     Tensor<1, n_vars, Number> corr;
 
-    const auto p_m = model.pressure<dim, n_vars>(u_m);
-    const auto p_p = model.pressure<dim, n_vars>(u_p);
+    const auto p_m = model.pressure<dim, n_vars>(u_m,data);
+    const auto p_p = model.pressure<dim, n_vars>(u_p,data);
 
     for (unsigned int d = 0; d < dim; ++d)
       corr[d + 1] = ( 0.5 * (p_p + p_m) - p_m ) * normal[d];

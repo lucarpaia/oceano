@@ -96,7 +96,8 @@ namespace Model
     template <int dim, int n_vars, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Number>
-      velocity(const Tensor<1, n_vars, Number> &conserved_variables) const;
+      velocity(const Tensor<1, n_vars, Number> &conserved_variables,
+               const Number                     data) const;
 
     // The next function computes the pressure from the vector of conserved
     // variables, using the formula $p = (\gamma - 1) \left(E - \frac 12 \rho
@@ -108,7 +109,8 @@ namespace Model
     template <int dim, int n_vars, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Number
-      pressure(const Tensor<1, n_vars, Number> &conserved_variables) const;
+      pressure(const Tensor<1, n_vars, Number> &conserved_variables,
+               const Number                     data) const;
 
     // Here is the definition of the Euler flux function, i.e., the definition
     // of the actual equation. Given the velocity and pressure (that the
@@ -117,7 +119,8 @@ namespace Model
     template <int dim, int n_vars, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, n_vars, Tensor<1, dim, Number>>
-      flux(const Tensor<1, n_vars, Number> &conserved_variables) const;
+      flux(const Tensor<1, n_vars, Number> &conserved_variables,
+           const Number                     data) const;
 
     // Here is the definition of the Euler source function. In the source
     // term we have coded only a body force ...
@@ -136,15 +139,16 @@ namespace Model
     inline DEAL_II_ALWAYS_INLINE //
       Number
       square_speed_estimate(
-        const Tensor<1, n_vars, Number> &conserved_variables) const;
+        const Tensor<1, n_vars, Number> &conserved_variables,
+        const Number                     data) const;
 
     // The next function computes an the square of the speed of sound:
     template <int dim, int n_vars, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Number
       square_wavespeed(
-        const Tensor<1, n_vars, Number> &conserved_variables) const;
-    
+        const Tensor<1, n_vars, Number> &conserved_variables,
+        const Number                     data) const;
   };
   
   
@@ -173,7 +177,8 @@ namespace Model
   template <int dim, int n_vars, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
-    Euler::velocity(const Tensor<1, n_vars, Number> &conserved_variables) const
+    Euler::velocity(const Tensor<1, n_vars, Number> &conserved_variables,
+                    const Number                     /*data*/) const
   {
     const Number inverse_density = Number(1.) / conserved_variables[0];
 
@@ -187,10 +192,11 @@ namespace Model
   template <int dim, int n_vars, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Number
-    Euler::pressure(const Tensor<1, n_vars, Number> &conserved_variables) const
+    Euler::pressure(const Tensor<1, n_vars, Number> &conserved_variables,
+                    const Number                     data) const
   {
     const Tensor<1, dim, Number> v =
-      velocity<dim, n_vars>(conserved_variables);
+      velocity<dim, n_vars>(conserved_variables, data);
 
     Number rho_u_dot_u = conserved_variables[1] * v[0];
     for (unsigned int d = 1; d < dim; ++d)
@@ -202,11 +208,12 @@ namespace Model
   template <int dim, int n_vars, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, n_vars, Tensor<1, dim, Number>>
-    Euler::flux(const Tensor<1, n_vars, Number> &conserved_variables) const
+    Euler::flux(const Tensor<1, n_vars, Number> &conserved_variables,
+                const Number                     data) const
   {
     const Tensor<1, dim, Number> v =
-      velocity<dim, n_vars>(conserved_variables);
-    const Number p = pressure<dim, n_vars>(conserved_variables);
+      velocity<dim, n_vars>(conserved_variables, data);
+    const Number p = pressure<dim, n_vars>(conserved_variables, data);
 
     Tensor<1, n_vars, Tensor<1, dim, Number>> flux;
     for (unsigned int d = 0; d < dim; ++d)
@@ -243,10 +250,11 @@ namespace Model
   inline DEAL_II_ALWAYS_INLINE //
     Number
     Euler::square_speed_estimate(
-      const Tensor<1, n_vars, Number> &conserved_variables) const
+      const Tensor<1, n_vars, Number> &conserved_variables,
+      const Number                     data) const
   {
-    const auto v = velocity<dim, n_vars>(conserved_variables);
-    const auto p = pressure<dim, n_vars>(conserved_variables);
+    const auto v = velocity<dim, n_vars>(conserved_variables, data);
+    const auto p = pressure<dim, n_vars>(conserved_variables, data);
     
     return v.norm_square() + gamma * p * (1. / conserved_variables[0]);
   }
@@ -254,9 +262,10 @@ namespace Model
   template <int dim, int n_vars, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Number
-    Euler::square_wavespeed(const Tensor<1, n_vars, Number> &conserved_variables) const
+    Euler::square_wavespeed(const Tensor<1, n_vars, Number> &conserved_variables,
+                            const Number                     data) const
   {
-    const auto p = pressure<dim, n_vars>(conserved_variables);
+    const auto p = pressure<dim, n_vars>(conserved_variables, data);
     
     return gamma * p * (1. / conserved_variables[0]);
   }

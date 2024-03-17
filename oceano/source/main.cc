@@ -15,6 +15,7 @@
 
  *
  * Author: Martin Kronbichler, 2020
+ *         Luca Arpaia,        2023
  */
 
 // Run-time polymorphism can be an elegant solution do deal within a single code 
@@ -36,11 +37,12 @@
 // We implement two different test cases. The first one is an analytical
 // solution in 2d, whereas the second is a channel flow around a cylinder as
 // described in the introduction.
-#undef  ICBC_ISENTROPICVORTEX
-#undef  ICBC_FLOWAROUNDCYLINDER
-#undef  ICBC_IMPULSIVEWAVE
-#define ICBC_SHALLOWWATERVORTEX
-#undef  ICBC_STOMMELGYRE
+#undef ICBC_ISENTROPICVORTEX
+#undef ICBC_FLOWAROUNDCYLINDER
+#undef ICBC_IMPULSIVEWAVE
+#undef ICBC_SHALLOWWATERVORTEX
+#undef ICBC_STOMMELGYRE
+#define ICBC_LAKEATREST
 // The following change the numerical flux (Riemann solver) at the faces between cells. For this
 // program, we have implemented a modified variant of the Lax--Friedrichs
 // flux and the Harten--Lax--van Leer (HLL) flux:
@@ -120,6 +122,8 @@
 #include <icbc/Icbc_ShallowWaterVortex.h>
 #elif defined ICBC_STOMMELGYRE
 #include <icbc/Icbc_StommelGyre.h>
+#elif defined ICBC_LAKEATREST
+#include <icbc/Icbc_LakeAtRest.h>
 #endif
 
 namespace Problem
@@ -133,7 +137,7 @@ namespace Problem
   // also specify a number of points in the Gaussian quadrature formula we
   // want to use for the nonlinear terms in the shallow water equations.
   constexpr unsigned int dimension            = 2;
-  constexpr unsigned int fe_degree            = 1;
+  constexpr unsigned int fe_degree            = 2;
   constexpr unsigned int n_q_points_1d        = fe_degree + 2;
 #if defined MODEL_EULER
   constexpr unsigned int n_variables          = dimension + 2;
@@ -144,14 +148,7 @@ namespace Problem
 
   using Number = double;
 
-  // Next off are some details of the time integrator, namely a Courant number
-  // that scales the time step size in terms of the formula $\Delta t =
-  // \text{Cr} n_\text{stages} \frac{h}{(p+1)^{1.5} (\|\mathbf{u} +
-  // c)_\text{max}}$, as well as a selection of a few low-storage Runge--Kutta
-  // methods. We specify the Courant number per stage of the Runge--Kutta
-  // scheme, as this gives a more realistic expression of the numerical cost
-  // for schemes of various numbers of stages.
-  const double courant_number = 0.15 / std::pow(std::max<int>(1,fe_degree), 1.5);
+  // Next off are some details of the time integrator:
   constexpr TimeIntegrator::LowStorageRungeKuttaScheme lsrk_scheme = TimeIntegrator::stage_3_order_3;
 
 
@@ -241,6 +238,8 @@ namespace Problem
       double output_tick;
       std::string output_filename;
 
+      ParameterHandler &prm;
+
 #if defined MODEL_EULER
       Model::Euler model;
 #elif defined MODEL_SHALLOWWATER
@@ -261,7 +260,8 @@ namespace Problem
   template <int dim, int n_vars>
   OceanoProblem<dim, n_vars>::Postprocessor::Postprocessor(
     IO::ParameterHandler &prm)
-    : model(prm)
+    : prm(prm)
+    , model(prm)
   {
     prm.enter_subsection("Output parameters");
     do_error = prm.get_double("Output_error");
@@ -276,15 +276,22 @@ namespace Problem
   // lengths of the arrays equal the expected values (the lengths `2*dim+4` or
   // `2*dim+5` are derived from the sizes of the names we specify in the
   // get_names() function below). Then we loop over all evaluation points and
-  // fill the respective information: First we fill the primal solution
-  // variables, the so called prognostic variables.
-  // Then we compute derived variables such as the velocity $\mathbf u$ or
-  // the pressure $p$. These variables are defined in the model class and they can
-  // change from model to model. For now these variables can depend only on the solution.
-  // In general they can also depend on the solution gradient (think for example to the
-  // vorticity) but this part has been commented part for now, see `do_schlieren_plot`.
+  // fill the respective information. First we fill the primal solution
+  // variables, the so called prognostic variables. Then we compute derived variables,
+  // the velocity $\mathbf u$ or the pressure $p$. These variables are defined in
+  // the model class and they can change from model to model.
+  // For now these variables can depend only on the solution and on given data. For the
+  // implementation of output variables depending on given data see the deal.ii documentation:
+  // https://www.dealii.org/current/doxygen/deal.II/classDataPostprocessorVector.html
+  // In general the output can also depend on the solution gradient (think for example to the
+  // vorticity) but this part has been commented for now, see `do_schlieren_plot`.
   // For the postprocessed variables, a well defined order must be followed: first the
   // velocity vector, then all the scalars.
+  //
+  // The loop over the evaluation points seems not vectorized.
+  // However the usual way to recover data is with
+  // the `evaluate_function` that operates on vectorized data. With a few tricks the
+  // the `evaluate_function` has been adapted to a non-vectorized loop.
   template <int dim, int n_vars>
   void OceanoProblem<dim, n_vars>::Postprocessor::evaluate_vector_field(
     const DataPostprocessorInputs::Vector<dim> &inputs,
@@ -310,8 +317,15 @@ namespace Problem
         for (unsigned int d = 0; d < n_vars; ++d)
           solution[d] = inputs.solution_values[p](d);
 
-        const Tensor<1, dim> velocity = model.velocity<dim, n_vars>(solution);
-        const double         pressure = model.pressure<dim, n_vars>(solution);
+        Point<dim, VectorizedArray<Number>> x_evaluation_points;
+        for (unsigned int d = 0; d < dim; ++d)
+          x_evaluation_points[d] = inputs.evaluation_points[p][d];
+        const VectorizedArray<Number> data =
+          SpaceDiscretization::evaluate_function<dim, Number>(
+            ICBC::ProblemData<dim>(prm), x_evaluation_points, 0);
+
+        const Tensor<1, dim> velocity = model.velocity<dim, n_vars>(solution, data[0]);
+        const double         pressure = model.pressure<dim, n_vars>(solution, data[0]);
 
         for (unsigned int d = 0; d < dim; ++d)
           computed_quantities[p](d) = velocity[d];
@@ -319,9 +333,11 @@ namespace Problem
           {
             if (postproc_names[dim+v] == "pressure")
               computed_quantities[p](v+dim) = pressure;
+            else if (postproc_names[dim+v] == "depth")
+              computed_quantities[p](v+dim) = solution[0] + data[0];
             else if (postproc_names[dim+v] == "speed_of_sound")
               computed_quantities[p](v+dim) =
-                std::sqrt(model.square_wavespeed<dim, n_vars>(solution));
+                std::sqrt(model.square_wavespeed<dim, n_vars>(solution, data[0]));
             else
               {
                 std::cout << "Postprocessing variable " << postproc_names[dim+v]
@@ -349,7 +365,7 @@ namespace Problem
 
 
 
-  // For the interpretation of quantities, we have first the scalar depth and
+  // For the interpretation of quantities, we have first the scalars: free-surface and
   // a number of postprocessed variables specified in the model class. As vectors we have
   // the momentum and the velocity.
   template <int dim, int n_vars>
@@ -371,16 +387,18 @@ namespace Problem
 
 
 
-  // With respect to the necessary update flags, we only need the values for
-  // all quantities but, as already said, some postprocessed variables are based on the
-  // solution gradient. For now the last choise has been commented and it is not available.
+  // With respect to the necessary update flags, for the postprocessing we need the values for
+  // the quantities (of course!) and the coordinates of the evaluation points (if we need to evaluate data
+  // at some evaluation points, think to the bathymetry or heat flux coefficient).
+  // Some postprocessed variables are also based on the solution gradient but, for now, this choise
+  // has been commented and it is not available.
   template <int dim, int n_vars>
   UpdateFlags OceanoProblem<dim, n_vars>::Postprocessor::get_needed_update_flags() const
   {
     //if (do_schlieren_plot == true)
-    //  return update_values | update_gradients;
+    //  return update_values | update_quadrature_points | update_gradients;
     //else
-    return update_values;
+    return update_values | update_quadrature_points;
   }
 
 
@@ -674,6 +692,18 @@ namespace Problem
 
     make_grid_and_dofs();
 
+    // Next off is the Courant number
+    // that scales the time step size in terms of the formula $\Delta t =
+    // \text{Cr} n_\text{stages} \frac{h}{(p+1)^{1.5} (\|\mathbf{u} +
+    // c)_\text{max}}$, as well as a selection of a few low-storage Runge--Kutta
+    // methods. We specify the Courant number per stage of the Runge--Kutta
+    // scheme, as this gives a more realistic expression of the numerical cost
+    // for schemes of various numbers of stages.
+    prm.enter_subsection("Time parameters");
+    const double final_time = prm.get_double("Final_time");
+    const double cfl = prm.get_double("CFL");
+    prm.leave_subsection();
+    const double courant_number = cfl / std::pow(std::max<int>(1,fe_degree), 1.5);
     const TimeIntegrator::LowStorageRungeKuttaIntegrator integrator(lsrk_scheme);
 
     LinearAlgebra::distributed::Vector<Number> rk_register_1;
@@ -724,9 +754,6 @@ namespace Problem
     // (e.g. 0.02), we also write the output. After the end of the time loop,
     // we summarize the computation by printing some statistics, which is
     // mostly done by the TimerOutput::print_wall_time_statistics() function.
-    prm.enter_subsection("Time parameters");
-    const double final_time = prm.get_double("Final_time");
-    prm.leave_subsection();
     unsigned int timestep_number = 0;
 
     while (time < final_time - 1e-12)
@@ -814,6 +841,8 @@ int main(int argc, char **argv)
       bc = new ICBC::BcShallowWaterVortex<dimension, n_variables>;
 #elif defined ICBC_STOMMELGYRE
       bc = new ICBC::BcStommelGyre<dimension, n_variables>; 
+#elif defined ICBC_LAKEATREST
+      bc = new ICBC::BcLakeAtRest<dimension, n_variables>;
 #else
       Assert(false, ExcNotImplemented());
       return 0.;

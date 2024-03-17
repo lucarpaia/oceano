@@ -122,7 +122,7 @@ namespace ICBC
   {
     this->set_inflow_boundary(
       0, std::make_unique<ExactSolution<dim, n_vars>>(0));
-    this->set_subsonic_outflow_boundary(
+    this->set_supercritical_outflow_boundary(
       1, std::make_unique<ExactSolution<dim, n_vars>>(0));
 
     this->set_wall_boundary(2);
@@ -131,7 +131,23 @@ namespace ICBC
 
 
 
-  // The `ProblemData` class define the body force for the test-case.
+  // We need a class to handle the problem data. Problem data are case dependent; for this 
+  // reason it appears inside the `ICBC` namespace. The data in general depends on
+  // both time and space. Deal.II has a class `Function` which returns function
+  // of space and time, thus we simply create a derived class. The size of the data is 
+  // fixed to `dim+3=5` scalar quantities. The first component is the bathymetry. 
+  // The second is the bottom friction coefficient. The third and fourth components 
+  // are the cartesian components of the wind velocity (in order, eastward and northward).
+  // The fifth one is the Coriolis parameter. The test-dependent functions `stommelGyre_wind()`
+  // and `stommelGyre_coriolis()` contain the definition of analytical functions for the 
+  // different data. The call to `value()` returns all the external data necessary to 
+  // complete the computation. 
+  //
+  // Finally the parameter handler class allows to read constants from the prm file.
+  // The parameter handler class may seems redundant but it is not! Constants that appears
+  // in you data may be easily recovered from the configuration file. More important file 
+  // names which contains the may be imported too.
+  // 
   // In this case it is a constant gravity, of course in the vertical
   // direction.
   template <int dim>

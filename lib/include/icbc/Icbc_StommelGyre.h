@@ -203,8 +203,17 @@ namespace ICBC
   // The fifth one is the Coriolis parameter. The test-dependent functions `stommelGyre_wind()`
   // and `stommelGyre_coriolis()` contain the definition of analytical functions for the 
   // different data. The call to `value()` returns all the external data necessary to 
-  // complete the computation. Finally the parameter handler class allows to read constants
-  // from the prm file.
+  // complete the computation. 
+  //
+  // Finally the parameter handler class allows to read constants from the prm file.
+  // The parameter handler class may seems redundant but it is not! Constants that appears
+  // in you data may be easily recovered from the configuration file. More important file 
+  // names which contains the may be imported too.
+  //
+  // For the stommel gyre we define the zonal wind field, a friction coefficient and
+  // the coriolis parameter. Note also how we define the $f$ and $\beta$ parameters. They are
+  // members of the `ProblemData` class and they are initialized in the constructor
+  // thanks to the parameter handler class.
   template <int dim>
   class ProblemData : public Function<dim>
   {
@@ -263,7 +272,7 @@ namespace ICBC
                                  const unsigned int component) const
   {
     if (component == 1)
-      return R;        
+      return R;
     else if (component == 2)
       return stommelGyre_wind(x, 0);
     else if (component == 3)

@@ -60,8 +60,8 @@ namespace ICBC
     // The next members are for the functions that appears into the boundary 
     // conditions or into the forcing terms. They are defined with the help of the
     // Deal.II `Function<dim>` which can design vector functions of the space and time.
-    // The first three members associate with a map each boundary id with the
-    // corresponding function for the boundary condition. The fourth member is used   
+    // The first four members associate, with the aid of a map, each boundary id with the
+    // corresponding function for the boundary condition. The last member is used
     // for the problem spatially and time varying parameters, such as friction, bathymetry
     // or wind. 
     // Actually we use pointers to Function, but note that we do not use regular 
@@ -73,21 +73,24 @@ namespace ICBC
     std::map<types::boundary_id, std::unique_ptr<Function<dim>>>
       inflow_boundaries;
     std::map<types::boundary_id, std::unique_ptr<Function<dim>>>
-                                   subsonic_outflow_boundaries;
+                                   supercritical_outflow_boundaries;
+    std::map<types::boundary_id, std::unique_ptr<Function<dim>>>
+                                   subcritical_outflow_boundaries;
     std::set<types::boundary_id>   wall_boundaries;
 
     std::unique_ptr<Function<dim>> problem_data;
-    
+
     // The subsequent four member functions are the ones that fill the boundary 
     // containers. They must be called from outside to specify the various types 
     // of boundaries. For an inflow boundary, we must specify all components in
-    // terms of density $\rho$, momentum $\rho\mathbf{u}$ and energy $E$. 
+    // terms of free-surface $\zeta$, momentum $h\mathbf{u}$ and, eventually tracers.
     // Given this information, we then store the
     // function alongside the respective boundary id in a map member variable of
-    // this class. Likewise, we proceed for the subsonic outflow boundaries (where
-    // we request a function as well, which we use to retrieve the energy) and for
-    // wall (no-penetration) boundaries where we impose zero normal velocity (no
-    // function necessary, so we only request the boundary id). For the present
+    // this class. Likewise, we proceed for the subcritical/supercritical
+    // outflow boundaries (where we request a function as well,
+    // which we use to retrieve the far-field state or the energy). For the
+    // wall (no-penetration) boundaries we impose zero normal velocity, no
+    // function necessary, so we only request the boundary id. For the present
     // DG code where boundary conditions are solely applied as part of the weak
     // form (during time integration), the call to set the boundary conditions
     // can appear both before or after the `reinit()` call to this class. This
@@ -98,10 +101,14 @@ namespace ICBC
     void set_inflow_boundary(const types::boundary_id       boundary_id,
                              std::unique_ptr<Function<dim>> inflow_function);
 
-    void set_subsonic_outflow_boundary(
+    void set_supercritical_outflow_boundary(
       const types::boundary_id       boundary_id,
       std::unique_ptr<Function<dim>> outflow_energy);
  
+     void set_subcritical_outflow_boundary(
+      const types::boundary_id       boundary_id,
+      std::unique_ptr<Function<dim>> outflow_energy);
+
     void set_wall_boundary(const types::boundary_id boundary_id);
 
     void set_problem_data(std::unique_ptr<Function<dim>> problem_data);
@@ -125,15 +132,17 @@ namespace ICBC
   // The checks added in each of the four function are used to
   // ensure that boundary conditions are mutually exclusive on the various
   // parts of the boundary, i.e., that a user does not accidentally designate a
-  // boundary as both an inflow and say a subsonic outflow boundary.
+  // boundary as both an inflow and say a supercritical outflow boundary.
   template <int dim, int n_vars>
   void BcBase<dim, n_vars>::set_inflow_boundary(
     const types::boundary_id       boundary_id,
     std::unique_ptr<Function<dim>> inflow_function)
   {
-    AssertThrow(subsonic_outflow_boundaries.find(boundary_id) ==
-                    subsonic_outflow_boundaries.end() &&
-                  wall_boundaries.find(boundary_id) == wall_boundaries.end(),
+    AssertThrow(supercritical_outflow_boundaries.find(boundary_id) ==
+                    supercritical_outflow_boundaries.end() &&
+                subcritical_outflow_boundaries.find(boundary_id) ==
+                    subcritical_outflow_boundaries.end() &&
+                wall_boundaries.find(boundary_id) == wall_boundaries.end(),
                 ExcMessage("You already set the boundary with id " +
                            std::to_string(static_cast<int>(boundary_id)) +
                            " to another type of boundary before now setting " +
@@ -146,21 +155,44 @@ namespace ICBC
 
 
   template <int dim, int n_vars>
-  void BcBase<dim, n_vars>::set_subsonic_outflow_boundary(
+  void BcBase<dim, n_vars>::set_supercritical_outflow_boundary(
     const types::boundary_id       boundary_id,
     std::unique_ptr<Function<dim>> outflow_function)
   {
     AssertThrow(inflow_boundaries.find(boundary_id) ==
                     inflow_boundaries.end() &&
-                  wall_boundaries.find(boundary_id) == wall_boundaries.end(),
+                subcritical_outflow_boundaries.find(boundary_id) ==
+                    subcritical_outflow_boundaries.end() &&
+                wall_boundaries.find(boundary_id) == wall_boundaries.end(),
                 ExcMessage("You already set the boundary with id " +
                            std::to_string(static_cast<int>(boundary_id)) +
                            " to another type of boundary before now setting " +
-                           "it as subsonic outflow"));
+                           "it as supercritical outflow"));
     AssertThrow(outflow_function->n_components == n_vars,
                 ExcMessage("Expected function with n_vars components"));
 
-    subsonic_outflow_boundaries[boundary_id] = std::move(outflow_function);
+    supercritical_outflow_boundaries[boundary_id] = std::move(outflow_function);
+  }
+
+
+  template <int dim, int n_vars>
+  void BcBase<dim, n_vars>::set_subcritical_outflow_boundary(
+    const types::boundary_id       boundary_id,
+    std::unique_ptr<Function<dim>> outflow_function)
+  {
+    AssertThrow(inflow_boundaries.find(boundary_id) ==
+                    inflow_boundaries.end() &&
+                supercritical_outflow_boundaries.find(boundary_id) ==
+                    supercritical_outflow_boundaries.end() &&
+                wall_boundaries.find(boundary_id) == wall_boundaries.end(),
+                ExcMessage("You already set the boundary with id " +
+                           std::to_string(static_cast<int>(boundary_id)) +
+                           " to another type of boundary before now setting " +
+                           "it as supercritical outflow"));
+    AssertThrow(outflow_function->n_components == n_vars,
+                ExcMessage("Expected function with n_vars components"));
+
+    subcritical_outflow_boundaries[boundary_id] = std::move(outflow_function);
   }
 
 
@@ -170,8 +202,8 @@ namespace ICBC
   {
     AssertThrow(inflow_boundaries.find(boundary_id) ==
                     inflow_boundaries.end() &&
-                  subsonic_outflow_boundaries.find(boundary_id) ==
-                    subsonic_outflow_boundaries.end(),
+                  supercritical_outflow_boundaries.find(boundary_id) ==
+                    supercritical_outflow_boundaries.end(),
                 ExcMessage("You already set the boundary with id " +
                            std::to_string(static_cast<int>(boundary_id)) +
                            " to another type of boundary before now setting " +
