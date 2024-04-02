@@ -98,11 +98,11 @@ namespace Physics
     BottomFrictionLinear::source(
       const Tensor<1, dim, Number> &velocity,
       const Number                  drag_coefficient,
-      const Number                  /*depth*/) const
+      const Number                  depth) const
   {
     Tensor<1, dim, Number> source;
     for (unsigned int d = 0; d < dim; ++d)
-      source[d] = drag_coefficient * velocity[d];
+      source[d] = drag_coefficient * depth * velocity[d];
 
     return source;
   }
