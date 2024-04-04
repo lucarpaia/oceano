@@ -128,7 +128,7 @@ namespace SpaceDiscretization
   // handed over to preconditioners), we skip the various `vmult` functions
   // otherwise present in matrix-free operators and only implement an `apply`
   // function as well as the combination of `apply` with the required vector
-  // updates for the low-storage Runge--Kutta time integrator mentioned above
+  // updates for the Runge--Kutta time integrator mentioned above
   // (called `perform_stage`). Furthermore, we have added three additional
   // functions involving matrix-free routines, namely one to compute an
   // estimate of the time step scaling (that is combined with the Courant
@@ -160,14 +160,26 @@ namespace SpaceDiscretization
                const LinearAlgebra::distributed::Vector<Number> &src,
                LinearAlgebra::distributed::Vector<Number> &      dst) const;
 
+#if defined TIMEINTEGRATOR_LOWSTORAGERUNGEKUTTA
     void
     perform_stage(const Number cur_time,
                   const Number factor_solution,
                   const Number factor_ai,
                   const LinearAlgebra::distributed::Vector<Number> &current_ri,
-                  LinearAlgebra::distributed::Vector<Number> &      vec_ki,
-                  LinearAlgebra::distributed::Vector<Number> &      solution,
-                  LinearAlgebra::distributed::Vector<Number> &next_ri) const;
+                  LinearAlgebra::distributed::Vector<Number>       &vec_ki,
+                  LinearAlgebra::distributed::Vector<Number>       &solution,
+                  LinearAlgebra::distributed::Vector<Number>       &next_ri) const;
+#elif defined TIMEINTEGRATOR_STRONGSTABILITYRUNGEKUTTA
+    void
+    perform_stage(const unsigned int cur_stage,
+                  const Number  cur_time,
+                  const Number  factor_bi,
+                  const Number *factor_solution,
+                  const LinearAlgebra::distributed::Vector<Number>        &current_ri,
+                  LinearAlgebra::distributed::Vector<Number>              &vec_ki,
+                  LinearAlgebra::distributed::Vector<Number>              &solution,
+                  std::vector<LinearAlgebra::distributed::Vector<Number>> &next_ri) const;
+#endif
 
     void project(const Function<dim> &                       function,
                  LinearAlgebra::distributed::Vector<Number> &solution) const;
@@ -873,6 +885,7 @@ namespace SpaceDiscretization
   // time with default vector updates on a 40-core machine, the percentage is
   // around 35% with the more optimized variant. In other words, this is a
   // speedup of around a third.
+#if defined TIMEINTEGRATOR_LOWSTORAGERUNGEKUTTA
   template <int dim, int n_vars, int degree, int n_points_1d>
   void OceanoOperator<dim, n_vars, degree, n_points_1d>::perform_stage(
     const Number                                      current_time,
@@ -938,8 +951,83 @@ namespace SpaceDiscretization
         });
     }
   }
+#elif defined TIMEINTEGRATOR_STRONGSTABILITYRUNGEKUTTA
+  template <int dim, int n_vars, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_vars, degree, n_points_1d>::perform_stage(
+    const unsigned int                                       current_stage,
+    const Number                                             current_time,
+    const Number                                             factor_bi,
+    const Number                                            *factor_solution,
+    const LinearAlgebra::distributed::Vector<Number>        &current_ri,
+    LinearAlgebra::distributed::Vector<Number>              &vec_ki,
+    LinearAlgebra::distributed::Vector<Number>              &solution,
+    std::vector<LinearAlgebra::distributed::Vector<Number>> &next_ri) const
+  {
+    {
+      TimerOutput::Scope t(timer, "rk_stage - integrals L_h");
+
+      for (auto &i : bc->inflow_boundaries)
+        i.second->set_time(current_time);
+      for (auto &i : bc->supercritical_outflow_boundaries)
+        i.second->set_time(current_time);
+
+      data.loop(&OceanoOperator::local_apply_cell,
+                &OceanoOperator::local_apply_face,
+                &OceanoOperator::local_apply_boundary_face,
+                this,
+                vec_ki,
+                current_ri,
+                true,
+                MatrixFree<dim, Number>::DataAccessOnFaces::values,
+                MatrixFree<dim, Number>::DataAccessOnFaces::values);
+    }
 
 
+    {
+      unsigned int n_stages = next_ri.size()-1; //lrp: may be optimized passing as argument
+      TimerOutput::Scope t(timer, "rk_stage - inv mass + vec upd");
+      data.cell_loop(
+        &OceanoOperator::local_apply_inverse_mass_matrix,
+        this,
+        next_ri.front(),
+        vec_ki,
+        std::function<void(const unsigned int, const unsigned int)>(),
+        [&](const unsigned int start_range, const unsigned int end_range) {
+          if (current_stage == n_stages-1)
+            {
+              /* DEAL_II_OPENMP_SIMD_PRAGMA */
+              for (unsigned int i = start_range; i < end_range; ++i)
+                {
+                  const Number k_i           = next_ri.front().local_element(i);
+                  Number sol_i               = solution.local_element(i);
+                  solution.local_element(i)  = factor_solution[0]  * sol_i + factor_bi * k_i;
+		  for (unsigned int j = 1; j < current_stage+1; ++j)
+		    {
+                      sol_i                      = next_ri[j].local_element(i);
+                      solution.local_element(i) += factor_solution[j]  * sol_i;
+                    }
+                }
+            }
+          else
+            {
+              /* DEAL_II_OPENMP_SIMD_PRAGMA */
+              for (unsigned int i = start_range; i < end_range; ++i)
+                {
+                  const unsigned int ns       = current_stage+1;
+                  const Number k_i            = next_ri.front().local_element(i);
+                  Number       sol_i          = solution.local_element(i);
+                  next_ri[ns].local_element(i) = factor_solution[0]  * sol_i + factor_bi * k_i;
+		  for (unsigned int j = 1; j < current_stage+1; ++j)
+		    {
+                      sol_i                         = next_ri[j].local_element(i);
+                      next_ri[ns].local_element(i) += factor_solution[j]  * sol_i;
+                    }
+                }
+            }
+        });
+    }
+  }
+#endif
 
   // Having discussed the implementation of the functions that deal with
   // advancing the solution by one time step, let us now move to functions

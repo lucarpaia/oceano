@@ -33,6 +33,17 @@
 // we use instead c++ preprocessors. C++ preprocessor allows to avoid interface classes
 // and to define just the classes actually used.
 
+// First come the numerics. The following preprocessor select the time integrator. For
+// now we have coded two explicit schemes that belong to the family of Runge-Kutta scheme.
+// The low-storage scheme privileges the rapidity of accessing the memory. The
+// strong-stability-preserving scheme privileges non-linear stability.
+#define TIMEINTEGRATOR_STRONGSTABILITYRUNGEKUTTA
+#undef  TIMEINTEGRATOR_LOWSTORAGERUNGEKUTTA
+// The numerical flux (Riemann solver) at the faces between cells. For this
+// program, we have implemented a modified variant of the Lax--Friedrichs
+// flux and the Harten--Lax--van Leer (HLL) flux:
+#define NUMERICALFLUX_LAXFRIEDRICHSMODIFIED
+#undef  NUMERICALFLUX_HARTENVANLEER
 // The following are the preprocessors that select the initial and boundary conditions.
 // We implement two different test cases. The first one is an analytical
 // solution in 2d, whereas the second is a channel flow around a cylinder as
@@ -41,13 +52,8 @@
 #undef ICBC_FLOWAROUNDCYLINDER
 #undef ICBC_IMPULSIVEWAVE
 #undef ICBC_SHALLOWWATERVORTEX
-#undef ICBC_STOMMELGYRE
-#define ICBC_LAKEATREST
-// The following change the numerical flux (Riemann solver) at the faces between cells. For this
-// program, we have implemented a modified variant of the Lax--Friedrichs
-// flux and the Harten--Lax--van Leer (HLL) flux:
-#define NUMERICALFLUX_LAXFRIEDRICHSMODIFIED
-#undef  NUMERICALFLUX_HARTENVANLEER
+#define ICBC_STOMMELGYRE
+#undef ICBC_LAKEATREST
 // We have two models: a non-hydrostatic Euler model for perfect gas which was the
 // original model coded in the deal.II example and the shallow water model. The Euler model
 // is only used for debugging, to check consistency with the original deal.II example.
@@ -104,7 +110,11 @@
 #include <deal.II/matrix_free/operators.h>
 
 // The following files include the oceano libraries:
+#if defined TIMEINTEGRATOR_LOWSTORAGERUNGEKUTTA
 #include <time_integrator/LowStorageRungeKuttaIntegrator.h>
+#elif defined TIMEINTEGRATOR_STRONGSTABILITYRUNGEKUTTA
+#include <time_integrator/StrongStabilityRungeKuttaIntegrator.h>
+#endif
 #include <space_discretization/OceanDG.h>
 #include <io/CommandLineParser.h>
 // The following files are included depending on
@@ -137,7 +147,7 @@ namespace Problem
   // also specify a number of points in the Gaussian quadrature formula we
   // want to use for the nonlinear terms in the shallow water equations.
   constexpr unsigned int dimension            = 2;
-  constexpr unsigned int fe_degree            = 2;
+  constexpr unsigned int fe_degree            = 1;
   constexpr unsigned int n_q_points_1d        = fe_degree + 2;
 #if defined MODEL_EULER
   constexpr unsigned int n_variables          = dimension + 2;
@@ -149,9 +159,11 @@ namespace Problem
   using Number = double;
 
   // Next off are some details of the time integrator:
-  constexpr TimeIntegrator::LowStorageRungeKuttaScheme lsrk_scheme = TimeIntegrator::stage_3_order_3;
-
-
+#if defined TIMEINTEGRATOR_LOWSTORAGERUNGEKUTTA
+  constexpr TimeIntegrator::LowStorageRungeKuttaScheme rk_scheme = TimeIntegrator::stage_3_order_3;
+#elif defined TIMEINTEGRATOR_STRONGSTABILITYRUNGEKUTTA
+  constexpr TimeIntegrator::StrongStabilityRungeKuttaScheme rk_scheme = TimeIntegrator::stage_3_order_3;
+#endif
 
   // @sect3{The OceanoProblem class}
 
@@ -692,26 +704,39 @@ namespace Problem
 
     make_grid_and_dofs();
 
+    oceano_operator.project(ICBC::Ic<dimension, n_variables>(), solution);
+
     // Next off is the Courant number
     // that scales the time step size in terms of the formula $\Delta t =
-    // \text{Cr} n_\text{stages} \frac{h}{(p+1)^{1.5} (\|\mathbf{u} +
-    // c)_\text{max}}$, as well as a selection of a few low-storage Runge--Kutta
-    // methods. We specify the Courant number per stage of the Runge--Kutta
-    // scheme, as this gives a more realistic expression of the numerical cost
-    // for schemes of various numbers of stages.
+    // \text{CFL}\frac{h}{(\|\mathbf{u} +
+    // c)_\text{max}}$, as well as a selection of a few explicit Runge--Kutta
+    // methods belonging to the low-storage family and to the strong stability one.
+    // The Courant number depends on the number of stages, on the degree of the finite
+    // element approximation as well as on the specific time integrator. The correct choice
+    // of the courant number is left to the user that must specify it in the parameter file.
+    // A possible expression can be $CFL=\frac{1}{p^{1.5}}*n_{stages}$. For TODO (Cockburn and Shu)
+    // $CFL=\frac{1}{2p+1}$.
+    // For the low storage schemes we need only to auxiliary vectors per stage. For
+    // strong stability preserving schemes we need also table to store the updated solution vector
+    // at each stage. We blend one of the two auxiliary vectors with this table in a single entity.
     prm.enter_subsection("Time parameters");
     const double final_time = prm.get_double("Final_time");
-    const double cfl = prm.get_double("CFL");
+    const double courant_number = prm.get_double("CFL");
     prm.leave_subsection();
-    const double courant_number = cfl / std::pow(std::max<int>(1,fe_degree), 1.5);
-    const TimeIntegrator::LowStorageRungeKuttaIntegrator integrator(lsrk_scheme);
 
+#if defined TIMEINTEGRATOR_LOWSTORAGERUNGEKUTTA
+    const TimeIntegrator::LowStorageRungeKuttaIntegrator integrator(rk_scheme);
     LinearAlgebra::distributed::Vector<Number> rk_register_1;
     LinearAlgebra::distributed::Vector<Number> rk_register_2;
     rk_register_1.reinit(solution);
     rk_register_2.reinit(solution);
-
-    oceano_operator.project(ICBC::Ic<dimension, n_variables>(), solution);
+#elif defined TIMEINTEGRATOR_STRONGSTABILITYRUNGEKUTTA
+    const TimeIntegrator::StrongStabilityRungeKuttaIntegrator integrator(rk_scheme);
+    std::vector<LinearAlgebra::distributed::Vector<Number>>
+      rk_register_1(integrator.n_stages()+1, solution);
+    LinearAlgebra::distributed::Vector<Number> rk_register_2;
+    rk_register_2.reinit(solution);
+#endif
 
     double min_vertex_distance = std::numeric_limits<double>::max();
     for (const auto &cell : triangulation.active_cell_iterators())
@@ -721,7 +746,7 @@ namespace Problem
     min_vertex_distance =
       Utilities::MPI::min(min_vertex_distance, MPI_COMM_WORLD);
 
-    time_step = courant_number * integrator.n_stages() /
+    time_step = courant_number  /
                 oceano_operator.compute_cell_transport_speed(solution);
     pcout << "Time step size: " << time_step
           << ", minimal h: " << min_vertex_distance
@@ -761,7 +786,7 @@ namespace Problem
         ++timestep_number;
         if (timestep_number % 5 == 0)
           time_step =
-            courant_number * integrator.n_stages() /
+            courant_number /
             Utilities::truncate_to_n_digits(
               oceano_operator.compute_cell_transport_speed(solution), 3);
 
