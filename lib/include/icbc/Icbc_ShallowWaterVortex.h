@@ -31,35 +31,35 @@ namespace ICBC
 {
 
   // The first test case is a compact shallow water travelling vortex (shortly RB-vortex)
-  // (Ricchiuto and Bollerman, 2008) which fulfills the shallow water equations 
-  // with zero force term on the right hand side. 
-  // The RB-vortex is $C^4$ in the depth but only $C^1$ 
+  // (Ricchiuto and Bollerman, 2008) which fulfills the shallow water equations
+  // with zero force term on the right hand side.
+  // The RB-vortex is $C^4$ in the depth but only $C^1$
   // in the velocity. According to the classical interpolation estimate
   // of finite element theory, we can expect only second order of convergence for
   // the variables, included momentum. This vortex is thus suited to test second order schemes.
-  // For an extension of the RB-vortex to an arbitrary degree of smoothness, 
+  // We have also coded an extension of the RB-vortex to an arbitrary degree of smoothness,
   // see (Ricchiuto and Torlo, 2021 arXiv:2109.10183v1). The implementation followed here
-  // is the same provided in the last reference for the lowest degree of smoothness (p=1).  
-  // The iterative corrections to improve the vortex smoothness and 
-  // test higher then second order schemes can be readily implemented.
+  // is the same provided in the last reference for the degree of smoothness $p=2$.
+  // Other iterative corrections to improve the vortex smoothness and
+  // test higher then third order schemes can be readily implemented.
 #undef REGULARITY_P1
 #define  REGULARITY_P2
-  
+
   using namespace dealii;
   
   // We define global parameters that help in the definition of the initial
-  // and boundary conditions. In  this case $g$ is defined also in the main 
+  // and boundary conditions. In  this case $g$ is defined also in the main
   // program and we could have recoverd it from there. We redefine $g$ here for now.
   constexpr double g       = 1.0;
   // The parameters of the vortex such as the undisturbed water depth and the free-strem velocity.
-  // follows. We choose a shallow channel $[0,1]\times[0,2]$ with depth of 0.1. The vortex have a 
-  // small amplitude of 0.01 and radius slightly less than half of the channel width.
-  constexpr double h0      = 1.0;
-  constexpr double uoo     = 1.0;  
+  // follows. We choose a channel $[0,1]\times[0,2]$ with a depth of 10. The vortex have an
+  // amplitude of 1 and a radius less than half of the channel width.
+  constexpr double h0      = 10.0;
+  constexpr double uoo     = 6.0;
   // the depth at the center:  
-  constexpr double hmin    = 0.99;
-  // the radius
-  constexpr double radius0 = 0.45;
+  constexpr double hmin    = 0.9;
+  // the radius:
+  constexpr double radius0 = 0.25;
 
 
 
