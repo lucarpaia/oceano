@@ -39,8 +39,8 @@ namespace TimeIntegrator
   enum StrongStabilityRungeKuttaScheme
   {
     stage_1_order_1, /* Forward Euler */
-    stage_2_order_2, /* RK2 coded as SSP22 Gottilieb and Shu */
-    stage_3_order_3, /* SSP33 Gottilieb and Shu */
+    stage_2_order_2, /* RK2 coded as SSP22 Gottlieb and Shu */
+    stage_3_order_3, /* SSP33 Gottlieb and Shu */
   };
 
 
