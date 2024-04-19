@@ -58,7 +58,9 @@ namespace NumericalFlux
   // This class implements the numerical flux (Riemann solver). It gets the
   // state from the two sides of an interface and the normal vector, oriented
   // from the side of the solution $\mathbf{w}^-$ towards the solution
-  // $\mathbf{w}^+$. In finite volume methods which rely on piece-wise
+  // $\mathbf{w}^+$. Also the data can be passed in a discontinous form, so we
+  // have the data from both sides of the interface.
+  // In finite volume methods which rely on piece-wise
   // constant data, the numerical flux is the central ingredient as it is the
   // only place where the physical information is entered. In DG methods, the
   // numerical flux is less central due to the polynomials within the elements
@@ -98,7 +100,8 @@ namespace NumericalFlux
       numerical_flux_strong(const Tensor<1, n_vars, Number> &u_m,
                             const Tensor<1, n_vars, Number> &u_p,
                             const Tensor<1, dim, Number>    &normal,
-                            const Number                     data) const;
+                            const Number                     data_m,
+                            const Number                     data_p) const;
 
 #if defined MODEL_EULER
     Model::Euler model;
@@ -123,16 +126,26 @@ namespace NumericalFlux
       const Tensor<1, n_vars, Number>  &u_m,
       const Tensor<1, n_vars, Number>  &u_p,
       const Tensor<1, dim, Number>     &normal,
-      const Number                      data) const
+      const Number                      data_m,
+      const Number                      data_p) const
   {
     Tensor<1, n_vars, Number> corr;
 
-    const auto p_m = model.pressure<dim, n_vars>(u_m,data);
-    const auto p_p = model.pressure<dim, n_vars>(u_p,data);
+//    const auto p_m = model.pressure<dim, n_vars>(u_m,data);
+//    const auto p_p = model.pressure<dim, n_vars>(u_p,data); //lrp
+    const auto h_m = u_m[0] + data_m;
+    const auto h_p = u_p[0] + data_p;
 
     for (unsigned int d = 0; d < dim; ++d)
-      corr[d + 1] = ( 0.5 * (p_p + p_m) - p_m ) * normal[d];
-
+//      corr[d + 1] = ( 0.5 * (p_p + p_m) - p_m ) * normal[d]; //lrp
+//#define MODEL_SHALLOWWATER_NONCONSERVATIVE_WB
+//#if defined MODEL_SHALLOWWATER_CONSERVATIVE_NOWB
+//      corr[d + 1] = model.g * 0.25 * (h_p + h_m) * (h_p - h_m) * normal[d];
+//#elif defined MODEL_SHALLOWWATER_NONCONSERVATIVE_WB
+      corr[d + 1] = model.g * 0.25 * (h_p + h_m) * (u_p[0] - u_m[0]) * normal[d];
+//#elif defined MODEL_SHALLOWWATER_NONCONSERVATIVE_ORLANDO
+//      corr[d + 1] = model.g * 0.5 * (h_p * u_p[0] - h_m * u_m[0]) * normal[d];
+//#endif
     return corr;
   }
 #endif

@@ -478,7 +478,11 @@ namespace SpaceDiscretization
   // evaluated at quadrature points from both sides (i.e., $\mathbf{w}^-$ and
   // $\mathbf{w}^+$), as well as the normal vector onto the minus side. 
   // We separate numerical fluxes coming from terms written in weak form from
-  // terms written in strong form.
+  // terms written in strong form. A simple trick is used to have  
+  // discontinuous bathymetry at the quadrature points along the edges. The 
+  // quadrature point is shifted perpendicularly to the edge direction by a
+  // very small quantity. Givent the outward sign of the normal, the offset is 
+  // positive for the "there" side and negative for the "here" side.
   //
   // For the shallow water equations mass-flux
   // and non-linear advection terms are coded in weak form while pressure force
@@ -517,15 +521,19 @@ namespace SpaceDiscretization
 
         for (unsigned int q = 0; q < phi_m.n_q_points; ++q)
           {
-            const VectorizedArray<Number> data_q =
-              evaluate_function<dim, Number>(
-                *bc->problem_data, phi_m.quadrature_point(q), 0);
+            const VectorizedArray<Number> data_m =
+              evaluate_function<dim, Number>(*bc->problem_data,
+                phi_m.quadrature_point(q)-1e-12*phi_m.normal_vector(q), 0);
+            const VectorizedArray<Number> data_p =
+              evaluate_function<dim, Number>(*bc->problem_data,
+                phi_m.quadrature_point(q)+1e-12*phi_m.normal_vector(q), 0);
 
             auto numerical_flux_p =
               num_flux.numerical_flux_weak<dim, n_vars>(phi_m.get_value(q),
                                                         phi_p.get_value(q),
                                                         phi_m.normal_vector(q),
-                                                        data_q);
+                                                        data_m,
+                                                        data_p);
             auto numerical_flux_m = -numerical_flux_p;
 
 #if defined MODEL_SHALLOWWATER
@@ -533,7 +541,8 @@ namespace SpaceDiscretization
               num_flux.numerical_flux_strong<dim, n_vars>(phi_m.get_value(q),
                                                           phi_p.get_value(q),
                                                           phi_m.normal_vector(q),
-                                                          data_q);
+                                                          data_m,
+                                                          data_p);
             numerical_flux_m -= pressure_numerical_flux;
             numerical_flux_p -= pressure_numerical_flux;
 #endif
@@ -628,7 +637,7 @@ namespace SpaceDiscretization
           {
             const auto w_m    = phi.get_value(q);
             const auto normal = phi.normal_vector(q);
-            const VectorizedArray<Number> data_q =
+            const VectorizedArray<Number> data_m =
               evaluate_function<dim, Number>(
                 *bc->problem_data, phi.quadrature_point(q), 0);
 
@@ -674,14 +683,14 @@ namespace SpaceDiscretization
                     *bc->subcritical_outflow_boundaries.find(boundary_id)->second,
                       phi.quadrature_point(q));
                 const auto r_p
-                  = model.riemann_invariant_p<dim, n_vars>(w_m, normal, data_q);
+                  = model.riemann_invariant_p<dim, n_vars>(w_m, normal, data_m);
                 const auto r_m
-                  = model.riemann_invariant_m<dim, n_vars>(w_p, normal, data_q);
+                  = model.riemann_invariant_m<dim, n_vars>(w_p, normal, data_m);
                 const auto c_b = 0.25 * (r_p - r_m);
                 const auto h_b = c_b * c_b / model.g;
                 const auto u_b = 0.5 * (r_p + r_m);
 
-                w_p[0] = h_b - data_q;
+                w_p[0] = h_b - data_m;
                 const auto norm = 1./normal.norm_square();
                 for (unsigned int d = 0; d < dim; ++d)
                   w_p[d + 1] =  u_b * h_b * norm * normal[d];
@@ -698,11 +707,12 @@ namespace SpaceDiscretization
                                      "you set a boundary condition for "
                                      "this part of the domain boundary?"));
 
-            auto flux = num_flux.numerical_flux_weak<dim, n_vars>(w_m, w_p, normal, data_q);
+            auto flux =
+              num_flux.numerical_flux_weak<dim, n_vars>(w_m, w_p, normal, data_m, data_m);
 
 #if defined MODEL_SHALLOWWATER
             auto pressure_numerical_fluxes =
-              num_flux.numerical_flux_strong<dim, n_vars>(w_m, w_p, normal, data_q);
+              num_flux.numerical_flux_strong<dim, n_vars>(w_m, w_p, normal, data_m, data_m);
             flux += pressure_numerical_fluxes;
 #endif
 

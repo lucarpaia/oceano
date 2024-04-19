@@ -62,7 +62,8 @@ namespace NumericalFlux
       numerical_flux_weak(const Tensor<1, n_vars, Number> &u_m,
                           const Tensor<1, n_vars, Number> &u_p,
                           const Tensor<1, dim, Number>    &normal,
-                          const Number                     data) const;
+                          const Number                     data_m,
+                          const Number                     data_p) const;
   };
 
 
@@ -115,13 +116,14 @@ namespace NumericalFlux
       const Tensor<1, n_vars, Number>  &u_m,
       const Tensor<1, n_vars, Number>  &u_p,
       const Tensor<1, dim, Number>     &normal,
-      const Number                      data) const
+      const Number                      data_m,
+      const Number                      data_p) const
   {
-    const auto lambda_m = model.square_speed_estimate<dim, n_vars>(u_m, data);
-    const auto lambda_p = model.square_speed_estimate<dim, n_vars>(u_p, data);
+    const auto lambda_m = model.square_speed_estimate<dim, n_vars>(u_m, data_m);
+    const auto lambda_p = model.square_speed_estimate<dim, n_vars>(u_p, data_p);
 
-    const auto flux_m = model.flux<dim, n_vars>(u_m, data);
-    const auto flux_p = model.flux<dim, n_vars>(u_p, data);
+    const auto flux_m = model.flux<dim, n_vars>(u_m, data_m);
+    const auto flux_p = model.flux<dim, n_vars>(u_p, data_p);
 
     const auto lambda =
       0.5 * std::sqrt(std::max(lambda_p, lambda_m));
