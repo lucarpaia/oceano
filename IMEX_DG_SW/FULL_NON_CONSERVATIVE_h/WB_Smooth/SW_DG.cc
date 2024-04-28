@@ -82,6 +82,7 @@ protected:
   /*--- Auxiliary mapping for possible curved boundary ---*/
   MappingQ1<dim> mapping;
   MappingQ1<dim> mapping_mg; /*--- Auxiliary mapping for multigrid for the sake of generality ---*/
+  std::map<types::global_dof_index, Point<dim>> dof_location_map; /*--- Map between global dof index and real space location ---*/
 
   /*--- Auxiliary quadratures for the variables for which we can keep track ---*/
   QGaussLobatto<dim> quadrature_height;
@@ -89,11 +90,15 @@ protected:
   QGaussLobatto<dim> quadrature_tracer;
 
   /*--- Variables for the height ---*/
+  LinearAlgebra::distributed::Vector<double> h_old;
+  LinearAlgebra::distributed::Vector<double> h_tmp_2;
+  LinearAlgebra::distributed::Vector<double> h_tmp_3;
+  LinearAlgebra::distributed::Vector<double> h_curr;
+  LinearAlgebra::distributed::Vector<double> rhs_h;
+
   LinearAlgebra::distributed::Vector<double> zeta_old;
   LinearAlgebra::distributed::Vector<double> zeta_tmp_2;
   LinearAlgebra::distributed::Vector<double> zeta_tmp_3;
-  LinearAlgebra::distributed::Vector<double> zeta_curr;
-  LinearAlgebra::distributed::Vector<double> rhs_zeta;
 
   /*--- Variables for the discharge ---*/
   LinearAlgebra::distributed::Vector<double> hu_old;
@@ -133,7 +138,7 @@ protected:
 
 private:
   /*--- Function to set the initial conditions ---*/
-  EquationData::TotalHeight<dim>        zeta_exact;
+  EquationData::Height<dim>             h_exact;
   EquationData::Discharge<dim>          hu_exact;
   EquationData::Tracer<dim>             hc_exact;
   EquationData::Bathymetry<dim, double> zb_exact;
@@ -142,15 +147,15 @@ private:
   std::shared_ptr<MatrixFree<dim, double>> matrix_free_storage;
 
   SWOperator<dim, EquationData::n_stages,
-             EquationData::degree_zeta, EquationData::degree_hu, EquationData::degree_hc,
-             2*EquationData::degree_zeta + 1 + EquationData::extra_quadrature_degree,
+             EquationData::degree_h, EquationData::degree_hu, EquationData::degree_hc,
+             2*EquationData::degree_h + 1 + EquationData::extra_quadrature_degree,
              2*EquationData::degree_hu + 1 + EquationData::extra_quadrature_degree,
              2*EquationData::degree_hc + 1 + EquationData::extra_quadrature_degree,
              LinearAlgebra::distributed::Vector<double>> SW_matrix;
 
   MGLevelObject<SWOperator<dim, EquationData::n_stages,
-                           EquationData::degree_zeta, EquationData::degree_hu, EquationData::degree_hc,
-                           2*EquationData::degree_zeta + 1 + EquationData::extra_quadrature_degree,
+                           EquationData::degree_h, EquationData::degree_hu, EquationData::degree_hc,
+                           2*EquationData::degree_h + 1 + EquationData::extra_quadrature_degree,
                            2*EquationData::degree_hu + 1 + EquationData::extra_quadrature_degree,
                            2*EquationData::degree_hc + 1 + EquationData::extra_quadrature_degree,
                            LinearAlgebra::distributed::Vector<float>>> mg_matrices_SW;
@@ -182,14 +187,14 @@ private:
   std::ofstream output_error_discharge;
   std::ofstream output_error_tracer;
 
-  Vector<double> L1_error_per_cell_zeta,
-                 Linfty_error_per_cell_zeta,
+  Vector<double> L1_error_per_cell_h,
+                 Linfty_error_per_cell_h,
                  L1_error_per_cell_hu,
                  Linfty_error_per_cell_hu,
                  L1_error_per_cell_hc,
                  Linfty_error_per_cell_hc;  /*--- Auxiliary variables to compute the errors ---*/
 
-  /*MGLevelObject<LinearAlgebra::distributed::Vector<float>> level_projection_zeta,
+  /*MGLevelObject<LinearAlgebra::distributed::Vector<float>> level_projection_h,
                                                            level_projection_hu;*/ /*--- Auxiliary variables for multigrid purposes ---*/
 
   double get_min_height(); /*--- Get minimum height ---*/
@@ -216,7 +221,7 @@ SWSolver<dim>::SWSolver(RunTimeParameters::Data_Storage& data):
   triangulation(MPI_COMM_WORLD,
                 parallel::distributed::Triangulation<dim>::limit_level_difference_at_vertices,
                 parallel::distributed::Triangulation<dim>::construct_multigrid_hierarchy),
-  fe_height(FE_DGQ<dim>(EquationData::degree_zeta), 1),
+  fe_height(FE_DGQ<dim>(EquationData::degree_h), 1),
   fe_discharge(FE_DGQ<dim>(EquationData::degree_hu), dim),
   fe_tracer(FE_DGQ<dim>(EquationData::degree_hc), 1),
   dof_handler_height(triangulation),
@@ -224,10 +229,10 @@ SWSolver<dim>::SWSolver(RunTimeParameters::Data_Storage& data):
   dof_handler_tracer(triangulation),
   mapping(),
   mapping_mg(),
-  quadrature_height(EquationData::degree_zeta + 1),
+  quadrature_height(EquationData::degree_h + 1),
   quadrature_discharge(EquationData::degree_hu + 1),
   quadrature_tracer(EquationData::degree_hc + 1),
-  zeta_exact(data.initial_time),
+  h_exact(data.initial_time),
   hu_exact(data.initial_time),
   hc_exact(data.initial_time),
   zb_exact(data.initial_time),
@@ -341,11 +346,15 @@ void SWSolver<dim>::setup_dofs() {
   matrix_free_storage->reinit(mapping, dof_handlers, constraints, quadratures, additional_data);
 
   /*--- Initialize the variables related to the height ---*/
+  matrix_free_storage->initialize_dof_vector(h_old, 0);
+  matrix_free_storage->initialize_dof_vector(h_tmp_2, 0);
+  matrix_free_storage->initialize_dof_vector(h_tmp_3, 0);
+  matrix_free_storage->initialize_dof_vector(h_curr, 0);
+  matrix_free_storage->initialize_dof_vector(rhs_h, 0);
+
   matrix_free_storage->initialize_dof_vector(zeta_old, 0);
   matrix_free_storage->initialize_dof_vector(zeta_tmp_2, 0);
   matrix_free_storage->initialize_dof_vector(zeta_tmp_3, 0);
-  matrix_free_storage->initialize_dof_vector(zeta_curr, 0);
-  matrix_free_storage->initialize_dof_vector(rhs_zeta, 0);
 
   /*--- Initialize the variables related to the discharge ---*/
   matrix_free_storage->initialize_dof_vector(hu_old, 1);
@@ -362,8 +371,8 @@ void SWSolver<dim>::setup_dofs() {
 
   /*--- Initialize the auxiliary variables to check the errors ---*/
   Vector<double> error_per_cell_tmp(triangulation.n_active_cells());
-  L1_error_per_cell_zeta.reinit(error_per_cell_tmp);
-  Linfty_error_per_cell_zeta.reinit(error_per_cell_tmp);
+  L1_error_per_cell_h.reinit(error_per_cell_tmp);
+  Linfty_error_per_cell_h.reinit(error_per_cell_tmp);
   L1_error_per_cell_hu.reinit(error_per_cell_tmp);
   Linfty_error_per_cell_hu.reinit(error_per_cell_tmp);
   L1_error_per_cell_hc.reinit(error_per_cell_tmp);
@@ -375,7 +384,7 @@ void SWSolver<dim>::setup_dofs() {
   dof_handler_discharge.distribute_mg_dofs();
   dof_handler_tracer.distribute_mg_dofs();
 
-  /*level_projection_zeta = MGLevelObject<LinearAlgebra::distributed::Vector<float>>(0, triangulation.n_global_levels() - 1);
+  /*level_projection_h = MGLevelObject<LinearAlgebra::distributed::Vector<float>>(0, triangulation.n_global_levels() - 1);
   level_projection_hu   = MGLevelObject<LinearAlgebra::distributed::Vector<float>>(0, triangulation.n_global_levels() - 1);*/
   mg_matrices_SW.resize(0, triangulation.n_global_levels() - 1);
   for(unsigned int level = 0; level < triangulation.n_global_levels(); ++level) {
@@ -384,11 +393,14 @@ void SWSolver<dim>::setup_dofs() {
 
     std::shared_ptr<MatrixFree<dim, float>> mg_mf_storage_level(new MatrixFree<dim, float>());
     mg_mf_storage_level->reinit(mapping_mg, dof_handlers, constraints, quadratures, additional_data_mg);
-    mg_mf_storage_level->initialize_dof_vector(level_projection_zeta[level], 0);
+    mg_mf_storage_level->initialize_dof_vector(level_projection_h[level], 0);
     mg_mf_storage_level->initialize_dof_vector(level_projection_hu[level], 1);*/
 
     mg_matrices_SW[level].set_dt(dt);
   }
+
+  /*--- Set the map between dofs indices and theri real space location ---*/
+  dof_location_map = DoFTools::map_dofs_to_support_points(mapping, dof_handler_height);
 }
 
 
@@ -400,13 +412,25 @@ template<int dim>
 void SWSolver<dim>::initialize() {
   TimerOutput::Scope t(time_table, "Initialize state");
 
-  VectorTools::interpolate(mapping, dof_handler_height, zeta_exact, zeta_old);
+  VectorTools::interpolate(mapping, dof_handler_height, h_exact, h_old);
   VectorTools::interpolate(mapping, dof_handler_discharge, hu_exact, hu_old);
   VectorTools::interpolate(mapping, dof_handler_tracer, hc_exact, hc_old);
 
-  /*VectorTools::project(mapping, dof_handler_height, constraints_height, QGauss<dim>(EquationData::degree_zeta + 1), zeta_exact, zeta_old);
+  /*VectorTools::project(mapping, dof_handler_height, constraints_height, QGauss<dim>(EquationData::degree_h + 1), h_exact, h_old);
   VectorTools::project(mapping, dof_handler_discharge, constraints_discharge, QGauss<dim>(EquationData::degree_hu + 1), hu_exact, hu_old);
   VectorTools::project(mapping, dof_handler_tracer, constraints_tracer, QGauss<dim>(EquationData::degree_hc + 1), hc_exact, hc_old);*/
+
+  /*--- Create the auxiliary variable for the total height ---*/
+  zeta_old.equ(1.0, h_old);
+  for(const auto& cell: dof_handler_height.active_cell_iterators()) {
+    if(cell->is_locally_owned()) {
+      std::vector<types::global_dof_index> dof_indices(fe_height.dofs_per_cell);
+      cell->get_dof_indices(dof_indices);
+      for(unsigned int idx = 0; idx < dof_indices.size(); ++idx) {
+        zeta_old(dof_indices[idx]) -= zb_exact.value(dof_location_map[dof_indices[idx]]);
+      }
+    }
+  }
 }
 
 
@@ -423,31 +447,31 @@ void SWSolver<dim>::update_height() {
 
   if(IMEX_stage == 2) {
     SW_matrix.set_SW_stage(1);
-    SW_matrix.vmult_rhs_zeta(rhs_zeta, {zeta_old, hu_old});
+    SW_matrix.vmult_rhs_h(rhs_h, {h_old, hu_old});
   }
   else if(IMEX_stage == 3) {
     SW_matrix.set_SW_stage(1);
-    SW_matrix.vmult_rhs_zeta(rhs_zeta, {zeta_old, hu_old,
-                                        zeta_tmp_2, hu_tmp_2});
+    SW_matrix.vmult_rhs_h(rhs_h, {h_old, hu_old,
+                                  h_tmp_2, hu_tmp_2});
   }
   else {
     SW_matrix.set_SW_stage(4);
-    SW_matrix.vmult_rhs_zeta(rhs_zeta, {zeta_old, hu_old,
-                                        zeta_tmp_2, hu_tmp_2,
-                                        zeta_tmp_3, hu_tmp_3});
+    SW_matrix.vmult_rhs_h(rhs_h, {h_old, hu_old,
+                                  h_tmp_2, hu_tmp_2,
+                                  h_tmp_3, hu_tmp_3});
   }
 
-  SolverControl solver_control(max_its, eps*rhs_zeta.l2_norm());
+  SolverControl solver_control(max_its, eps*rhs_h.l2_norm());
   SolverCG<LinearAlgebra::distributed::Vector<double>> cg(solver_control);
 
   /*--- Compute multigrid preconditioner for the height equation ---*/
   MGTransferMatrixFree<dim, float> mg_transfer;
   mg_transfer.build(dof_handler_height);
   using SmootherType = PreconditionChebyshev<SWOperator<dim, EquationData::n_stages,
-                                                        EquationData::degree_zeta,
+                                                        EquationData::degree_h,
                                                         EquationData::degree_hu,
                                                         EquationData::degree_hc,
-                                                        2*EquationData::degree_zeta + 1 + EquationData::extra_quadrature_degree,
+                                                        2*EquationData::degree_h + 1 + EquationData::extra_quadrature_degree,
                                                         2*EquationData::degree_hu + 1 + EquationData::extra_quadrature_degree,
                                                         2*EquationData::degree_hc + 1 + EquationData::extra_quadrature_degree,
                                                         LinearAlgebra::distributed::Vector<float>>,
@@ -498,16 +522,40 @@ void SWSolver<dim>::update_height() {
 
   /*--- Solve the linear system for the height ---*/
   if(IMEX_stage == 2) {
-    zeta_tmp_2.equ(1.0, zeta_old);
-    cg.solve(SW_matrix, zeta_tmp_2, rhs_zeta, preconditioner);
+    h_tmp_2.equ(1.0, h_old);
+    cg.solve(SW_matrix, h_tmp_2, rhs_h, preconditioner);
+
+    /*--- Update the total height ---*/
+    zeta_tmp_2.equ(1.0, h_tmp_2);
+    for(const auto& cell: dof_handler_height.active_cell_iterators()) {
+      if(cell->is_locally_owned()) {
+        std::vector<types::global_dof_index> dof_indices(fe_height.dofs_per_cell);
+        cell->get_dof_indices(dof_indices);
+        for(unsigned int idx = 0; idx < dof_indices.size(); ++idx) {
+          zeta_tmp_2(dof_indices[idx]) -= zb_exact.value(dof_location_map[dof_indices[idx]]);
+        }
+      }
+    }
   }
   else if(IMEX_stage == 3) {
-    zeta_tmp_3.equ(1.0, zeta_tmp_2);
-    cg.solve(SW_matrix, zeta_tmp_3, rhs_zeta, preconditioner);
+    h_tmp_3.equ(1.0, h_tmp_2);
+    cg.solve(SW_matrix, h_tmp_3, rhs_h, preconditioner);
+
+    /*--- Update the total height ---*/
+    zeta_tmp_3.equ(1.0, h_tmp_3);
+    for(const auto& cell: dof_handler_height.active_cell_iterators()) {
+      if(cell->is_locally_owned()) {
+        std::vector<types::global_dof_index> dof_indices(fe_height.dofs_per_cell);
+        cell->get_dof_indices(dof_indices);
+        for(unsigned int idx = 0; idx < dof_indices.size(); ++idx) {
+          zeta_tmp_3(dof_indices[idx]) -= zb_exact.value(dof_location_map[dof_indices[idx]]);
+        }
+      }
+    }
   }
   else {
-    zeta_curr.equ(1.0, zeta_tmp_3);
-    cg.solve(SW_matrix, zeta_curr, rhs_zeta, preconditioner);
+    h_curr.equ(1.0, h_tmp_3);
+    cg.solve(SW_matrix, h_curr, rhs_h, preconditioner);
   }
 }
 
@@ -525,18 +573,18 @@ void SWSolver<dim>::update_discharge() {
 
   if(IMEX_stage == 2) {
     SW_matrix.set_SW_stage(2);
-    SW_matrix.vmult_rhs_hu(rhs_hu, {zeta_old, hu_old});
+    SW_matrix.vmult_rhs_hu(rhs_hu, {h_old, hu_old, zeta_old});
   }
   else if(IMEX_stage == 3) {
     SW_matrix.set_SW_stage(2);
-    SW_matrix.vmult_rhs_hu(rhs_hu, {zeta_old, hu_old,
-                                    zeta_tmp_2, hu_tmp_2});
+    SW_matrix.vmult_rhs_hu(rhs_hu, {h_old, hu_old, zeta_old,
+                                    h_tmp_2, hu_tmp_2, zeta_tmp_2});
   }
   else {
     SW_matrix.set_SW_stage(5);
-    SW_matrix.vmult_rhs_hu(rhs_hu, {zeta_old, hu_old,
-                                    zeta_tmp_2, hu_tmp_2,
-                                    zeta_tmp_3, hu_tmp_3});
+    SW_matrix.vmult_rhs_hu(rhs_hu, {h_old, hu_old, zeta_old,
+                                    h_tmp_2, hu_tmp_2, zeta_tmp_2,
+                                    h_tmp_3, hu_tmp_3, zeta_tmp_3});
   }
 
   SolverControl solver_control(max_its, eps*rhs_hu.l2_norm());
@@ -546,10 +594,10 @@ void SWSolver<dim>::update_discharge() {
   MGTransferMatrixFree<dim, float> mg_transfer;
   mg_transfer.build(dof_handler_discharge);
   using SmootherType = PreconditionChebyshev<SWOperator<dim, EquationData::n_stages,
-                                                        EquationData::degree_zeta,
+                                                        EquationData::degree_h,
                                                         EquationData::degree_hu,
                                                         EquationData::degree_hc,
-                                                        2*EquationData::degree_zeta + 1 + EquationData::extra_quadrature_degree,
+                                                        2*EquationData::degree_h + 1 + EquationData::extra_quadrature_degree,
                                                         2*EquationData::degree_hu + 1 + EquationData::extra_quadrature_degree,
                                                         2*EquationData::degree_hc + 1 + EquationData::extra_quadrature_degree,
                                                         LinearAlgebra::distributed::Vector<float>>,
@@ -627,18 +675,18 @@ void SWSolver<dim>::update_tracer() {
 
   if(IMEX_stage == 2) {
     SW_matrix.set_SW_stage(3);
-    SW_matrix.vmult_rhs_hc(rhs_hc, {zeta_old, hu_old, hc_old});
+    SW_matrix.vmult_rhs_hc(rhs_hc, {h_old, hu_old, hc_old});
   }
   else if(IMEX_stage == 3) {
     SW_matrix.set_SW_stage(3);
-    SW_matrix.vmult_rhs_hc(rhs_hc, {zeta_old, hu_old, hc_old,
-                                    zeta_tmp_2, hu_tmp_2, hc_tmp_2});
+    SW_matrix.vmult_rhs_hc(rhs_hc, {h_old, hu_old, hc_old,
+                                    h_tmp_2, hu_tmp_2, hc_tmp_2});
   }
   else {
     SW_matrix.set_SW_stage(6);
-    SW_matrix.vmult_rhs_hc(rhs_hc, {zeta_old, hu_old, hc_old,
-                                    zeta_tmp_2, hu_tmp_2, hc_tmp_2,
-                                    zeta_tmp_3, hu_tmp_3, hc_tmp_3});
+    SW_matrix.vmult_rhs_hc(rhs_hc, {h_old, hu_old, hc_old,
+                                    h_tmp_2, hu_tmp_2, hc_tmp_2,
+                                    h_tmp_3, hu_tmp_3, hc_tmp_3});
   }
 
   SolverControl solver_control(max_its, eps*rhs_hc.l2_norm());
@@ -648,10 +696,10 @@ void SWSolver<dim>::update_tracer() {
   MGTransferMatrixFree<dim, float> mg_transfer;
   mg_transfer.build(dof_handler_tracer);
   using SmootherType = PreconditionChebyshev<SWOperator<dim, EquationData::n_stages,
-                                                        EquationData::degree_zeta,
+                                                        EquationData::degree_h,
                                                         EquationData::degree_hu,
                                                         EquationData::degree_hc,
-                                                        2*EquationData::degree_zeta + 1 + EquationData::extra_quadrature_degree,
+                                                        2*EquationData::degree_h + 1 + EquationData::extra_quadrature_degree,
                                                         2*EquationData::degree_hu + 1 + EquationData::extra_quadrature_degree,
                                                         2*EquationData::degree_hc + 1 + EquationData::extra_quadrature_degree,
                                                         LinearAlgebra::distributed::Vector<float>>,
@@ -727,8 +775,8 @@ void SWSolver<dim>::output_results(const unsigned int step) {
   /*--- Save the fields ---*/
   DataOut<dim> data_out;
 
-  zeta_old.update_ghost_values();
-  data_out.add_data_vector(dof_handler_height, zeta_old, "zeta", {DataComponentInterpretation::component_is_scalar});
+  h_old.update_ghost_values();
+  data_out.add_data_vector(dof_handler_height, h_old, "h", {DataComponentInterpretation::component_is_scalar});
 
   std::vector<std::string> velocity_names(dim, "hu");
   std::vector<DataComponentInterpretation::DataComponentInterpretation>
@@ -745,7 +793,7 @@ void SWSolver<dim>::output_results(const unsigned int step) {
   data_out.write_vtu_in_parallel(output, MPI_COMM_WORLD);
 
   /*--- Call this function to be sure to be able to write again on these fields ---*/
-  zeta_old.zero_out_ghost_values();
+  h_old.zero_out_ghost_values();
   hu_old.zero_out_ghost_values();
   hc_old.zero_out_ghost_values();
 }
@@ -760,15 +808,15 @@ void SWSolver<dim>::analyze_results() {
   TimerOutput::Scope t(time_table, "Analysis results: computing errrors");
 
   /*--- Errors for the height ---*/
-  VectorTools::integrate_difference(dof_handler_height, zeta_old, zeta_exact,
-                                    L1_error_per_cell_zeta, quadrature_height, VectorTools::L1_norm);
-  const double error_zeta_L1 = VectorTools::compute_global_error(triangulation, L1_error_per_cell_zeta, VectorTools::L1_norm);
-  pcout << "Verification via L1 error height:    " << error_zeta_L1 << std::endl;
+  VectorTools::integrate_difference(dof_handler_height, h_old, h_exact,
+                                    L1_error_per_cell_h, quadrature_height, VectorTools::L1_norm);
+  const double error_h_L1 = VectorTools::compute_global_error(triangulation, L1_error_per_cell_h, VectorTools::L1_norm);
+  pcout << "Verification via L1 error height:    " << error_h_L1 << std::endl;
 
-  VectorTools::integrate_difference(dof_handler_height, zeta_old, zeta_exact,
-                                    Linfty_error_per_cell_zeta, quadrature_height, VectorTools::Linfty_norm);
-  const double error_zeta_Linfty = VectorTools::compute_global_error(triangulation, Linfty_error_per_cell_zeta, VectorTools::Linfty_norm);
-  pcout << "Verification via Linfty error height:    " << error_zeta_Linfty << std::endl;
+  VectorTools::integrate_difference(dof_handler_height, h_old, h_exact,
+                                    Linfty_error_per_cell_h, quadrature_height, VectorTools::Linfty_norm);
+  const double error_h_Linfty = VectorTools::compute_global_error(triangulation, Linfty_error_per_cell_h, VectorTools::Linfty_norm);
+  pcout << "Verification via Linfty error height:    " << error_h_Linfty << std::endl;
 
   /*--- Errors for the discharge ---*/
   VectorTools::integrate_difference(dof_handler_discharge, hu_old, hu_exact,
@@ -794,12 +842,12 @@ void SWSolver<dim>::analyze_results() {
 
   /*--- Save errors ---*/
   if(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0) {
-    output_error_height    << error_zeta_L1     << std::endl;
-    output_error_height    << error_zeta_Linfty << std::endl;
-    output_error_discharge << error_hu_L1       << std::endl;
-    output_error_discharge << error_hu_Linfty   << std::endl;
-    output_error_tracer    << error_hc_L1       << std::endl;
-    output_error_tracer    << error_hc_Linfty   << std::endl;
+    output_error_height    << error_h_L1      << std::endl;
+    output_error_height    << error_h_Linfty  << std::endl;
+    output_error_discharge << error_hu_L1     << std::endl;
+    output_error_discharge << error_hu_Linfty << std::endl;
+    output_error_tracer    << error_hc_L1     << std::endl;
+    output_error_tracer    << error_hc_Linfty << std::endl;
   }
 }
 
@@ -810,7 +858,7 @@ template<int dim>
 double SWSolver<dim>::get_min_height() {
   const unsigned int n_q_points = quadrature_height.size();
 
-  FEValues<dim> fe_values(fe_height, quadrature_height, update_values | update_quadrature_points);
+  FEValues<dim> fe_values(fe_height, quadrature_height, update_values);
   std::vector<double> solution_values(n_q_points);
 
   double min_local_height = std::numeric_limits<double>::max();
@@ -820,17 +868,17 @@ double SWSolver<dim>::get_min_height() {
     if(cell->is_locally_owned()) {
       fe_values.reinit(cell);
       if(IMEX_stage == 2) {
-        fe_values.get_function_values(zeta_tmp_2, solution_values);
+        fe_values.get_function_values(h_tmp_2, solution_values);
       }
       else if(IMEX_stage == 3) {
-        fe_values.get_function_values(zeta_tmp_3, solution_values);
+        fe_values.get_function_values(h_tmp_3, solution_values);
       }
       else {
-        fe_values.get_function_values(zeta_old, solution_values);
+        fe_values.get_function_values(h_old, solution_values);
       }
 
       for(unsigned int q = 0; q < n_q_points; ++q) {
-        min_local_height = std::min(min_local_height, solution_values[q] + zb_exact.value(fe_values.quadrature_point(q)));
+        min_local_height = std::min(min_local_height, solution_values[q]);
       }
     }
   }
@@ -845,7 +893,7 @@ template<int dim>
 double SWSolver<dim>::get_max_height() {
   const unsigned int n_q_points = quadrature_height.size();
 
-  FEValues<dim> fe_values(fe_height, quadrature_height, update_values | update_quadrature_points);
+  FEValues<dim> fe_values(fe_height, quadrature_height, update_values);
   std::vector<double> solution_values(n_q_points);
 
   double max_local_height = std::numeric_limits<double>::min();
@@ -855,17 +903,17 @@ double SWSolver<dim>::get_max_height() {
     if(cell->is_locally_owned()) {
       fe_values.reinit(cell);
       if(IMEX_stage == 2) {
-        fe_values.get_function_values(zeta_tmp_2, solution_values);
+        fe_values.get_function_values(h_tmp_2, solution_values);
       }
       else if(IMEX_stage == 3) {
-        fe_values.get_function_values(zeta_tmp_3, solution_values);
+        fe_values.get_function_values(h_tmp_3, solution_values);
       }
       else {
-        fe_values.get_function_values(zeta_old, solution_values);
+        fe_values.get_function_values(h_old, solution_values);
       }
 
       for(unsigned int q = 0; q < n_q_points; ++q) {
-        max_local_height = std::max(max_local_height, solution_values[q] + zb_exact.value(fe_values.quadrature_point(q)));
+        max_local_height = std::max(max_local_height, solution_values[q]);
       }
     }
   }
@@ -878,7 +926,7 @@ double SWSolver<dim>::get_max_height() {
 //
 template<int dim>
 std::tuple<double, double, double> SWSolver<dim>::compute_max_C_x_y() {
-  FEValues<dim>               fe_values_zeta(fe_height, quadrature_height, update_values | update_quadrature_points);
+  FEValues<dim>               fe_values_h(fe_height, quadrature_height, update_values);
   std::vector<double>         solution_values_height(quadrature_height.size(), update_values);
 
   FEValues<dim>               fe_values_hu(fe_discharge, quadrature_height, update_values);
@@ -892,14 +940,14 @@ std::tuple<double, double, double> SWSolver<dim>::compute_max_C_x_y() {
   auto tmp_cell = dof_handler_discharge.begin_active();
   for(const auto& cell: dof_handler_height.active_cell_iterators()) {
     if(cell->is_locally_owned()) {
-      fe_values_zeta.reinit(cell);
-      fe_values_zeta.get_function_values(zeta_old, solution_values_height);
+      fe_values_h.reinit(cell);
+      fe_values_h.get_function_values(h_old, solution_values_height);
 
       fe_values_hu.reinit(tmp_cell);
       fe_values_hu.get_function_values(hu_old, solution_values_discharge);
 
       for(unsigned int q = 0; q < quadrature_height.size(); ++q) {
-        const auto h_q = solution_values_height[q] + zb_exact.value(fe_values_zeta.quadrature_point(q));
+        const auto h_q = solution_values_height[q];
         auto vel_q     = solution_values_discharge[q];
         vel_q         /= h_q;
 
@@ -957,15 +1005,15 @@ void SWSolver<dim>::run(const bool verbose, const unsigned int output_interval) 
     pcout << "Maximum height " << get_max_height() << std::endl;
 
     verbose_cout << "  Update discharge stage 2" << std::endl;
-    /*SW_matrix.set_zeta_curr(zeta_tmp_2);
+    /*SW_matrix.set_h_curr(h_tmp_2);
     SW_matrix.set_hu_curr(hu_tmp_2);
     MGTransferMatrixFree<dim, float> mg_transfer;
     mg_transfer.build(dof_handler_height);
-    mg_transfer.interpolate_to_mg(dof_handler_height, level_projection_zeta, zeta_tmp_2);
+    mg_transfer.interpolate_to_mg(dof_handler_height, level_projection_h, h_tmp_2);
     mg_transfer.build(dof_handler_discharge);
     mg_transfer.interpolate_to_mg(dof_handler_discharge, level_projection_hu, hu_tmp_2);
     for(unsigned int level = 0; level < triangulation.n_global_levels(); ++level) {
-      mg_matrices_SW[level].set_zeta_curr(level_projection_zeta[level]);
+      mg_matrices_SW[level].set_h_curr(level_projection_h[level]);
       mg_matrices_SW[level].set_hu_curr(level_projection_hu[level]);
     }*/
     update_discharge();
@@ -983,14 +1031,14 @@ void SWSolver<dim>::run(const bool verbose, const unsigned int output_interval) 
     pcout << "Maximum height " << get_max_height() << std::endl;
 
     verbose_cout << "  Update discharge stage 3" << std::endl;
-    /*SW_matrix.set_zeta_curr(zeta_tmp_3);
+    /*SW_matrix.set_h_curr(h_tmp_3);
     SW_matrix.set_hu_curr(hu_tmp_3);
     mg_transfer.build(dof_handler_height);
-    mg_transfer.interpolate_to_mg(dof_handler_height, level_projection_zeta, zeta_tmp_3);
+    mg_transfer.interpolate_to_mg(dof_handler_height, level_projection_h, h_tmp_3);
     mg_transfer.build(dof_handler_discharge);
     mg_transfer.interpolate_to_mg(dof_handler_discharge, level_projection_hu, hu_tmp_3);
     for(unsigned int level = 0; level < triangulation.n_global_levels(); ++level) {
-      mg_matrices_SW[level].set_zeta_curr(level_projection_zeta[level]);
+      mg_matrices_SW[level].set_h_curr(level_projection_h[level]);
       mg_matrices_SW[level].set_hu_curr(level_projection_hu[level]);
     }*/
     update_discharge();
@@ -1014,7 +1062,17 @@ void SWSolver<dim>::run(const bool verbose, const unsigned int output_interval) 
     update_tracer();
 
     /*--- Update for next step ---*/
-    zeta_old.equ(1.0, zeta_curr);
+    h_old.equ(1.0, h_curr);
+    zeta_old.equ(1.0, h_old);
+    for(const auto& cell: dof_handler_height.active_cell_iterators()) {
+      if(cell->is_locally_owned()) {
+        std::vector<types::global_dof_index> dof_indices(fe_height.dofs_per_cell);
+        cell->get_dof_indices(dof_indices);
+        for(unsigned int idx = 0; idx < dof_indices.size(); ++idx) {
+          zeta_old(dof_indices[idx]) -= zb_exact.value(dof_location_map[dof_indices[idx]]);
+        }
+      }
+    }
     hu_old.equ(1.0, hu_curr);
 
     /*--- Analyze the results ---*/
