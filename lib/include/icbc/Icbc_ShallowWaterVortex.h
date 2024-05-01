@@ -42,8 +42,8 @@ namespace ICBC
   // is the same provided in the last reference for the degree of smoothness $p=2$.
   // Other iterative corrections to improve the vortex smoothness and
   // test higher then third order schemes can be readily implemented.
-#undef REGULARITY_P1
-#define  REGULARITY_P2
+#undef  ICBC_SHALLOWWATERVORTEX_REGULARITYP1
+#define ICBC_SHALLOWWATERVORTEX_REGULARITYP2
 
   using namespace dealii;
   
@@ -95,17 +95,17 @@ namespace ICBC
     x0[0] = 0.5 + uoo *t; 
     x0[1] = 0.5;
 
-#if defined REGULARITY_P1
+#if defined ICBC_SHALLOWWATERVORTEX_REGULARITYP1
     const unsigned int p = 1;
-#elif defined REGULARITY_P2
+#elif defined ICBC_SHALLOWWATERVORTEX_REGULARITYP2
     const unsigned int p = 2;
 #endif
     const double corr = 4.;
     const double twoPowp = std::pow(2,p);
 
-#if defined REGULARITY_P1
+#if defined ICBC_SHALLOWWATERVORTEX_REGULARITYP1
     const double Gamma = M_PI/(twoPowp*radius0) * std::sqrt( 1./corr* g*(h0-hmin)/(0.046875*M_PI*M_PI-0.25));
-#elif defined REGULARITY_P2
+#elif defined ICBC_SHALLOWWATERVORTEX_REGULARITYP2
     const double Gamma = M_PI/(twoPowp*radius0) * std::sqrt( 1./corr* g*(h0-hmin)/(0.034179687*M_PI*M_PI-0.222222222));
 #endif
         
@@ -120,10 +120,10 @@ namespace ICBC
     double cos2x2 = cos2x*cos2x;
     double x2 = pi_half*pi_half;
 
-#if defined REGULARITY_P1
+#if defined ICBC_SHALLOWWATERVORTEX_REGULARITYP1
     double H_pi_half = 0.125*cos2x + 0.25*pi_half*sin2x 
       + 0.015625*cos2x2 + 0.1875*x2 + 0.0625*pi_half*cos2x*sin2x;
-#elif defined REGULARITY_P2
+#elif defined ICBC_SHALLOWWATERVORTEX_REGULARITYP2
     double sinx = std::sin(pi_half);
     double H_pi_half = 0.091145833*cos2x + 0.182291667*pi_half*sin2x 
       + std::pow(cosx,6)* (0.015625*cosx2 + 0.024305556) + 0.011393229*cos2x2 
@@ -140,10 +140,10 @@ namespace ICBC
     cos2x2 = cos2x*cos2x;
     x2 = rho_half*rho_half;
 
-#if defined REGULARITY_P1
+#if defined ICBC_SHALLOWWATERVORTEX_REGULARITYP1
     double H_rho_half = 0.125*cos2x + 0.25*rho_half*sin2x 
       + 0.015625*cos2x2 + 0.1875*x2 + 0.0625*rho_half*cos2x*sin2x;
-#elif defined REGULARITY_P2
+#elif defined ICBC_SHALLOWWATERVORTEX_REGULARITYP2
     sinx = std::sin(rho_half);
     double H_rho_half = 0.091145833*cos2x + 0.182291667*rho_half*sin2x 
       + std::pow(cosx,6)* (0.015625*cosx2 + 0.024305556) + 0.011393229*cos2x2 
