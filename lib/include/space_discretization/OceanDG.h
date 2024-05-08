@@ -1163,7 +1163,7 @@ namespace SpaceDiscretization
     LinearAlgebra::distributed::Vector<Number>                    &next_ri_discharge) const  
   {
     {
-      TimerOutput::Scope t(timer, "rk_stage mass - integrals L_h");
+      TimerOutput::Scope t(timer, "rk_stage - integrals L_h");
 
       for (auto &i : bc->inflow_boundaries)
         i.second->set_time(current_time);
@@ -1226,11 +1226,8 @@ namespace SpaceDiscretization
             }
         },
         0);
-    }
 
 
-    {
-      TimerOutput::Scope t(timer, "rk_stage - inv mass + vec upd");
       data.cell_loop(
         &OceanoOperator::local_apply_inverse_mass_matrix_discharge,
         this,
@@ -1282,7 +1279,7 @@ namespace SpaceDiscretization
     std::vector<LinearAlgebra::distributed::Vector<Number>>       &next_ri_discharge) const
   {
     {
-      TimerOutput::Scope t(timer, "rk_stage mass - integrals L_h");
+      TimerOutput::Scope t(timer, "rk_stage - integrals L_h");
 
       for (auto &i : bc->inflow_boundaries)
         i.second->set_time(current_time);
@@ -1313,7 +1310,7 @@ namespace SpaceDiscretization
 
     {
       unsigned int n_stages = next_ri_height.size()-1; //lrp: may be optimized passing as argument
-      TimerOutput::Scope t(timer, "rk_stage mass - inv mass + vec upd");
+      TimerOutput::Scope t(timer, "rk_stage - inv mass + vec upd");
       data.cell_loop(
         &OceanoOperator::local_apply_inverse_mass_matrix_height,
         this,
@@ -1354,12 +1351,8 @@ namespace SpaceDiscretization
             }
         },
         0);
-    }
-    
-    
-    {
-      unsigned int n_stages = next_ri_discharge.size()-1; //lrp: may be optimized passing as argument
-      TimerOutput::Scope t(timer, "rk_stage mom - inv mass + vec upd");
+
+
       data.cell_loop(
         &OceanoOperator::local_apply_inverse_mass_matrix_discharge,
         this,

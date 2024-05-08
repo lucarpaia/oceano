@@ -522,7 +522,8 @@ namespace Problem
     // detail.
     std::locale s = pcout.get_stream().getloc();
     pcout.get_stream().imbue(std::locale(""));
-    pcout << "Number of degrees of freedom: " << dof_handler_height.n_dofs()
+    pcout << "Number of degrees of freedom: "
+          << dof_handler_height.n_dofs() + dof_handler_discharge.n_dofs()
           << " ( = " << (n_vars) << " [vars] x "
           << triangulation.n_global_active_cells() << " [cells] x "
           << Utilities::pow(fe_degree + 1, dim) << " [dofs/cell/var] )"
