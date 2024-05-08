@@ -38,23 +38,6 @@ namespace NumericalFlux
 
  
   
-  // This next function is a helper to simplify the implementation of the
-  // numerical flux, implementing the action of a tensor of tensors (with
-  // non-standard outer dimension of size `n_vars`, so the standard overloads
-  // provided by deal.II's tensor classes do not apply here) with another
-  // tensor of the same inner dimension, i.e., a matrix-vector product.
-  template <int n_components, int dim, typename Number>
-  inline DEAL_II_ALWAYS_INLINE //
-    Tensor<1, n_components, Number>
-    operator*(const Tensor<1, n_components, Tensor<1, dim, Number>> &matrix,
-              const Tensor<1, dim, Number> &                         vector)
-  {
-    Tensor<1, n_components, Number> result;
-    for (unsigned int d = 0; d < n_components; ++d)
-      result[d] = matrix[d] * vector;
-    return result;
-  }
-    
   // This class implements the numerical flux (Riemann solver). It gets the
   // state from the two sides of an interface and the normal vector, oriented
   // from the side of the solution $\mathbf{w}^-$ towards the solution
@@ -96,12 +79,12 @@ namespace NumericalFlux
 
     template <int dim, int n_vars, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
-      Tensor<1, n_vars, Number>
-      numerical_flux_strong(const Tensor<1, n_vars, Number> &u_m,
-                            const Tensor<1, n_vars, Number> &u_p,
-                            const Tensor<1, dim, Number>    &normal,
-                            const Number                     data_m,
-                            const Number                     data_p) const;
+      Tensor<1, dim, Number>
+      numerical_presflux_strong(const Number                     z_m,
+                                const Number                     z_p,
+                                const Tensor<1, dim, Number>    &normal,
+                                const Number                     data_m,
+                                const Number                     data_p) const;
 
 #if defined MODEL_EULER
     Model::Euler model;
@@ -121,32 +104,28 @@ namespace NumericalFlux
   // This is the case for the pressure term in the shallow water equations.
   template <int dim, int n_vars, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
-    Tensor<1, n_vars, Number>
-    NumericalFluxBase::numerical_flux_strong(
-      const Tensor<1, n_vars, Number>  &u_m,
-      const Tensor<1, n_vars, Number>  &u_p,
+    Tensor<1, dim, Number>
+    NumericalFluxBase::numerical_presflux_strong(
+      const Number                      z_m,
+      const Number                      z_p,
       const Tensor<1, dim, Number>     &normal,
       const Number                      data_m,
       const Number                      data_p) const
   {
-    Tensor<1, n_vars, Number> corr;
+    const auto h_m = z_m + data_m;
+    const auto h_p = z_p + data_p;
 
-//    const auto p_m = model.pressure<dim, n_vars>(u_m,data);
-//    const auto p_p = model.pressure<dim, n_vars>(u_p,data); //lrp
-    const auto h_m = u_m[0] + data_m;
-    const auto h_p = u_p[0] + data_p;
-
-    for (unsigned int d = 0; d < dim; ++d)
+//    for (unsigned int d = 0; d < dim; ++d) //lrp: please clean
 //      corr[d + 1] = ( 0.5 * (p_p + p_m) - p_m ) * normal[d]; //lrp
 //#define MODEL_SHALLOWWATER_NONCONSERVATIVE_WB
 //#if defined MODEL_SHALLOWWATER_CONSERVATIVE_NOWB
 //      corr[d + 1] = model.g * 0.25 * (h_p + h_m) * (h_p - h_m) * normal[d];
 //#elif defined MODEL_SHALLOWWATER_NONCONSERVATIVE_WB
-      corr[d + 1] = model.g * 0.25 * (h_p + h_m) * (u_p[0] - u_m[0]) * normal[d];
+//      corr = model.g * 0.25 * (h_p + h_m) * (u_p[0] - u_m[0]) * normal;
 //#elif defined MODEL_SHALLOWWATER_NONCONSERVATIVE_ORLANDO
 //      corr[d + 1] = model.g * 0.5 * (h_p * u_p[0] - h_m * u_m[0]) * normal[d];
 //#endif
-    return corr;
+    return model.g * 0.25 * (h_p + h_m) * (z_p - z_m) * normal;
   }
 #endif
    

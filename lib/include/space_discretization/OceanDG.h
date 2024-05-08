@@ -16,6 +16,7 @@
  *
  * Author: Martin Kronbichler, 2020
  *         Luca Arpaia,        2023
+ *         Giuseppe Orlando,   2024
  */
 #ifndef EULERDG_HPP
 #define EULERDG_HPP 
@@ -154,7 +155,8 @@ namespace SpaceDiscretization
                   TimerOutput               &timer_output);
 
     void reinit(const Mapping<dim> &   mapping,
-                const DoFHandler<dim> &dof_handler);
+                const DoFHandler<dim> &dof_handler_height,
+                const DoFHandler<dim> &dof_handler_discharge); //lrp
 
     void apply(const double                                      current_time,
                const LinearAlgebra::distributed::Vector<Number> &src,
@@ -165,34 +167,45 @@ namespace SpaceDiscretization
     perform_stage(const Number cur_time,
                   const Number factor_solution,
                   const Number factor_ai,
-                  const LinearAlgebra::distributed::Vector<Number> &current_ri,
-                  LinearAlgebra::distributed::Vector<Number>       &vec_ki,
-                  LinearAlgebra::distributed::Vector<Number>       &solution,
-                  LinearAlgebra::distributed::Vector<Number>       &next_ri) const;
+                  const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
+                  LinearAlgebra::distributed::Vector<Number>       &vec_ki_height,
+                  LinearAlgebra::distributed::Vector<Number>       &vec_ki_discharge,
+                  LinearAlgebra::distributed::Vector<Number>       &solution_height,
+                  LinearAlgebra::distributed::Vector<Number>       &solution_discharge,
+                  LinearAlgebra::distributed::Vector<Number>       &next_ri_height,
+                  LinearAlgebra::distributed::Vector<Number>       &next_ri_discharge) const;
+
 #elif defined TIMEINTEGRATOR_STRONGSTABILITYRUNGEKUTTA
-    void
-    perform_stage(const unsigned int cur_stage,
-                  const Number  cur_time,
-                  const Number  factor_bi,
-                  const Number *factor_solution,
-                  const LinearAlgebra::distributed::Vector<Number>        &current_ri,
-                  LinearAlgebra::distributed::Vector<Number>              &vec_ki,
-                  LinearAlgebra::distributed::Vector<Number>              &solution,
-                  std::vector<LinearAlgebra::distributed::Vector<Number>> &next_ri) const;
+    void 
+    perform_stage(const unsigned int                                             cur_stage,
+                  const Number                                                   cur_time,
+                  const Number                                                   factor_bi,
+                  const Number                                                  *factor_solution,
+                  const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
+                  LinearAlgebra::distributed::Vector<Number>                    &vec_ki_height,
+                  LinearAlgebra::distributed::Vector<Number>                    &vec_ki_discharge,
+                  LinearAlgebra::distributed::Vector<Number>                    &solution_height,
+                  LinearAlgebra::distributed::Vector<Number>                    &solution_discharge,
+                  std::vector<LinearAlgebra::distributed::Vector<Number>>       &next_ri_height,
+                  std::vector<LinearAlgebra::distributed::Vector<Number>>       &next_ri_discharge) const;
 #endif
 
     void project(const Function<dim> &                       function,
-                 LinearAlgebra::distributed::Vector<Number> &solution) const;
+                 LinearAlgebra::distributed::Vector<Number> &solution_height,
+                 LinearAlgebra::distributed::Vector<Number> &solution_discharge) const;
 
     std::array<double, n_vars-dim+1> compute_errors(
       const Function<dim> &                             function,
-      const LinearAlgebra::distributed::Vector<Number> &solution) const;
+      const LinearAlgebra::distributed::Vector<Number> &solution_height,
+      const LinearAlgebra::distributed::Vector<Number> &solution_discharge) const;
 
     double compute_cell_transport_speed(
-      const LinearAlgebra::distributed::Vector<Number> &solution) const;
+      const LinearAlgebra::distributed::Vector<Number> &solution_height,
+      const LinearAlgebra::distributed::Vector<Number> &solution_discharge) const;
 
     void
-    initialize_vector(LinearAlgebra::distributed::Vector<Number> &vector) const;
+    initialize_vector(LinearAlgebra::distributed::Vector<Number> &vector,
+                      const unsigned int                          variable) const;
 
     ICBC::BcBase<dim, n_vars> *bc;
     
@@ -224,29 +237,53 @@ namespace SpaceDiscretization
     return 0.;
 #endif
 
-    void local_apply_inverse_mass_matrix(
+    void local_apply_inverse_mass_matrix_height(
       const MatrixFree<dim, Number> &                   data,
       LinearAlgebra::distributed::Vector<Number> &      dst,
       const LinearAlgebra::distributed::Vector<Number> &src,
       const std::pair<unsigned int, unsigned int> &     cell_range) const;
 
-    void local_apply_cell(
+    void local_apply_inverse_mass_matrix_discharge(
       const MatrixFree<dim, Number> &                   data,
       LinearAlgebra::distributed::Vector<Number> &      dst,
       const LinearAlgebra::distributed::Vector<Number> &src,
       const std::pair<unsigned int, unsigned int> &     cell_range) const;
 
-    void local_apply_face(
-      const MatrixFree<dim, Number> &                   data,
-      LinearAlgebra::distributed::Vector<Number> &      dst,
-      const LinearAlgebra::distributed::Vector<Number> &src,
-      const std::pair<unsigned int, unsigned int> &     face_range) const;
+    void local_apply_cell_height(
+      const MatrixFree<dim, Number>                                 &data,
+      LinearAlgebra::distributed::Vector<Number>                    &dst,
+      const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
+      const std::pair<unsigned int, unsigned int>                   &cell_range) const;
 
-    void local_apply_boundary_face(
-      const MatrixFree<dim, Number> &                   data,
-      LinearAlgebra::distributed::Vector<Number> &      dst,
-      const LinearAlgebra::distributed::Vector<Number> &src,
-      const std::pair<unsigned int, unsigned int> &     face_range) const;
+    void local_apply_cell_discharge(
+      const MatrixFree<dim, Number>                                 &data,
+      LinearAlgebra::distributed::Vector<Number>                    &dst,
+      const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
+      const std::pair<unsigned int, unsigned int>                   &cell_range) const;
+
+    void local_apply_face_height(
+      const MatrixFree<dim, Number>                                 &data,
+      LinearAlgebra::distributed::Vector<Number>                    &dst,
+      const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
+      const std::pair<unsigned int, unsigned int>                   &face_range) const;
+
+    void local_apply_face_discharge(
+      const MatrixFree<dim, Number>                                 &data,
+      LinearAlgebra::distributed::Vector<Number>                    &dst,
+      const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
+      const std::pair<unsigned int, unsigned int>                   &face_range) const;
+
+    void local_apply_boundary_face_height(
+      const MatrixFree<dim, Number>                                 &data,
+      LinearAlgebra::distributed::Vector<Number>                    &dst,
+      const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
+      const std::pair<unsigned int, unsigned int>                   &face_range) const;
+
+    void local_apply_boundary_face_discharge(
+      const MatrixFree<dim, Number>                                 &data,
+      LinearAlgebra::distributed::Vector<Number>                    &dst,
+      const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
+      const std::pair<unsigned int, unsigned int>                   &face_range) const;
   };
 
 
@@ -285,11 +322,13 @@ namespace SpaceDiscretization
   template <int dim, int n_vars, int degree, int n_points_1d>
   void OceanoOperator<dim, n_vars, degree, n_points_1d>::reinit(
     const Mapping<dim> &   mapping,
-    const DoFHandler<dim> &dof_handler)
+    const DoFHandler<dim> &dof_handler_height,
+    const DoFHandler<dim> &dof_handler_discharge)
   {
-    const std::vector<const DoFHandler<dim> *> dof_handlers = {&dof_handler};
+    std::vector<const DoFHandler<dim> *> dof_handlers;
     const AffineConstraints<double>            dummy;
-    const std::vector<const AffineConstraints<double> *> constraints = {&dummy};
+    const std::vector<const AffineConstraints<double> *> 
+      constraints = {&dummy, &dummy};
     const std::vector<Quadrature<1>> quadratures = {QGauss<1>(n_points_1d),
                                                     QGauss<1>(degree + 1)};
 
@@ -306,6 +345,9 @@ namespace SpaceDiscretization
     additional_data.tasks_parallel_scheme =
       MatrixFree<dim, Number>::AdditionalData::none;
 
+    dof_handlers.push_back(&dof_handler_height);
+    dof_handlers.push_back(&dof_handler_discharge);
+
     data.reinit(
       mapping, dof_handlers, constraints, quadratures, additional_data);
   }
@@ -314,9 +356,10 @@ namespace SpaceDiscretization
 
   template <int dim, int n_vars, int degree, int n_points_1d>
   void OceanoOperator<dim, n_vars, degree, n_points_1d>::initialize_vector(
-    LinearAlgebra::distributed::Vector<Number> &vector) const
+    LinearAlgebra::distributed::Vector<Number> &vector,
+    const unsigned int                          variable) const
   {
-    data.initialize_dof_vector(vector);
+    data.initialize_dof_vector(vector, variable);
   }
 
 
@@ -405,45 +448,83 @@ namespace SpaceDiscretization
   // a member function where the MatrixFree object is already available as the
   // `data` variable, we stick with that to avoid confusion.
   template <int dim, int n_vars, int degree, int n_points_1d>
-  void OceanoOperator<dim, n_vars, degree, n_points_1d>::local_apply_cell(
+  void OceanoOperator<dim, n_vars, degree, n_points_1d>::local_apply_cell_height(
     const MatrixFree<dim, Number> &,
-    LinearAlgebra::distributed::Vector<Number> &      dst,
-    const LinearAlgebra::distributed::Vector<Number> &src,
-    const std::pair<unsigned int, unsigned int> &     cell_range) const
+    LinearAlgebra::distributed::Vector<Number>                    &dst,
+    const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
+    const std::pair<unsigned int, unsigned int>                   &cell_range) const
   {
-    FEEvaluation<dim, degree, n_points_1d, n_vars, Number> phi(data);
+    FEEvaluation<dim, degree, n_points_1d, 1, Number> phi_height(data,0);
+    FEEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge(data,1);
 
     for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
       {
-        phi.reinit(cell);
-        phi.gather_evaluate(src, EvaluationFlags::values
-                              | EvaluationFlags::gradients);
+        phi_height.reinit(cell);
+        phi_discharge.reinit(cell);
+        phi_discharge.gather_evaluate(src[1], EvaluationFlags::values);
 
-        for (unsigned int q = 0; q < phi.n_q_points; ++q)
+        for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
           {
-            const auto w_q = phi.get_value(q);
-            const auto dw_q = phi.get_gradient(q);
+            const auto q_q = phi_discharge.get_value(q);
+//            const auto dw_q = phi.get_gradient(q);
+//
+//            Tensor<1, dim+3, VectorizedArray<Number>> data_q =
+//              evaluate_function<dim, Number, dim+3>(
+//                *bc->problem_data, phi.quadrature_point(q));
 
-            Tensor<1, dim+3, VectorizedArray<Number>> data_q =
-              evaluate_function<dim, Number, dim+3>(
-                *bc->problem_data, phi.quadrature_point(q));
+            phi_height.submit_gradient(model.massflux<dim, n_vars>(q_q), q);
 
-            phi.submit_gradient(model.flux<dim, n_vars>(w_q, data_q[0]), q);
-
-            phi.submit_value(
-              model.source<dim, n_vars>(w_q, dw_q[0], data_q),
-              q);
+//            phi_height.submit_value(
+//              model.source<dim, n_vars>(w_q, dw_q[0], data_q),
+//              q);
           }
 
-        phi.integrate_scatter(((bc->problem_data.get() != nullptr) ?
-                                 EvaluationFlags::values :
-                                 EvaluationFlags::nothing) |
-                                EvaluationFlags::gradients,
-                              dst);
+        phi_height.integrate_scatter(EvaluationFlags::gradients,
+                                       dst);
       }
   }
 
+  template <int dim, int n_vars, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_vars, degree, n_points_1d>::local_apply_cell_discharge(
+    const MatrixFree<dim, Number> &,
+    LinearAlgebra::distributed::Vector<Number>                    &dst,
+    const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
+    const std::pair<unsigned int, unsigned int>                   &cell_range) const
+  {
+    FEEvaluation<dim, degree, n_points_1d, 1, Number> phi_height(data,0);
+    FEEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge(data,1);
 
+    for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
+      {
+        phi_height.reinit(cell);
+        phi_height.gather_evaluate(src[0], EvaluationFlags::values
+                              | EvaluationFlags::gradients);
+        phi_discharge.reinit(cell);
+        phi_discharge.gather_evaluate(src[1], EvaluationFlags::values);
+
+        for (unsigned int q = 0; q < phi_discharge.n_q_points; ++q)
+          {
+            const auto q_q = phi_discharge.get_value(q);
+            const auto z_q = phi_height.get_value(q);
+            const auto dz_q = phi_height.get_gradient(q);
+
+            Tensor<1, dim+3, VectorizedArray<Number>> data_q =
+              evaluate_function<dim, Number, dim+3>(
+                *bc->problem_data, phi_discharge.quadrature_point(q));
+
+            phi_discharge.submit_gradient(
+              model.advectiveflux<dim, n_vars>(z_q, q_q, data_q[0]), q);
+
+            phi_discharge.submit_value(
+              model.source<dim, n_vars>(z_q, q_q, dz_q, data_q),
+              q);
+          }
+
+        phi_discharge.integrate_scatter(EvaluationFlags::values |
+                                        EvaluationFlags::gradients,
+                                       dst);
+      }
+  }
 
   // The next function concerns the computation of integrals on interior
   // faces, where we need evaluators from both cells adjacent to the face. We
@@ -500,63 +581,127 @@ namespace SpaceDiscretization
   // another function to compute it.
   //
   template <int dim, int n_vars, int degree, int n_points_1d>
-  void OceanoOperator<dim, n_vars, degree, n_points_1d>::local_apply_face(
+  void OceanoOperator<dim, n_vars, degree, n_points_1d>::local_apply_face_height(
     const MatrixFree<dim, Number> &,
-    LinearAlgebra::distributed::Vector<Number> &      dst,
-    const LinearAlgebra::distributed::Vector<Number> &src,
-    const std::pair<unsigned int, unsigned int> &     face_range) const
+    LinearAlgebra::distributed::Vector<Number>                    &dst,
+    const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
+    const std::pair<unsigned int, unsigned int>                   &face_range) const
   {
-    FEFaceEvaluation<dim, degree, n_points_1d, n_vars, Number> phi_m(data,
-                                                                      true);
-    FEFaceEvaluation<dim, degree, n_points_1d, n_vars, Number> phi_p(data,
-                                                                      false);
+    FEFaceEvaluation<dim, degree, n_points_1d, 1, Number> phi_height_m(data,
+                                                                      true, 0);
+    FEFaceEvaluation<dim, degree, n_points_1d, 1, Number> phi_height_p(data,
+                                                                      false, 0);
+    FEFaceEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge_m(data,
+                                                                      true, 1);
+    FEFaceEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge_p(data,
+                                                                      false, 1);
 
     for (unsigned int face = face_range.first; face < face_range.second; ++face)
       {
-        phi_p.reinit(face);
-        phi_p.gather_evaluate(src, EvaluationFlags::values);
+        phi_height_p.reinit(face);
+        phi_height_p.gather_evaluate(src[0], EvaluationFlags::values);
+        phi_discharge_p.reinit(face);
+        phi_discharge_p.gather_evaluate(src[1], EvaluationFlags::values);
 
-        phi_m.reinit(face);
-        phi_m.gather_evaluate(src, EvaluationFlags::values);
+        phi_height_m.reinit(face);
+        phi_height_m.gather_evaluate(src[0], EvaluationFlags::values);
+        phi_discharge_m.reinit(face);
+        phi_discharge_m.gather_evaluate(src[1], EvaluationFlags::values);
 
-        for (unsigned int q = 0; q < phi_m.n_q_points; ++q)
+        for (unsigned int q = 0; q < phi_height_m.n_q_points; ++q)
           {
             const VectorizedArray<Number> data_m =
               evaluate_function<dim, Number>(*bc->problem_data,
-                phi_m.quadrature_point(q)-1e-12*phi_m.normal_vector(q), 0);
+                phi_height_m.quadrature_point(q)-1e-12*phi_height_m.normal_vector(q), 0);
             const VectorizedArray<Number> data_p =
               evaluate_function<dim, Number>(*bc->problem_data,
-                phi_m.quadrature_point(q)+1e-12*phi_m.normal_vector(q), 0);
+                phi_height_m.quadrature_point(q)+1e-12*phi_height_m.normal_vector(q), 0);
 
             auto numerical_flux_p =
-              num_flux.numerical_flux_weak<dim, n_vars>(phi_m.get_value(q),
-                                                        phi_p.get_value(q),
-                                                        phi_m.normal_vector(q),
-                                                        data_m,
-                                                        data_p);
+              num_flux.numerical_massflux_weak<dim, n_vars>(phi_height_m.get_value(q),
+                                                            phi_height_p.get_value(q),
+                                                            phi_discharge_m.get_value(q),
+                                                            phi_discharge_p.get_value(q),
+                                                            phi_height_m.normal_vector(q),
+                                                            data_m,
+                                                            data_p);
+//            auto numerical_flux_m = -numerical_flux_p;
+
+            phi_height_m.submit_value(-numerical_flux_p, q);
+            phi_height_p.submit_value(numerical_flux_p, q);
+          }
+
+        phi_height_p.integrate_scatter(EvaluationFlags::values, dst);
+        phi_height_m.integrate_scatter(EvaluationFlags::values, dst);
+      }
+  }
+
+  template <int dim, int n_vars, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_vars, degree, n_points_1d>::local_apply_face_discharge(
+    const MatrixFree<dim, Number> &,
+    LinearAlgebra::distributed::Vector<Number>                    &dst,
+    const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
+    const std::pair<unsigned int, unsigned int>                   &face_range) const
+  {
+    FEFaceEvaluation<dim, degree, n_points_1d, 1, Number> phi_height_m(data,
+                                                                      true, 0);
+    FEFaceEvaluation<dim, degree, n_points_1d, 1, Number> phi_height_p(data,
+                                                                      false, 0);
+    FEFaceEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge_m(data,
+                                                                      true, 1);
+    FEFaceEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge_p(data,
+                                                                      false, 1);
+
+    for (unsigned int face = face_range.first; face < face_range.second; ++face)
+      {
+        phi_height_p.reinit(face);
+        phi_height_p.gather_evaluate(src[0], EvaluationFlags::values);
+        phi_discharge_p.reinit(face);
+        phi_discharge_p.gather_evaluate(src[1], EvaluationFlags::values);
+
+        phi_height_m.reinit(face);
+        phi_height_m.gather_evaluate(src[0], EvaluationFlags::values);
+        phi_discharge_m.reinit(face);
+        phi_discharge_m.gather_evaluate(src[1], EvaluationFlags::values);
+
+        for (unsigned int q = 0; q < phi_discharge_m.n_q_points; ++q)
+          {
+            const VectorizedArray<Number> data_m =
+              evaluate_function<dim, Number>(*bc->problem_data,
+                phi_discharge_m.quadrature_point(q)-1e-12*phi_discharge_m.normal_vector(q), 0);
+            const VectorizedArray<Number> data_p =
+              evaluate_function<dim, Number>(*bc->problem_data,
+                phi_discharge_m.quadrature_point(q)+1e-12*phi_discharge_m.normal_vector(q), 0);
+
+            auto numerical_flux_p =
+              num_flux.numerical_advflux_weak<dim, n_vars>(phi_height_m.get_value(q),
+                                                           phi_height_p.get_value(q),
+                                                           phi_discharge_m.get_value(q),
+                                                           phi_discharge_p.get_value(q),
+                                                           phi_discharge_m.normal_vector(q),
+                                                           data_m,
+                                                           data_p);
             auto numerical_flux_m = -numerical_flux_p;
 
 #if defined MODEL_SHALLOWWATER
             auto pressure_numerical_flux =
-              num_flux.numerical_flux_strong<dim, n_vars>(phi_m.get_value(q),
-                                                          phi_p.get_value(q),
-                                                          phi_m.normal_vector(q),
-                                                          data_m,
-                                                          data_p);
+              num_flux.numerical_presflux_strong<dim, n_vars>(phi_height_m.get_value(q),
+                                                                  phi_height_p.get_value(q), //lrp: zq, qq as variable?
+                                                                  phi_discharge_m.normal_vector(q),
+                                                                  data_m,
+                                                                  data_p);
             numerical_flux_m -= pressure_numerical_flux;
             numerical_flux_p -= pressure_numerical_flux;
 #endif
 
-            phi_m.submit_value(numerical_flux_m, q);
-            phi_p.submit_value(numerical_flux_p, q);
+            phi_discharge_m.submit_value(numerical_flux_m, q);
+            phi_discharge_p.submit_value(numerical_flux_p, q);
           }
 
-        phi_p.integrate_scatter(EvaluationFlags::values, dst);
-        phi_m.integrate_scatter(EvaluationFlags::values, dst);
+        phi_discharge_p.integrate_scatter(EvaluationFlags::values, dst);
+        phi_discharge_m.integrate_scatter(EvaluationFlags::values, dst);
       }
   }
-
-
 
   // For faces located at the boundary, we need to impose the appropriate
   // boundary conditions. In this tutorial program, we implement four cases as
@@ -620,59 +765,57 @@ namespace SpaceDiscretization
   // `else` clause will catch the case when some part of the boundary was not
   // assigned any boundary condition via `OceanoOperator::set_..._boundary(...)`.
   template <int dim, int n_vars, int degree, int n_points_1d>
-  void OceanoOperator<dim, n_vars, degree, n_points_1d>::local_apply_boundary_face(
+  void OceanoOperator<dim, n_vars, degree, n_points_1d>::local_apply_boundary_face_height(
     const MatrixFree<dim, Number> &,
-    LinearAlgebra::distributed::Vector<Number> &      dst,
-    const LinearAlgebra::distributed::Vector<Number> &src,
-    const std::pair<unsigned int, unsigned int> &     face_range) const
+    LinearAlgebra::distributed::Vector<Number>                    &dst,
+    const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
+    const std::pair<unsigned int, unsigned int>                   &face_range) const
   {
-    FEFaceEvaluation<dim, degree, n_points_1d, n_vars, Number> phi(data, true);
+    FEFaceEvaluation<dim, degree, n_points_1d, 1, Number> phi_height(data, true, 0);
+    FEFaceEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge(data, true, 1);
 
     for (unsigned int face = face_range.first; face < face_range.second; ++face)
       {
-        phi.reinit(face);
-        phi.gather_evaluate(src, EvaluationFlags::values);
+        phi_height.reinit(face);
+        phi_height.gather_evaluate(src[0], EvaluationFlags::values);
+        phi_discharge.reinit(face);
+        phi_discharge.gather_evaluate(src[1], EvaluationFlags::values);
 
-        for (unsigned int q = 0; q < phi.n_q_points; ++q)
+        for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
           {
-            const auto w_m    = phi.get_value(q);
-            const auto normal = phi.normal_vector(q);
+            const auto z_m    = phi_height.get_value(q);
+            const auto q_m    = phi_discharge.get_value(q);
+            const auto normal = phi_height.normal_vector(q);
             const VectorizedArray<Number> data_m =
               evaluate_function<dim, Number>(
-                *bc->problem_data, phi.quadrature_point(q), 0);
+                *bc->problem_data, phi_height.quadrature_point(q), 0);
 
-            auto rho_u_dot_n = w_m[1] * normal[0];
-            for (unsigned int d = 1; d < dim; ++d)
-              rho_u_dot_n += w_m[1 + d] * normal[d];
+            auto rho_u_dot_n = q_m * normal;
 
-            bool at_outflow = false;
-
+            VectorizedArray<Number> z_p;
+            Tensor<1, dim, VectorizedArray<Number>> q_p;
             Tensor<1, n_vars, VectorizedArray<Number>> w_p;
             const auto boundary_id = data.get_boundary_id(face);
             if (bc->wall_boundaries.find(boundary_id) != bc->wall_boundaries.end())
               {
-                w_p[0] = w_m[0];
-                for (unsigned int d = 0; d < dim; ++d)
-                  w_p[d + 1] = w_m[d + 1] - 2. * rho_u_dot_n * normal[d];
-                for (unsigned int t = 0; t < n_vars-dim-1; ++t)
-                  w_p[dim + 1 + t] = w_m[dim + 1 + t];
+                z_p = z_m;
+                q_p = q_m - 2. * rho_u_dot_n * normal;
               }
             else if (bc->inflow_boundaries.find(boundary_id) !=
                      bc->inflow_boundaries.end())
-              w_p =
-                evaluate_function<dim, Number, n_vars>(
+              {
+                w_p =
+                  evaluate_function<dim, Number, n_vars>(
                 		  *bc->inflow_boundaries.find(boundary_id)->second,
-                                  phi.quadrature_point(q));
+                                  phi_height.quadrature_point(q));
+                z_p = w_p[0];
+                for (unsigned int d = 0; d < dim; ++d) q_p[d] = w_p[d+1];
+              }
             else if (bc->supercritical_outflow_boundaries.find(boundary_id) !=
                      bc->supercritical_outflow_boundaries.end())
               {
-                w_p          = w_m;
-                for (unsigned int t = 0; t < n_vars-dim-1; ++t)
-                  w_p[dim + 1 + t] = evaluate_function(
-                    *bc->supercritical_outflow_boundaries.find(boundary_id)->second,
-                    phi.quadrature_point(q),
-                    dim + 1 + t);
-                at_outflow = true;
+                z_p = z_m;
+                q_p = q_m;
               }
 #if defined MODEL_SHALLOWWATER
             else if (bc->subcritical_outflow_boundaries.find(boundary_id) !=
@@ -681,24 +824,20 @@ namespace SpaceDiscretization
                 w_p =
                   evaluate_function<dim, Number, n_vars>(
                     *bc->subcritical_outflow_boundaries.find(boundary_id)->second,
-                      phi.quadrature_point(q));
+                      phi_height.quadrature_point(q));
+                z_p = w_p[0];
+                for (unsigned int d = 0; d < dim; ++d) q_p[d] = w_p[d+1];
                 const auto r_p
-                  = model.riemann_invariant_p<dim, n_vars>(w_m, normal, data_m);
+                  = model.riemann_invariant_p<dim, n_vars>(z_m, q_m, normal, data_m);
                 const auto r_m
-                  = model.riemann_invariant_m<dim, n_vars>(w_p, normal, data_m);
+                  = model.riemann_invariant_m<dim, n_vars>(z_p, q_p, normal, data_m);
                 const auto c_b = 0.25 * (r_p - r_m);
                 const auto h_b = c_b * c_b / model.g;
                 const auto u_b = 0.5 * (r_p + r_m);
 
-                w_p[0] = h_b - data_m;
+                z_p = h_b - data_m;
                 const auto norm = 1./normal.norm_square();
-                for (unsigned int d = 0; d < dim; ++d)
-                  w_p[d + 1] =  u_b * h_b * norm * normal[d];
-                for (unsigned int t = 0; t < n_vars-dim-1; ++t)
-                  w_p[dim + 1 + t] = evaluate_function(
-                    *bc->subcritical_outflow_boundaries.find(boundary_id)->second,
-                    phi.quadrature_point(q),
-                    dim + 1 + t);
+                q_p =  u_b * h_b * norm * normal;
               }
 #endif
             else
@@ -708,11 +847,107 @@ namespace SpaceDiscretization
                                      "this part of the domain boundary?"));
 
             auto flux =
-              num_flux.numerical_flux_weak<dim, n_vars>(w_m, w_p, normal, data_m, data_m);
+              num_flux.numerical_massflux_weak<dim, n_vars>(z_m, z_p, q_m, q_p, 
+                                                            normal, data_m, data_m);
+
+            phi_height.submit_value(-flux, q);
+          }
+
+        phi_height.integrate_scatter(EvaluationFlags::values, dst);
+      }
+  }
+
+  template <int dim, int n_vars, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_vars, degree, n_points_1d>::local_apply_boundary_face_discharge(
+    const MatrixFree<dim, Number> &,
+    LinearAlgebra::distributed::Vector<Number>                    &dst,
+    const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
+    const std::pair<unsigned int, unsigned int>                   &face_range) const
+  {
+    FEFaceEvaluation<dim, degree, n_points_1d, 1, Number> phi_height(data, true, 0);
+    FEFaceEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge(data, true, 1);
+
+    for (unsigned int face = face_range.first; face < face_range.second; ++face)
+      {
+        phi_height.reinit(face);        
+        phi_height.gather_evaluate(src[0], EvaluationFlags::values);
+        phi_discharge.reinit(face);
+        phi_discharge.gather_evaluate(src[1], EvaluationFlags::values);
+
+        for (unsigned int q = 0; q < phi_discharge.n_q_points; ++q)
+          {
+            const auto z_m    = phi_height.get_value(q);
+            const auto q_m    = phi_discharge.get_value(q);
+            const auto normal = phi_discharge.normal_vector(q);
+            const VectorizedArray<Number> data_m =
+              evaluate_function<dim, Number>(
+                *bc->problem_data, phi_discharge.quadrature_point(q), 0);
+
+            auto rho_u_dot_n = q_m * normal;
+
+            bool at_outflow = false;
+
+            VectorizedArray<Number> z_p;
+            Tensor<1, dim, VectorizedArray<Number>> q_p;
+            Tensor<1, n_vars, VectorizedArray<Number>> w_p;
+            const auto boundary_id = data.get_boundary_id(face);
+            if (bc->wall_boundaries.find(boundary_id) != bc->wall_boundaries.end())
+              {
+                z_p = z_m;
+                q_p = q_m - 2. * rho_u_dot_n * normal;
+              }
+            else if (bc->inflow_boundaries.find(boundary_id) !=
+                     bc->inflow_boundaries.end())
+              {
+                w_p =
+                  evaluate_function<dim, Number, n_vars>(
+                		  *bc->inflow_boundaries.find(boundary_id)->second,
+                                  phi_height.quadrature_point(q));
+                z_p = w_p[0];
+                for (unsigned int d = 0; d < dim; ++d) q_p[d] = w_p[d+1];
+              }
+            else if (bc->supercritical_outflow_boundaries.find(boundary_id) !=
+                     bc->supercritical_outflow_boundaries.end())
+              {
+                z_p = z_m;
+                q_p = q_m;
+                at_outflow = true;
+              }
+#if defined MODEL_SHALLOWWATER
+            else if (bc->subcritical_outflow_boundaries.find(boundary_id) !=
+                     bc->subcritical_outflow_boundaries.end())
+              {
+                w_p =
+                  evaluate_function<dim, Number, n_vars>(
+                    *bc->subcritical_outflow_boundaries.find(boundary_id)->second,
+                      phi_height.quadrature_point(q));
+                z_p = w_p[0];
+                for (unsigned int d = 0; d < dim; ++d) q_p[d] = w_p[d+1];
+                const auto r_p
+                  = model.riemann_invariant_p<dim, n_vars>(z_m, q_m, normal, data_m);
+                const auto r_m
+                  = model.riemann_invariant_m<dim, n_vars>(z_p, q_p, normal, data_m);
+                const auto c_b = 0.25 * (r_p - r_m);
+                const auto h_b = c_b * c_b / model.g;
+                const auto u_b = 0.5 * (r_p + r_m);
+
+                z_p = h_b - data_m;
+                const auto norm = 1./normal.norm_square();
+                q_p =  u_b * h_b * norm * normal;
+              }
+#endif
+            else
+              AssertThrow(false,
+                          ExcMessage("Unknown boundary id, did "
+                                     "you set a boundary condition for "
+                                     "this part of the domain boundary?"));
+
+            auto flux =
+              num_flux.numerical_advflux_weak<dim, n_vars>(z_m, z_p, q_m, q_p, normal, data_m, data_m);
 
 #if defined MODEL_SHALLOWWATER
             auto pressure_numerical_fluxes =
-              num_flux.numerical_flux_strong<dim, n_vars>(w_m, w_p, normal, data_m, data_m);
+              num_flux.numerical_presflux_strong<dim, n_vars>(z_m, z_p, normal, data_m, data_m);
             flux += pressure_numerical_fluxes;
 #endif
 
@@ -721,17 +956,15 @@ namespace SpaceDiscretization
                 {
                   if (rho_u_dot_n[v] < -1e-12)
                     for (unsigned int d = 0; d < dim; ++d)
-                      flux[d + 1][v] = 0.;
+                      flux[d][v] = 0.;
                 }
 
-            phi.submit_value(-flux, q);
+            phi_discharge.submit_value(-flux, q);
           }
 
-        phi.integrate_scatter(EvaluationFlags::values, dst);
+        phi_discharge.integrate_scatter(EvaluationFlags::values, dst);
       }
   }
-
-
 
   // The next function implements the inverse mass matrix operation. The
   // algorithms and rationale have been discussed extensively in the
@@ -762,28 +995,48 @@ namespace SpaceDiscretization
   // matrix. This leads to square contributions to the mass matrix and ensures
   // exact integration, as explained in the introduction.
   template <int dim, int n_vars, int degree, int n_points_1d>
-  void OceanoOperator<dim, n_vars, degree, n_points_1d>::local_apply_inverse_mass_matrix(
+  void OceanoOperator<dim, n_vars, degree, n_points_1d>::local_apply_inverse_mass_matrix_height(
     const MatrixFree<dim, Number> &,
     LinearAlgebra::distributed::Vector<Number> &      dst,
     const LinearAlgebra::distributed::Vector<Number> &src,
     const std::pair<unsigned int, unsigned int> &     cell_range) const
   {
-    FEEvaluation<dim, degree, degree + 1, n_vars, Number> phi(data, 0, 1);
-    MatrixFreeOperators::CellwiseInverseMassMatrix<dim, degree, n_vars, Number>
-      inverse(phi);
+    FEEvaluation<dim, degree, degree + 1, 1, Number> phi_height(data, 0, 1);
+    MatrixFreeOperators::CellwiseInverseMassMatrix<dim, degree, 1, Number>
+      inverse(phi_height);
 
     for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
       {
-        phi.reinit(cell);
-        phi.read_dof_values(src);
+        phi_height.reinit(cell);
+        phi_height.read_dof_values(src);
 
-        inverse.apply(phi.begin_dof_values(), phi.begin_dof_values());
+        inverse.apply(phi_height.begin_dof_values(), phi_height.begin_dof_values());
 
-        phi.set_dof_values(dst);
+        phi_height.set_dof_values(dst);
       }
   }
 
+  template <int dim, int n_vars, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_vars, degree, n_points_1d>::local_apply_inverse_mass_matrix_discharge(
+    const MatrixFree<dim, Number> &,
+    LinearAlgebra::distributed::Vector<Number> &      dst,
+    const LinearAlgebra::distributed::Vector<Number> &src,
+    const std::pair<unsigned int, unsigned int> &     cell_range) const
+  {
+    FEEvaluation<dim, degree, degree + 1, dim, Number> phi_discharge(data, 1, 1);
+    MatrixFreeOperators::CellwiseInverseMassMatrix<dim, degree, dim, Number>
+      inverse(phi_discharge);
 
+    for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
+      {
+        phi_discharge.reinit(cell);
+        phi_discharge.read_dof_values(src);
+
+        inverse.apply(phi_discharge.begin_dof_values(), phi_discharge.begin_dof_values());
+
+        phi_discharge.set_dof_values(dst);
+      }
+  }
 
   // @sect4{The apply() and related functions}
 
@@ -898,27 +1151,40 @@ namespace SpaceDiscretization
 #if defined TIMEINTEGRATOR_LOWSTORAGERUNGEKUTTA
   template <int dim, int n_vars, int degree, int n_points_1d>
   void OceanoOperator<dim, n_vars, degree, n_points_1d>::perform_stage(
-    const Number                                      current_time,
-    const Number                                      factor_solution,
-    const Number                                      factor_ai,
-    const LinearAlgebra::distributed::Vector<Number> &current_ri,
-    LinearAlgebra::distributed::Vector<Number> &      vec_ki,
-    LinearAlgebra::distributed::Vector<Number> &      solution,
-    LinearAlgebra::distributed::Vector<Number> &      next_ri) const
+    const Number                                                   current_time,
+    const Number                                                   factor_solution,
+    const Number                                                   factor_ai,
+    const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
+    LinearAlgebra::distributed::Vector<Number>                    &vec_ki_height,
+    LinearAlgebra::distributed::Vector<Number>                    &vec_ki_discharge,
+    LinearAlgebra::distributed::Vector<Number>                    &solution_height,
+    LinearAlgebra::distributed::Vector<Number>                    &solution_discharge,
+    LinearAlgebra::distributed::Vector<Number>                    &next_ri_height,
+    LinearAlgebra::distributed::Vector<Number>                    &next_ri_discharge) const  
   {
     {
-      TimerOutput::Scope t(timer, "rk_stage - integrals L_h");
+      TimerOutput::Scope t(timer, "rk_stage mass - integrals L_h");
 
       for (auto &i : bc->inflow_boundaries)
         i.second->set_time(current_time);
       for (auto &i : bc->supercritical_outflow_boundaries)
         i.second->set_time(current_time);
 
-      data.loop(&OceanoOperator::local_apply_cell,
-                &OceanoOperator::local_apply_face,
-                &OceanoOperator::local_apply_boundary_face,
+      data.loop(&OceanoOperator::local_apply_cell_height,
+                &OceanoOperator::local_apply_face_height,
+                &OceanoOperator::local_apply_boundary_face_height,
                 this,
-                vec_ki,
+                vec_ki_height,
+                current_ri,
+                true,
+                MatrixFree<dim, Number>::DataAccessOnFaces::values,
+                MatrixFree<dim, Number>::DataAccessOnFaces::values);
+
+      data.loop(&OceanoOperator::local_apply_cell_discharge,
+                &OceanoOperator::local_apply_face_discharge,
+                &OceanoOperator::local_apply_boundary_face_discharge,
+                this,
+                vec_ki_discharge,
                 current_ri,
                 true,
                 MatrixFree<dim, Number>::DataAccessOnFaces::values,
@@ -929,10 +1195,10 @@ namespace SpaceDiscretization
     {
       TimerOutput::Scope t(timer, "rk_stage - inv mass + vec upd");
       data.cell_loop(
-        &OceanoOperator::local_apply_inverse_mass_matrix,
+        &OceanoOperator::local_apply_inverse_mass_matrix_height,
         this,
-        next_ri,
-        vec_ki,
+        next_ri_height,
+        vec_ki_height,
         std::function<void(const unsigned int, const unsigned int)>(),
         [&](const unsigned int start_range, const unsigned int end_range) {
           const Number ai = factor_ai;
@@ -942,9 +1208,9 @@ namespace SpaceDiscretization
               /* DEAL_II_OPENMP_SIMD_PRAGMA */
               for (unsigned int i = start_range; i < end_range; ++i)
                 {
-                  const Number k_i          = next_ri.local_element(i);
-                  const Number sol_i        = solution.local_element(i);
-                  solution.local_element(i) = sol_i + bi * k_i;
+                  const Number k_i          = next_ri_height.local_element(i);
+                  const Number sol_i        = solution_height.local_element(i);
+                  solution_height.local_element(i) = sol_i + bi * k_i;
                 }
             }
           else
@@ -952,40 +1218,92 @@ namespace SpaceDiscretization
               /* DEAL_II_OPENMP_SIMD_PRAGMA */
               for (unsigned int i = start_range; i < end_range; ++i)
                 {
-                  const Number k_i          = next_ri.local_element(i);
-                  const Number sol_i        = solution.local_element(i);
-                  solution.local_element(i) = sol_i + bi * k_i;
-                  next_ri.local_element(i)  = sol_i + ai * k_i;
+                  const Number k_i          = next_ri_height.local_element(i);
+                  const Number sol_i        = solution_height.local_element(i);
+                  solution_height.local_element(i) = sol_i + bi * k_i;
+                  next_ri_height.local_element(i)  = sol_i + ai * k_i;
                 }
             }
-        });
+        },
+        0);
     }
+
+
+    {
+      TimerOutput::Scope t(timer, "rk_stage - inv mass + vec upd");
+      data.cell_loop(
+        &OceanoOperator::local_apply_inverse_mass_matrix_discharge,
+        this,
+        next_ri_discharge,
+        vec_ki_discharge,
+        std::function<void(const unsigned int, const unsigned int)>(),
+        [&](const unsigned int start_range, const unsigned int end_range) {
+          const Number ai = factor_ai;
+          const Number bi = factor_solution;
+          if (ai == Number())
+            {
+              /* DEAL_II_OPENMP_SIMD_PRAGMA */
+              for (unsigned int i = start_range; i < end_range; ++i)
+                {
+                  const Number k_i          = next_ri_discharge.local_element(i);
+                  const Number sol_i        = solution_discharge.local_element(i);
+                  solution_discharge.local_element(i) = sol_i + bi * k_i;
+                }
+            }
+          else
+            {
+              /* DEAL_II_OPENMP_SIMD_PRAGMA */
+              for (unsigned int i = start_range; i < end_range; ++i)
+                {
+                  const Number k_i          = next_ri_discharge.local_element(i);
+                  const Number sol_i        = solution_discharge.local_element(i);
+                  solution_discharge.local_element(i) = sol_i + bi * k_i;
+                  next_ri_discharge.local_element(i)  = sol_i + ai * k_i;
+                }
+            }
+        },
+        1);
+    }    
   }
+
 #elif defined TIMEINTEGRATOR_STRONGSTABILITYRUNGEKUTTA
   template <int dim, int n_vars, int degree, int n_points_1d>
   void OceanoOperator<dim, n_vars, degree, n_points_1d>::perform_stage(
-    const unsigned int                                       current_stage,
-    const Number                                             current_time,
-    const Number                                             factor_bi,
-    const Number                                            *factor_solution,
-    const LinearAlgebra::distributed::Vector<Number>        &current_ri,
-    LinearAlgebra::distributed::Vector<Number>              &vec_ki,
-    LinearAlgebra::distributed::Vector<Number>              &solution,
-    std::vector<LinearAlgebra::distributed::Vector<Number>> &next_ri) const
+    const unsigned int                                             current_stage,
+    const Number                                                   current_time,
+    const Number                                                   factor_bi,
+    const Number                                                  *factor_solution,
+    const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
+    LinearAlgebra::distributed::Vector<Number>                    &vec_ki_height,
+    LinearAlgebra::distributed::Vector<Number>                    &vec_ki_discharge,
+    LinearAlgebra::distributed::Vector<Number>                    &solution_height,
+    LinearAlgebra::distributed::Vector<Number>                    &solution_discharge,
+    std::vector<LinearAlgebra::distributed::Vector<Number>>       &next_ri_height,
+    std::vector<LinearAlgebra::distributed::Vector<Number>>       &next_ri_discharge) const
   {
     {
-      TimerOutput::Scope t(timer, "rk_stage - integrals L_h");
+      TimerOutput::Scope t(timer, "rk_stage mass - integrals L_h");
 
       for (auto &i : bc->inflow_boundaries)
         i.second->set_time(current_time);
       for (auto &i : bc->supercritical_outflow_boundaries)
         i.second->set_time(current_time);
 
-      data.loop(&OceanoOperator::local_apply_cell,
-                &OceanoOperator::local_apply_face,
-                &OceanoOperator::local_apply_boundary_face,
+      data.loop(&OceanoOperator::local_apply_cell_height,
+                &OceanoOperator::local_apply_face_height,
+                &OceanoOperator::local_apply_boundary_face_height,
                 this,
-                vec_ki,
+                vec_ki_height,
+                current_ri,
+                true,
+                MatrixFree<dim, Number>::DataAccessOnFaces::values,
+                MatrixFree<dim, Number>::DataAccessOnFaces::values);
+
+      data.loop(&OceanoOperator::local_apply_cell_discharge,
+                &OceanoOperator::local_apply_face_discharge,
+                &OceanoOperator::local_apply_boundary_face_discharge,
+                this,
+                vec_ki_discharge,
                 current_ri,
                 true,
                 MatrixFree<dim, Number>::DataAccessOnFaces::values,
@@ -994,13 +1312,13 @@ namespace SpaceDiscretization
 
 
     {
-      unsigned int n_stages = next_ri.size()-1; //lrp: may be optimized passing as argument
-      TimerOutput::Scope t(timer, "rk_stage - inv mass + vec upd");
+      unsigned int n_stages = next_ri_height.size()-1; //lrp: may be optimized passing as argument
+      TimerOutput::Scope t(timer, "rk_stage mass - inv mass + vec upd");
       data.cell_loop(
-        &OceanoOperator::local_apply_inverse_mass_matrix,
+        &OceanoOperator::local_apply_inverse_mass_matrix_height,
         this,
-        next_ri.front(),
-        vec_ki,
+        next_ri_height.front(),
+        vec_ki_height,
         std::function<void(const unsigned int, const unsigned int)>(),
         [&](const unsigned int start_range, const unsigned int end_range) {
           if (current_stage == n_stages-1)
@@ -1008,13 +1326,13 @@ namespace SpaceDiscretization
               /* DEAL_II_OPENMP_SIMD_PRAGMA */
               for (unsigned int i = start_range; i < end_range; ++i)
                 {
-                  const Number k_i           = next_ri.front().local_element(i);
-                  Number sol_i               = solution.local_element(i);
-                  solution.local_element(i)  = factor_solution[0]  * sol_i + factor_bi * k_i;
+                  const Number k_i           = next_ri_height.front().local_element(i);
+                  Number sol_i               = solution_height.local_element(i);
+                  solution_height.local_element(i)  = factor_solution[0]  * sol_i + factor_bi * k_i;
 		  for (unsigned int j = 1; j < current_stage+1; ++j)
 		    {
-                      sol_i                      = next_ri[j].local_element(i);
-                      solution.local_element(i) += factor_solution[j]  * sol_i;
+                      sol_i                      = next_ri_height[j].local_element(i);
+                      solution_height.local_element(i) += factor_solution[j]  * sol_i;
                     }
                 }
             }
@@ -1024,19 +1342,66 @@ namespace SpaceDiscretization
               for (unsigned int i = start_range; i < end_range; ++i)
                 {
                   const unsigned int ns       = current_stage+1;
-                  const Number k_i            = next_ri.front().local_element(i);
-                  Number       sol_i          = solution.local_element(i);
-                  next_ri[ns].local_element(i) = factor_solution[0]  * sol_i + factor_bi * k_i;
+                  const Number k_i            = next_ri_height.front().local_element(i);
+                  Number       sol_i          = solution_height.local_element(i);
+                  next_ri_height[ns].local_element(i) = factor_solution[0]  * sol_i + factor_bi * k_i;
 		  for (unsigned int j = 1; j < current_stage+1; ++j)
 		    {
-                      sol_i                         = next_ri[j].local_element(i);
-                      next_ri[ns].local_element(i) += factor_solution[j]  * sol_i;
+                      sol_i                         = next_ri_height[j].local_element(i);
+                      next_ri_height[ns].local_element(i) += factor_solution[j]  * sol_i;
                     }
                 }
             }
-        });
+        },
+        0);
     }
-  }
+    
+    
+    {
+      unsigned int n_stages = next_ri_discharge.size()-1; //lrp: may be optimized passing as argument
+      TimerOutput::Scope t(timer, "rk_stage mom - inv mass + vec upd");
+      data.cell_loop(
+        &OceanoOperator::local_apply_inverse_mass_matrix_discharge,
+        this,
+        next_ri_discharge.front(),
+        vec_ki_discharge,
+        std::function<void(const unsigned int, const unsigned int)>(),
+        [&](const unsigned int start_range, const unsigned int end_range) {
+          if (current_stage == n_stages-1)
+            {
+              /* DEAL_II_OPENMP_SIMD_PRAGMA */
+              for (unsigned int i = start_range; i < end_range; ++i)
+                {
+                  const Number k_i           = next_ri_discharge.front().local_element(i);
+                  Number sol_i               = solution_discharge.local_element(i);
+                  solution_discharge.local_element(i)  = factor_solution[0]  * sol_i + factor_bi * k_i;
+		  for (unsigned int j = 1; j < current_stage+1; ++j)
+		    {
+                      sol_i                      = next_ri_discharge[j].local_element(i);
+                      solution_discharge.local_element(i) += factor_solution[j]  * sol_i;
+                    }
+                }
+            }
+          else
+            {
+              /* DEAL_II_OPENMP_SIMD_PRAGMA */
+              for (unsigned int i = start_range; i < end_range; ++i)
+                {
+                  const unsigned int ns       = current_stage+1;
+                  const Number k_i            = next_ri_discharge.front().local_element(i);
+                  Number       sol_i          = solution_discharge.local_element(i);
+                  next_ri_discharge[ns].local_element(i) = factor_solution[0]  * sol_i + factor_bi * k_i;
+		  for (unsigned int j = 1; j < current_stage+1; ++j)
+		    {
+                      sol_i                         = next_ri_discharge[j].local_element(i);
+                      next_ri_discharge[ns].local_element(i) += factor_solution[j]  * sol_i;
+                    }
+                }
+            }
+        },
+        1);
+    }
+  }  
 #endif
 
   // Having discussed the implementation of the functions that deal with
@@ -1081,31 +1446,58 @@ namespace SpaceDiscretization
   // accumulating the results as typical in integration tasks -- we can do
   // this because every vector entry has contributions from only a single
   // cell for discontinuous Galerkin discretizations.
+  // The quadrature choosen to do the integral is the normal one stored in 
+  // the finite element evaluation class, thus a Gaussian quadrature 
+  // with the points lying at the interior
+  // of the cell. This allows to mantain a discontinuous datum with
+  // the jump passing through the edges of the cell.
   template <int dim, int n_vars, int degree, int n_points_1d>
   void OceanoOperator<dim, n_vars, degree, n_points_1d>::project(
     const Function<dim> &                       function,
-    LinearAlgebra::distributed::Vector<Number> &solution) const
+    LinearAlgebra::distributed::Vector<Number> &solution_height,
+    LinearAlgebra::distributed::Vector<Number> &solution_discharge) const
   {
-    FEEvaluation<dim, degree, degree + 1, n_vars, Number> phi(data, 0, 1);
-    MatrixFreeOperators::CellwiseInverseMassMatrix<dim, degree, n_vars, Number>
-      inverse(phi);
-    solution.zero_out_ghost_values();
+    FEEvaluation<dim, degree, degree + 1, 1, Number> phi_height(data, 0, 1);
+    MatrixFreeOperators::CellwiseInverseMassMatrix<dim, degree, 1, Number>
+      inverse_height(phi_height);
+    solution_height.zero_out_ghost_values();
     for (unsigned int cell = 0; cell < data.n_cell_batches(); ++cell)
       {
-        phi.reinit(cell);
-        for (unsigned int q = 0; q < phi.n_q_points; ++q)
-          phi.submit_dof_value(evaluate_function<dim, Number, n_vars>(
+        phi_height.reinit(cell);
+        for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
+          phi_height.submit_dof_value(evaluate_function<dim, Number>(
           					 function,
-                                                 phi.quadrature_point(q)),
+                                                 phi_height.quadrature_point(q),
+                                                 0),
                                q);
-        inverse.transform_from_q_points_to_basis(n_vars,
-                                                 phi.begin_dof_values(),
-                                                 phi.begin_dof_values());
-        phi.set_dof_values(solution);
+        inverse_height.transform_from_q_points_to_basis(1,
+                                                 phi_height.begin_dof_values(),
+                                                 phi_height.begin_dof_values());
+        phi_height.set_dof_values(solution_height);
+      }
+
+    FEEvaluation<dim, degree, degree + 1, dim, Number> phi_discharge(data, 1, 1);
+    MatrixFreeOperators::CellwiseInverseMassMatrix<dim, degree, dim, Number>
+      inverse_discharge(phi_discharge);
+    solution_discharge.zero_out_ghost_values();
+    for (unsigned int cell = 0; cell < data.n_cell_batches(); ++cell)
+      {
+        Tensor<1, dim, VectorizedArray<Number>> discharge; //lrp: Vectorized? or simple array
+        phi_discharge.reinit(cell);
+        for (unsigned int q = 0; q < phi_discharge.n_q_points; ++q) 
+          {
+            for (unsigned int d = 0; d < dim; ++d)
+              discharge[d] = evaluate_function<dim, Number>(function,
+                                                phi_discharge.quadrature_point(q),
+                                                d+1);
+            phi_discharge.submit_dof_value(discharge, q);
+          }
+        inverse_discharge.transform_from_q_points_to_basis(dim,
+                                                 phi_discharge.begin_dof_values(),
+                                                 phi_discharge.begin_dof_values());
+        phi_discharge.set_dof_values(solution_discharge);
       }
   }
-
-
 
   // The next function again repeats functionality also provided by the
   // deal.II library, namely VectorTools::integrate_difference(). We here show
@@ -1141,33 +1533,48 @@ namespace SpaceDiscretization
   template <int dim, int n_vars, int degree, int n_points_1d>
   std::array<double, n_vars-dim+1> OceanoOperator<dim, n_vars, degree, n_points_1d>::compute_errors(
     const Function<dim> &                             function,
-    const LinearAlgebra::distributed::Vector<Number> &solution) const
+    const LinearAlgebra::distributed::Vector<Number> &solution_height,
+    const LinearAlgebra::distributed::Vector<Number> &solution_discharge) const
   {
     TimerOutput::Scope t(timer, "compute errors");
     const unsigned int n_err = n_vars-dim+1;
     double             errors_squared[n_err] = {};
-    FEEvaluation<dim, degree, n_points_1d, n_vars, Number> phi(data, 0, 0);
+    FEEvaluation<dim, degree, n_points_1d, 1, Number> phi_height(data, 0, 0);
+    FEEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge(data, 1, 0);
 
     for (unsigned int cell = 0; cell < data.n_cell_batches(); ++cell)
       {
-        phi.reinit(cell);
-        phi.gather_evaluate(solution, EvaluationFlags::values);
-        VectorizedArray<Number> local_errors_squared[n_err] = {};
-        for (unsigned int q = 0; q < phi.n_q_points; ++q)
-          {
-            const auto error =
-              evaluate_function<dim, Number, n_vars>(
-              			function, 
-              			phi.quadrature_point(q)) -
-              phi.get_value(q);
-            const auto JxW = phi.JxW(q);
+        phi_height.reinit(cell);
+        phi_height.gather_evaluate(solution_height, EvaluationFlags::values);
+        phi_discharge.reinit(cell);
+        phi_discharge.gather_evaluate(solution_discharge, EvaluationFlags::values);
 
+        VectorizedArray<Number> local_errors_squared[n_err] = {};
+        Tensor<1, dim+1, VectorizedArray<Number>> error; 
+        for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
+          {
+            error[0] = evaluate_function<dim, Number>(
+                              function, 
+              		      phi_height.quadrature_point(q),
+              		      0) - 
+              	       phi_height.get_value(q);
+            const auto JxW = phi_height.JxW(q);
             local_errors_squared[0] += error[0] * error[0] * JxW;
+          }
+        for (unsigned int q = 0; q < phi_discharge.n_q_points; ++q)
+          {          
+            for (unsigned int d = 0; d < dim; ++d)
+              error[d+1] = evaluate_function<dim, Number>(
+              			function, 
+              			phi_discharge.quadrature_point(q),
+              			d+1) -
+              		  phi_discharge.get_value(q)[d];
+            const auto JxW = phi_discharge.JxW(q);
             for (unsigned int d = 0; d < dim; ++d)
               local_errors_squared[1] += (error[d + 1] * error[d + 1]) * JxW;
-            for (unsigned int t = 0; t < n_vars-dim-1; ++t)
-              local_errors_squared[t+dim] += (error[t + dim + 1] * error[t + dim + 1]) * JxW;
-          }
+//            for (unsigned int t = 0; t < n_vars-dim-1; ++t)
+//              local_errors_squared[t+dim] += (error[t + dim + 1] * error[t + dim + 1]) * JxW;
+          }  
         for (unsigned int v = 0; v < data.n_active_entries_per_cell_batch(cell);
              ++v)
           for (unsigned int d = 0; d < n_err; ++d)
@@ -1182,8 +1589,6 @@ namespace SpaceDiscretization
 
     return errors;
   }
-
-
 
   // This final function of the OceanoOperator class is used to estimate the
   // transport speed, scaled by the mesh size, that is relevant for setting
@@ -1227,26 +1632,31 @@ namespace SpaceDiscretization
   // confident that the result is good.
   template <int dim, int n_vars, int degree, int n_points_1d>
   double OceanoOperator<dim, n_vars, degree, n_points_1d>::compute_cell_transport_speed(
-    const LinearAlgebra::distributed::Vector<Number> &solution) const
+    const LinearAlgebra::distributed::Vector<Number> &solution_height,
+    const LinearAlgebra::distributed::Vector<Number> &solution_discharge) const
   {
     TimerOutput::Scope t(timer, "compute transport speed");
     Number             max_transport = 0;
-    FEEvaluation<dim, degree, degree + 1, n_vars, Number> phi(data, 0, 1);
+    FEEvaluation<dim, degree, degree + 1, 1, Number> phi_height(data, 0, 1);
+    FEEvaluation<dim, degree, degree + 1, dim, Number> phi_discharge(data, 1, 1);
 
     for (unsigned int cell = 0; cell < data.n_cell_batches(); ++cell)
       {
-        phi.reinit(cell);
-        phi.gather_evaluate(solution, EvaluationFlags::values);
+        phi_height.reinit(cell);
+        phi_height.gather_evaluate(solution_height, EvaluationFlags::values);
+        phi_discharge.reinit(cell);
+        phi_discharge.gather_evaluate(solution_discharge, EvaluationFlags::values);
         VectorizedArray<Number> local_max = 0.;
-        for (unsigned int q = 0; q < phi.n_q_points; ++q)
+        for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
           {
             const VectorizedArray<Number> data_q =
               evaluate_function<dim, Number>(
-                *bc->problem_data, phi.quadrature_point(q), 0);
-            const auto solution = phi.get_value(q);
-            const auto velocity = model.velocity<dim, n_vars>(solution, data_q);
+                *bc->problem_data, phi_height.quadrature_point(q), 0);
+            const auto zq = phi_height.get_value(q);
+            const auto qq = phi_discharge.get_value(q);
+            const auto velocity = model.velocity<dim, n_vars>(zq, qq, data_q);
 
-            const auto inverse_jacobian = phi.inverse_jacobian(q);
+            const auto inverse_jacobian = phi_height.inverse_jacobian(q);
             const auto convective_speed = inverse_jacobian * velocity;
             VectorizedArray<Number> convective_limit = 0.;
             for (unsigned int d = 0; d < dim; ++d)
@@ -1254,7 +1664,7 @@ namespace SpaceDiscretization
                 std::max(convective_limit, std::abs(convective_speed[d]));
 
             const auto speed_of_sound =
-              std::sqrt(model.square_wavespeed<dim, n_vars>(solution, data_q));
+              std::sqrt(model.square_wavespeed<dim, n_vars>(zq, data_q));
 
             Tensor<1, dim, VectorizedArray<Number>> eigenvector;
             for (unsigned int d = 0; d < dim; ++d)

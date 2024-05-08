@@ -55,15 +55,28 @@ namespace NumericalFlux
   public:
     HartenVanLeer(IO::ParameterHandler &param);
     ~HartenVanLeer(){};
-    
+
     template <int dim, int n_vars, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
-      Tensor<1, n_vars, Number>
-      numerical_flux_weak(const Tensor<1, n_vars, Number> &u_m,
-                          const Tensor<1, n_vars, Number> &u_p,
-                          const Tensor<1, dim, Number>    &normal,
-                          const Number                     data_m,
-                          const Number                     data_p) const;
+      Number
+      numerical_massflux_weak(const Number                  z_m,
+                              const Number                  z_p,
+                              const Tensor<1, dim, Number> &q_m,
+                              const Tensor<1, dim, Number> &q_p,
+                              const Tensor<1, dim, Number> &normal,
+                              const Number                  data_m,
+                              const Number                  data_p) const;
+
+    template <int dim, int n_vars, typename Number>
+    inline DEAL_II_ALWAYS_INLINE //
+      Tensor<1, dim, Number>
+      numerical_advflux_weak(const Number                  z_m,
+                             const Number                  z_p,
+                             const Tensor<1, dim, Number> &q_m,
+                             const Tensor<1, dim, Number> &q_p,
+                             const Tensor<1, dim, Number> &normal,
+                             const Number                  data_m,
+                             const Number                  data_p) const;
   };
 
  
@@ -99,22 +112,24 @@ namespace NumericalFlux
   // a compact notation similar to the mathematical definition.
   template <int dim, int n_vars, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
-    Tensor<1, n_vars, Number>
-    HartenVanLeer::numerical_flux_weak(
-      const Tensor<1, n_vars, Number>  &u_m,
-      const Tensor<1, n_vars, Number>  &u_p,
+    Number
+    HartenVanLeer::numerical_massflux_weak(
+      const Number                      z_m,
+      const Number                      z_p,
+      const Tensor<1, dim, Number>     &q_m,
+      const Tensor<1, dim, Number>     &q_p,
       const Tensor<1, dim, Number>     &normal,
       const Number                      data_m,
       const Number                      data_p) const
   {
-    const auto velocity_m = model.velocity<dim, n_vars>(u_m, data_m);
-    const auto velocity_p = model.velocity<dim, n_vars>(u_p, data_p);
+    const auto velocity_m = model.velocity<dim, n_vars>(z_m, q_m, data_m);
+    const auto velocity_p = model.velocity<dim, n_vars>(z_p, q_p, data_p);
 
-    const auto csquare_m = model.square_wavespeed<dim, n_vars>(u_m, data_m);
-    const auto csquare_p = model.square_wavespeed<dim, n_vars>(u_p, data_m);
+    const auto csquare_m = model.square_wavespeed<dim, n_vars>(z_m, data_m);
+    const auto csquare_p = model.square_wavespeed<dim, n_vars>(z_p, data_m);
 
-    const auto flux_m = model.flux<dim, n_vars>(u_m, data_m);
-    const auto flux_p = model.flux<dim, n_vars>(u_p, data_p);
+    const auto flux_m = model.massflux<dim, n_vars>(q_m);
+    const auto flux_p = model.massflux<dim, n_vars>(q_p);
 
     const auto avg_velocity_normal =
       0.5 * ((velocity_m + velocity_p) * normal);
@@ -128,7 +143,43 @@ namespace NumericalFlux
 
     return inverse_s *
            ((s_pos * (flux_m * normal) - s_neg * (flux_p * normal)) -
-           s_pos * s_neg * (u_m - u_p));
+           s_pos * s_neg * (z_m - z_p));
+  }
+
+  template <int dim, int n_vars, typename Number>
+  inline DEAL_II_ALWAYS_INLINE //
+    Tensor<1, dim, Number>
+    HartenVanLeer::numerical_advflux_weak(
+      const Number                      z_m,
+      const Number                      z_p,
+      const Tensor<1, dim, Number>     &q_m,
+      const Tensor<1, dim, Number>     &q_p,
+      const Tensor<1, dim, Number>     &normal,
+      const Number                      data_m,
+      const Number                      data_p) const
+  {
+    const auto velocity_m = model.velocity<dim, n_vars>(z_m, q_m, data_m);
+    const auto velocity_p = model.velocity<dim, n_vars>(z_p, q_p, data_p);
+
+    const auto csquare_m = model.square_wavespeed<dim, n_vars>(z_m, data_m);
+    const auto csquare_p = model.square_wavespeed<dim, n_vars>(z_p, data_m);
+
+    const auto flux_m = model.advectiveflux<dim, n_vars>(z_m, q_m, data_m);
+    const auto flux_p = model.advectiveflux<dim, n_vars>(z_p, q_p, data_p);
+
+    const auto avg_velocity_normal =
+      0.5 * ((velocity_m + velocity_p) * normal);
+    const auto   avg_c = std::sqrt(std::abs(
+      0.5 * (csquare_p + csquare_m)));
+    const Number s_pos =
+      std::max(Number(), avg_velocity_normal + avg_c);
+    const Number s_neg =
+      std::min(Number(), avg_velocity_normal - avg_c);
+    const Number inverse_s = Number(1.) / (s_pos - s_neg);
+
+    return inverse_s *
+           ((s_pos * (flux_m * normal) - s_neg * (flux_p * normal)) -
+           s_pos * s_neg * (q_m - q_p));
   }
 } // namespace NumericalFlux
 

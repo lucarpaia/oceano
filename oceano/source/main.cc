@@ -15,7 +15,8 @@
 
  *
  * Author: Martin Kronbichler, 2020
- *         Luca Arpaia,        2023
+ *         Luca Arpaia,        2024
+ *         Giuseppe Orlando,   2024
  */
 
 // Run-time polymorphism can be an elegant solution do deal within a single code 
@@ -52,8 +53,8 @@
 #undef ICBC_FLOWAROUNDCYLINDER
 #undef ICBC_IMPULSIVEWAVE
 #undef ICBC_SHALLOWWATERVORTEX
-#define ICBC_STOMMELGYRE
-#undef ICBC_LAKEATREST
+#undef ICBC_STOMMELGYRE
+#define ICBC_LAKEATREST
 // We have two models: a non-hydrostatic Euler model for perfect gas which was the
 // original model coded in the deal.II example and the shallow water model. The Euler model
 // is only used for debugging, to check consistency with the original deal.II example.
@@ -192,7 +193,7 @@ namespace Problem
   // The class is templated with the dimension and the number of variables.
   // Both are important because all templated members and methods
   // (Tensor and Functions for example) that are defined in nested classes
-  // needs to inherit `dim` and `n_vars`. 
+  // needs to inherit `dim` and `n_vars`.
   template <int dim, int n_vars>
   class OceanoProblem
   {
@@ -205,7 +206,8 @@ namespace Problem
   private:
     void make_grid_and_dofs();
 
-    LinearAlgebra::distributed::Vector<Number> solution;
+    LinearAlgebra::distributed::Vector<Number> solution_height;
+    LinearAlgebra::distributed::Vector<Number> solution_discharge;
 
     ParameterHandler &prm;
 
@@ -217,9 +219,12 @@ namespace Problem
     Triangulation<dim> triangulation;
 #endif
 
-    FESystem<dim>   fe;
+    FESystem<dim>   fe_height;
+    FESystem<dim>   fe_discharge;
+
     MappingQ<dim>   mapping;
-    DoFHandler<dim> dof_handler;
+    DoFHandler<dim> dof_handler_height;
+    DoFHandler<dim> dof_handler_discharge;
 
     TimerOutput timer;
 
@@ -336,20 +341,20 @@ namespace Problem
           SpaceDiscretization::evaluate_function<dim, Number>(
             ICBC::ProblemData<dim>(prm), x_evaluation_points, 0);
 
-        const Tensor<1, dim> velocity = model.velocity<dim, n_vars>(solution, data[0]);
-        const double         pressure = model.pressure<dim, n_vars>(solution, data[0]);
+        //const Tensor<1, dim> velocity = model.velocity<dim, n_vars>(solution, data[0]);
+        //const double         pressure = model.pressure<dim, n_vars>(solution, data[0]);
 
         for (unsigned int d = 0; d < dim; ++d)
-          computed_quantities[p](d) = velocity[d];
+          computed_quantities[p](d) = 0.;//velocity[d]; lrp: we have to rebranch postprocessing
         for (unsigned int v = 0; v < postproc_names.size()-dim; ++v)
           {
             if (postproc_names[dim+v] == "pressure")
-              computed_quantities[p](v+dim) = pressure;
+              computed_quantities[p](v+dim) = 0.;//pressure; lrp: we have to rebranch postprocessing
             else if (postproc_names[dim+v] == "depth")
               computed_quantities[p](v+dim) = solution[0] + data[0];
             else if (postproc_names[dim+v] == "speed_of_sound")
-              computed_quantities[p](v+dim) =
-                std::sqrt(model.square_wavespeed<dim, n_vars>(solution, data[0]));
+              computed_quantities[p](v+dim) = 0.;
+//                std::sqrt(model.square_wavespeed<dim, n_vars>(solution, data[0])); lrp:rebranch 
             else
               {
                 std::cout << "Postprocessing variable " << postproc_names[dim+v]
@@ -430,9 +435,11 @@ namespace Problem
 #ifdef DEAL_II_WITH_P4EST
     , triangulation(MPI_COMM_WORLD)
 #endif
-    , fe(FE_DGQ<dim>(fe_degree), n_vars)
+    , fe_height(FE_DGQ<dim>(fe_degree), 1)
+    , fe_discharge(FE_DGQ<dim>(fe_degree), dim)
     , mapping(1)
-    , dof_handler(triangulation)
+    , dof_handler_height(triangulation)
+    , dof_handler_discharge(triangulation)
     , timer(pcout, TimerOutput::never, TimerOutput::wall_times)
     , oceano_operator(param, bc, timer)
     , time(0)
@@ -500,10 +507,12 @@ namespace Problem
 
     triangulation.refine_global(n_global_refinements);
 
-    dof_handler.distribute_dofs(fe);
+    dof_handler_height.distribute_dofs(fe_height);
+    dof_handler_discharge.distribute_dofs(fe_discharge);
 
-    oceano_operator.reinit(mapping, dof_handler);
-    oceano_operator.initialize_vector(solution);
+    oceano_operator.reinit(mapping, dof_handler_height, dof_handler_discharge);
+    oceano_operator.initialize_vector(solution_height, 0);
+    oceano_operator.initialize_vector(solution_discharge, 1);
 
     // In the following, we output some statistics about the problem. Because we
     // often end up with quite large numbers of cells or degrees of freedom, we
@@ -513,7 +522,7 @@ namespace Problem
     // detail.
     std::locale s = pcout.get_stream().getloc();
     pcout.get_stream().imbue(std::locale(""));
-    pcout << "Number of degrees of freedom: " << dof_handler.n_dofs()
+    pcout << "Number of degrees of freedom: " << dof_handler_height.n_dofs()
           << " ( = " << (n_vars) << " [vars] x "
           << triangulation.n_global_active_cells() << " [cells] x "
           << Utilities::pow(fe_degree + 1, dim) << " [dofs/cell/var] )"
@@ -579,7 +588,8 @@ namespace Problem
     const unsigned int n_tra = n_vars-dim-1;
     const std::array<double, n_vars-dim+1> errors =
       oceano_operator.compute_errors(
-        ICBC::ExactSolution<dimension, n_variables>(time), solution);
+        ICBC::ExactSolution<dimension, n_variables>(time),
+        solution_height, solution_discharge);
 
     const std::string quantity_name =
       postprocessor.do_error == 1 ? "error" : "norm";
@@ -606,33 +616,50 @@ namespace Problem
       flags.write_higher_order_cells = true;
       data_out.set_flags(flags);
 
-      data_out.attach_dof_handler(dof_handler);
+      data_out.attach_dof_handler(dof_handler_height); //lrp: dof_handler_discharge?
       {
         std::vector<DataComponentInterpretation::DataComponentInterpretation>
           interpretation;
-        interpretation.push_back(
-          DataComponentInterpretation::component_is_scalar);
         for (unsigned int d = 0; d < dim; ++d)
           interpretation.push_back(
             DataComponentInterpretation::component_is_part_of_vector);
-        for (unsigned int t = 0; t < n_tra; ++t)
-          interpretation.push_back(
-            DataComponentInterpretation::component_is_scalar);
-
-        data_out.add_data_vector(dof_handler, solution, vars_names, interpretation);
+        data_out.add_data_vector(dof_handler_height,
+                                 solution_height,
+                                 vars_names[0],
+                                 {DataComponentInterpretation::component_is_scalar});
+        data_out.add_data_vector(dof_handler_discharge,
+                                 solution_discharge,
+                                 {vars_names[1],vars_names[2]},
+                                 interpretation);
       }
-      data_out.add_data_vector(solution, postprocessor);
 
-      LinearAlgebra::distributed::Vector<Number> reference;
+/*      {
+      //data_out.add_data_vector(solution, postprocessor); //lrp: rebranch postproc
+        LinearAlgebra::distributed::Vector<Number> postprocess_variables;
+        postprocess_variables.reinit(solution_discharge);
+        std::vector<DataComponentInterpretation::DataComponentInterpretation>
+          interpretation = postprocessor.get_data_component_interpretation();
+        std::vector<std::string> names = postprocessor.get_names();
+        postprocessor.compute(postprocess_variables, solution_height, solution_discharge);
+        data_out.add_data_vector(dof_handler_discharge,
+                                 postprocess_variables,
+                                 {names[0],names[1]},
+                                 {interpretation[0],interpretation[1]});
+      }*/
+
+      LinearAlgebra::distributed::Vector<Number> reference_height;
+      LinearAlgebra::distributed::Vector<Number> reference_discharge;
 
       if (postprocessor.do_error && dim == 2)
         {
-          reference.reinit(solution);
-          oceano_operator.project(
-            ICBC::ExactSolution<dimension, n_variables>(time), reference);
-          reference.sadd(-1., 1, solution);
+          reference_height.reinit(solution_height);
+          reference_discharge.reinit(solution_discharge);
+          oceano_operator.project(ICBC::ExactSolution<dimension, n_variables>(time),
+                                  reference_height, reference_discharge);
+          reference_height.sadd(-1., 1, solution_height);
+          reference_discharge.sadd(-1., 1, solution_discharge);
+
           std::vector<std::string> names;
-          names.emplace_back("error_"+ vars_names[0]);
           for (unsigned int d = 0; d < dim; ++d)
             names.emplace_back("error_"+ vars_names[d+1]);
           for (unsigned int t = 0; t < n_tra; ++t)
@@ -640,17 +667,19 @@ namespace Problem
 
           std::vector<DataComponentInterpretation::DataComponentInterpretation>
             interpretation;
-          interpretation.push_back(
-            DataComponentInterpretation::component_is_scalar);
           for (unsigned int d = 0; d < dim; ++d)
             interpretation.push_back(
               DataComponentInterpretation::component_is_part_of_vector);
-          for (unsigned int t = 0; t < n_tra; ++t)
-            interpretation.push_back(
-              DataComponentInterpretation::component_is_scalar);
+//          for (unsigned int t = 0; t < n_tra; ++t)
+//            interpretation.push_back(
+//              DataComponentInterpretation::component_is_scalar);
 
-          data_out.add_data_vector(dof_handler,
-                                   reference,
+          data_out.add_data_vector(dof_handler_height,
+                                   reference_height,
+                                   "error_"+ vars_names[0],
+                                   {DataComponentInterpretation::component_is_scalar});
+          data_out.add_data_vector(dof_handler_discharge,
+                                   reference_discharge,
                                    names,
                                    interpretation);
         }
@@ -660,7 +689,7 @@ namespace Problem
       data_out.add_data_vector(mpi_owner, "owner");
 
       data_out.build_patches(mapping,
-                             fe.degree,
+                             fe_height.degree,
                              DataOut<dim>::curved_inner_cells);
 
       const std::string filename =
@@ -704,7 +733,8 @@ namespace Problem
 
     make_grid_and_dofs();
 
-    oceano_operator.project(ICBC::Ic<dimension, n_variables>(), solution);
+    oceano_operator.project(ICBC::Ic<dimension, n_variables>(),
+                            solution_height, solution_discharge);
 
     // Next off is the Courant number
     // that scales the time step size in terms of the formula $\Delta t =
@@ -726,16 +756,29 @@ namespace Problem
 
 #if defined TIMEINTEGRATOR_LOWSTORAGERUNGEKUTTA
     const TimeIntegrator::LowStorageRungeKuttaIntegrator integrator(rk_scheme);
-    LinearAlgebra::distributed::Vector<Number> rk_register_1;
-    LinearAlgebra::distributed::Vector<Number> rk_register_2;
-    rk_register_1.reinit(solution);
-    rk_register_2.reinit(solution);
+
+    LinearAlgebra::distributed::Vector<Number> rk_register_height_1;
+    LinearAlgebra::distributed::Vector<Number> rk_register_height_2;
+    LinearAlgebra::distributed::Vector<Number> rk_register_discharge_1;
+    LinearAlgebra::distributed::Vector<Number> rk_register_discharge_2;
+
+    rk_register_height_1.reinit(solution_height);
+    rk_register_height_2.reinit(solution_height);
+    rk_register_discharge_1.reinit(solution_discharge);
+    rk_register_discharge_2.reinit(solution_discharge);
+
 #elif defined TIMEINTEGRATOR_STRONGSTABILITYRUNGEKUTTA
     const TimeIntegrator::StrongStabilityRungeKuttaIntegrator integrator(rk_scheme);
+
     std::vector<LinearAlgebra::distributed::Vector<Number>>
-      rk_register_1(integrator.n_stages()+1, solution);
-    LinearAlgebra::distributed::Vector<Number> rk_register_2;
-    rk_register_2.reinit(solution);
+      rk_register_height_1(integrator.n_stages()+1, solution_height);
+    std::vector<LinearAlgebra::distributed::Vector<Number>>
+      rk_register_discharge_1(integrator.n_stages()+1, solution_discharge);
+
+    LinearAlgebra::distributed::Vector<Number> rk_register_height_2;
+    LinearAlgebra::distributed::Vector<Number> rk_register_discharge_2;
+    rk_register_height_2.reinit(solution_height);
+    rk_register_discharge_2.reinit(solution_discharge);
 #endif
 
     double min_vertex_distance = std::numeric_limits<double>::max();
@@ -747,11 +790,13 @@ namespace Problem
       Utilities::MPI::min(min_vertex_distance, MPI_COMM_WORLD);
 
     time_step = courant_number  /
-                oceano_operator.compute_cell_transport_speed(solution);
+      oceano_operator.compute_cell_transport_speed(solution_height,
+                                                   solution_discharge);
     pcout << "Time step size: " << time_step
           << ", minimal h: " << min_vertex_distance
           << ", initial transport scaling: "
-          << 1. / oceano_operator.compute_cell_transport_speed(solution)
+          << 1. / oceano_operator.compute_cell_transport_speed(solution_height,
+                                                               solution_discharge)
           << std::endl
           << std::endl;
 
@@ -788,16 +833,20 @@ namespace Problem
           time_step =
             courant_number /
             Utilities::truncate_to_n_digits(
-              oceano_operator.compute_cell_transport_speed(solution), 3);
+              oceano_operator.compute_cell_transport_speed(solution_height,
+                                                           solution_discharge), 3);
 
         {
           TimerOutput::Scope t(timer, "rk time stepping total");
           integrator.perform_time_step(oceano_operator,
                                        time,
                                        time_step,
-                                       solution,
-                                       rk_register_1,
-                                       rk_register_2);
+                                       solution_height,
+                                       solution_discharge,
+                                       rk_register_height_1,
+                                       rk_register_discharge_1,
+                                       rk_register_height_2,
+                                       rk_register_discharge_2);
         }
 
         time += time_step;

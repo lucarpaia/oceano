@@ -57,7 +57,7 @@ namespace ICBC
   constexpr double h0      = 10.0;
   constexpr double uoo     = 6.0;
   // the depth at the center:  
-  constexpr double hmin    = 0.9;
+  constexpr double hmin    = 9.0;
   // the radius:
   constexpr double radius0 = 0.25;
 

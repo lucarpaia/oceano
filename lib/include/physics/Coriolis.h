@@ -46,8 +46,8 @@ namespace Physics
     template <int dim, int n_vars, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Number>
-      source(const Tensor<1, n_vars, Number> &conserved_variables,
-             const Number                     coriolis_parameter) const;
+      source(const Tensor<1, dim, Number> &discharge,
+             const Number                  coriolis_parameter) const;
   };
   
   // Not surprisingly the constructor of the base class takes as arguments 
@@ -76,8 +76,8 @@ namespace Physics
     template <int dim, int n_vars, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Number>
-      source(const Tensor<1, n_vars, Number> &conserved_variables,
-             const Number                     coriolis_parameter) const;
+      source(const Tensor<1, dim, Number> &discharge,
+             const Number                  coriolis_parameter) const;
   };
 
   CoriolisBeta::CoriolisBeta()
@@ -87,12 +87,12 @@ namespace Physics
   template <int dim, int n_vars, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
-    CoriolisBeta::source(const Tensor<1, n_vars, Number> &conserved_variables,
-                         const Number                     coriolis_parameter) const
+    CoriolisBeta::source(const Tensor<1, dim, Number> &discharge,
+                         const Number                  coriolis_parameter) const
   {
     Tensor<1, dim, Number> source;
-    source[0] = coriolis_parameter * conserved_variables[2];
-    source[1] = -coriolis_parameter * conserved_variables[1];
+    source[0] = coriolis_parameter * discharge[1];
+    source[1] = -coriolis_parameter * discharge[0];
 
     return source;
   }

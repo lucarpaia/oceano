@@ -46,10 +46,14 @@ namespace NumericalFlux
   // `Tensor<1, n_vars, VectorizedArray<Number>>`. I don't know why, without
   // a template class, everything works. I leave this for future work.
   //
-  // In this and the following functions, we use variable suffixes `_m` and
+  // In this and the following functions, we use `z` for the mass variable,
+  // (for us the water height or the free-surface position) and `q`
+  // stands for the momentum (for us the discharge).
+  // We use variable suffixes `_m` and
   // `_p` to indicate quantities derived from $\mathbf{w}^-$ and $\mathbf{w}^+$,
   // i.e., values "here" and "there" relative to the current cell when looking
-  // at a neighbor cell.
+  // at a neighbor cell. We also make use of the standard overloads
+  // provided by deal.II's tensor classes for implementing the dot product.
   class LaxFriedrichsModified : public NumericalFluxBase
   {
   public:
@@ -58,12 +62,25 @@ namespace NumericalFlux
 
     template <int dim, int n_vars, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
-      Tensor<1, n_vars, Number>
-      numerical_flux_weak(const Tensor<1, n_vars, Number> &u_m,
-                          const Tensor<1, n_vars, Number> &u_p,
-                          const Tensor<1, dim, Number>    &normal,
-                          const Number                     data_m,
-                          const Number                     data_p) const;
+      Number
+      numerical_massflux_weak(const Number                  z_m,
+                              const Number                  z_p,
+                              const Tensor<1, dim, Number> &q_m,
+                              const Tensor<1, dim, Number> &q_p,
+                              const Tensor<1, dim, Number> &normal,
+                              const Number                  data_m,
+                              const Number                  data_p) const;
+
+    template <int dim, int n_vars, typename Number>
+    inline DEAL_II_ALWAYS_INLINE //
+      Tensor<1, dim, Number>
+      numerical_advflux_weak(const Number                  z_m,
+                             const Number                  z_p,
+                             const Tensor<1, dim, Number> &q_m,
+                             const Tensor<1, dim, Number> &q_p,
+                             const Tensor<1, dim, Number> &normal,
+                             const Number                  data_m,
+                             const Number                  data_p) const;
   };
 
 
@@ -111,25 +128,49 @@ namespace NumericalFlux
   // a compact notation similar to the mathematical definition.
   template <int dim, int n_vars, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
-    Tensor<1, n_vars, Number>
-    LaxFriedrichsModified::numerical_flux_weak(
-      const Tensor<1, n_vars, Number>  &u_m,
-      const Tensor<1, n_vars, Number>  &u_p,
+    Number
+    LaxFriedrichsModified::numerical_massflux_weak(
+      const Number                      z_m,
+      const Number                      z_p,
+      const Tensor<1, dim, Number>     &q_m,
+      const Tensor<1, dim, Number>     &q_p,
       const Tensor<1, dim, Number>     &normal,
       const Number                      data_m,
       const Number                      data_p) const
   {
-    const auto lambda_m = model.square_speed_estimate<dim, n_vars>(u_m, data_m);
-    const auto lambda_p = model.square_speed_estimate<dim, n_vars>(u_p, data_p);
+    const auto lambda_m = model.square_speed_estimate<dim, n_vars>(z_m, q_m, data_m);
+    const auto lambda_p = model.square_speed_estimate<dim, n_vars>(z_p, q_p, data_p);
 
-    const auto flux_m = model.flux<dim, n_vars>(u_m, data_m);
-    const auto flux_p = model.flux<dim, n_vars>(u_p, data_p);
+    const auto lambda =
+      0.5 * std::sqrt(std::max(lambda_p, lambda_m));
+
+    return 0.5 * (q_m * normal + q_p * normal) +
+           0.5 * lambda * (z_m - z_p);
+  }
+
+  template <int dim, int n_vars, typename Number>
+  inline DEAL_II_ALWAYS_INLINE //
+    Tensor<1, dim, Number>
+    LaxFriedrichsModified::numerical_advflux_weak(
+      const Number                   z_m,
+      const Number                   z_p,
+      const Tensor<1, dim, Number>  &q_m,
+      const Tensor<1, dim, Number>  &q_p,
+      const Tensor<1, dim, Number>  &normal,
+      const Number                   data_m,
+      const Number                   data_p) const
+  {
+    const auto lambda_m = model.square_speed_estimate<dim, n_vars>(z_m, q_m, data_m);
+    const auto lambda_p = model.square_speed_estimate<dim, n_vars>(z_p, q_p, data_p);
+
+    const auto flux_m = model.advectiveflux<dim, n_vars>(z_m, q_m, data_m);
+    const auto flux_p = model.advectiveflux<dim, n_vars>(z_p, q_p, data_p);
 
     const auto lambda =
       0.5 * std::sqrt(std::max(lambda_p, lambda_m));
 
     return 0.5 * (flux_m * normal + flux_p * normal) +
-           0.5 * lambda * (u_m - u_p);
+           0.5 * lambda * (q_m - q_p);
   }
 } // namespace NumericalFlux
 

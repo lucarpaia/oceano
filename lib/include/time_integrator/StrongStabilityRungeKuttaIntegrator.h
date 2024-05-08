@@ -75,9 +75,12 @@ namespace TimeIntegrator
     void perform_time_step(const Operator          &pde_operator,
                            const double             current_time,
                            const double             time_step,
-                           VectorType              &solution,
-                           std::vector<VectorType> &vec_ri,
-                           VectorType              &vec_ki) const;
+                           VectorType              &solution_height,
+                           VectorType              &solution_discharge,
+                           std::vector<VectorType> &vec_ri_height,
+                           std::vector<VectorType> &vec_ri_discharge,
+                           VectorType              &vec_ki_height,
+                           VectorType              &vec_ki_discharge) const;
 
   private:
     std::vector<std::vector<double>> ai;
@@ -150,9 +153,12 @@ namespace TimeIntegrator
     const Operator          &pde_operator,
     const double             current_time,
     const double             time_step,
-    VectorType              &solution,
-    std::vector<VectorType> &vec_ri,
-    VectorType              &vec_ki) const
+    VectorType              &solution_height,
+    VectorType              &solution_discharge,
+    std::vector<VectorType> &vec_ri_height,
+    std::vector<VectorType> &vec_ri_discharge,
+    VectorType              &vec_ki_height,
+    VectorType              &vec_ki_discharge) const
   {
     AssertDimension(ci.size(), bi.size());
 
@@ -160,22 +166,30 @@ namespace TimeIntegrator
                                current_time,
                                bi[0] * time_step,
                                &ai[0][0],
-                               solution,
-                               vec_ki,
-                               solution,
-                               vec_ri);
+                               {solution_height, solution_discharge},
+                               vec_ki_height,
+                               vec_ki_discharge,
+                               solution_height,
+                               solution_discharge,
+                               vec_ri_height,
+                               vec_ri_discharge);
 
     for (unsigned int stage = 1; stage < ci.size(); ++stage)
       {
         const double c_i = ci[stage];
+
         pde_operator.perform_stage(stage,
                                    current_time + c_i * time_step,
                                    bi[stage] * time_step,
                                    &ai[stage][0],
-                                   vec_ri[stage],
-                                   vec_ki,
-                                   solution,
-                                   vec_ri);
+                                   {vec_ri_height[stage], vec_ri_discharge[stage]},
+                                   vec_ki_height,
+                                   vec_ki_discharge,
+                                   solution_height,
+                                   solution_discharge,
+                                   vec_ri_height,
+                                   vec_ri_discharge);
+
       }
   }
 
