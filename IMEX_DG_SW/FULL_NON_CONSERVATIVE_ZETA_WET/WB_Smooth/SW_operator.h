@@ -52,7 +52,7 @@ namespace SW {
                                                                            for the discharge. ---*/
 
     void vmult_rhs_hc(Vec& dst, const std::vector<Vec>& src) const;  /*--- Auxiliary function to assemble the rhs
-                                                                             for the tracer. ---*/
+                                                                           for the tracer. ---*/
 
     virtual void compute_diagonal() override; /*--- Compute the diagonal for several preconditioners ---*/
 
@@ -718,6 +718,7 @@ namespace SW {
           /*--- Compute the quantites at the previous stages ---*/
           Tensor<2, dim, VectorizedArray<Number>> flux;
           Tensor<1, dim, VectorizedArray<Number>> non_cons_flux;
+          Tensor<1, dim, VectorizedArray<Number>> friction;
           for(unsigned int s = 1; s <= IMEX_stage - 1; ++s) {
             const auto& h_s         = phi_zeta[s - 1].get_value(q) + zb_q;
             const auto& u_s         = phi_u[s - 1].get_value(q);
@@ -726,9 +727,12 @@ namespace SW {
 
             flux += a[IMEX_stage - 1][s - 1]*dt*outer_product(h_s*u_s, u_s);
             non_cons_flux += a[IMEX_stage - 1][s - 1]*dt*EquationData::g*h_s*grad_zeta_s;
+
+            const auto& gamma_s = 0.0; // TODO: Add proper expression of the friction
+            friction += a_tilde[IMEX_stage - 1][s - 1]*dt*gamma_s*u_s;
           }
 
-          phi.submit_value(h_old*u_old - non_cons_flux, q);
+          phi.submit_value(h_old*u_old - non_cons_flux - friction, q);
           phi.submit_gradient(flux, q);
         }
 
@@ -773,6 +777,7 @@ namespace SW {
           /*--- Compute the quantites at the previous stages ---*/
           Tensor<2, dim, VectorizedArray<Number>> flux;
           Tensor<1, dim, VectorizedArray<Number>> non_cons_flux;
+          Tensor<1, dim, VectorizedArray<Number>> friction;
           for(unsigned int s = 1; s <= IMEX_stage - 1; ++s) {
             const auto& h_s         = phi_zeta[s - 1].get_value(q) + zb_q;
             const auto& u_s         = phi_u[s - 1].get_value(q);
@@ -781,9 +786,12 @@ namespace SW {
 
             flux += b[s - 1]*dt*outer_product(h_s*u_s, u_s);
             non_cons_flux += b[s - 1]*dt*EquationData::g*h_s*grad_zeta_s;
+
+            const auto& gamma_s = 0.0; //TODO: Add proper expression of the friction
+            friction += b_tilde[s-1]*dt*gamma_s*u_s;
           }
 
-          phi.submit_value(h_old*u_old - non_cons_flux, q);
+          phi.submit_value(h_old*u_old - non_cons_flux - friction, q);
           phi.submit_gradient(flux, q);
         }
 
@@ -1019,15 +1027,15 @@ namespace SW {
       /*--- Since here we have just one 'src' vector, but we also need to deal with the current height and velocity,
             we employ the auxiliary vectors where we set this information ---*/
       FEEvaluation<dim, fe_degree_zeta, n_q_points_1d_u, 1, Number> phi_zeta_curr(data, 0);
-      //FEEvaluation<dim, fe_degree_u, n_q_points_1d_u, dim, Number> phi_u_curr(data, 1);
+      FEEvaluation<dim, fe_degree_u, n_q_points_1d_u, dim, Number>  phi_u_curr(data, 1);
 
       /*--- Loop over all cells ---*/
       for(unsigned int cell = cell_range.first; cell < cell_range.second; ++cell) {
         phi_zeta_curr.reinit(cell);
         phi_zeta_curr.gather_evaluate(zeta_curr, EvaluationFlags::values);
 
-        /*phi_u_curr.reinit(cell);
-        phi_u_curr.gather_evaluate(u_curr, EvaluationFlags::values);*/
+        phi_u_curr.reinit(cell);
+        phi_u_curr.gather_evaluate(u_curr, EvaluationFlags::values);
 
         phi.reinit(cell);
         phi.gather_evaluate(src, EvaluationFlags::values);
@@ -1047,14 +1055,12 @@ namespace SW {
 
           const auto& h_s      = phi_zeta_curr.get_value(q) + zb_q;
 
-          /*const auto& u_s      = phi_u_curr.get_value(q);
+          const auto& u_s      = phi_u_curr.get_value(q);
           const auto& mod_hu_s = std::sqrt(scalar_product(h_s*u_s, h_s*u_s));
 
-          const auto& gamma    = 0.0; TODO: Add friction as a function of h_s and hu_s
+          const auto& gamma    = 0.0; // TODO: Add friction as a function of h_s and hu_s
 
-          phi.submit_value((1.0 + a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*gamma/h_s)*h_s*phi.get_value(q), q);*/
-
-          phi.submit_value(h_s*phi.get_value(q), q);
+          phi.submit_value((1.0 + a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*gamma/h_s)*h_s*phi.get_value(q), q);
         }
 
         phi.integrate_scatter(EvaluationFlags::values, dst);
@@ -1566,15 +1572,15 @@ namespace SW {
       /*--- Since here we have just one 'src' vector, but we also need to deal with the current height and velocity,
             we employ the auxiliary vectors where we set this information ---*/
       FEEvaluation<dim, fe_degree_zeta, n_q_points_1d_u, 1, Number> phi_zeta_curr(data, 0);
-      //FEEvaluation<dim, fe_degree_u, n_q_points_1d_u, dim, Number> phi_u_curr(data, 1);
+      FEEvaluation<dim, fe_degree_u, n_q_points_1d_u, dim, Number>  phi_u_curr(data, 1);
 
       /*--- Loop over all cells ---*/
       for(unsigned int cell = cell_range.first; cell < cell_range.second; ++cell) {
         phi_zeta_curr.reinit(cell);
         phi_zeta_curr.gather_evaluate(zeta_curr, EvaluationFlags::values);
 
-        /*phi_u_curr.reinit(cell);
-        phi_u_curr.gather_evaluate(u_curr, EvaluationFlags::values);*/
+        phi_u_curr.reinit(cell);
+        phi_u_curr.gather_evaluate(u_curr, EvaluationFlags::values);
 
         phi.reinit(cell);
 
@@ -1601,14 +1607,12 @@ namespace SW {
 
             const auto& h_s      = phi_zeta_curr.get_value(q) + zb_q;
 
-            /*const auto& u_s     = phi_u_curr.get_value(q);
+            const auto& u_s      = phi_u_curr.get_value(q);
             const auto& mod_hu_s = std::sqrt(scalar_product(h_s*u_s, h_s*u_s));
 
-            const auto& gamma    = 0.0; TODO: Add friction as a function of h_s and hu_s
+            const auto& gamma    = 0.0; // TODO: Add friction as a function of h_s and hu_s
 
-            phi.submit_value((1.0 + a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*gamma/h_s)*h_s*phi.get_value(q), q);*/
-
-            phi.submit_value(h_s*phi.get_value(q), q);
+            phi.submit_value((1.0 + a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*gamma/h_s)*h_s*phi.get_value(q), q);
           }
 
           phi.integrate(EvaluationFlags::values);

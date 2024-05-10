@@ -52,7 +52,7 @@ namespace SW {
                                                                            for the discharge. ---*/
 
     void vmult_rhs_hc(Vec& dst, const std::vector<Vec>& src) const;  /*--- Auxiliary function to assemble the rhs
-                                                                             for the tracer. ---*/
+                                                                           for the tracer. ---*/
 
     virtual void compute_diagonal() override; /*--- Compute the diagonal for several preconditioners ---*/
 
@@ -690,6 +690,7 @@ namespace SW {
           /*--- Compute the quantites at the previous stages ---*/
           Tensor<2, dim, VectorizedArray<Number>> flux;
           Tensor<1, dim, VectorizedArray<Number>> non_cons_flux;
+          Tensor<1, dim, VectorizedArray<Number>> friction;
           for(unsigned int s = 1; s <= IMEX_stage - 1; ++s) {
             const auto& h_s         = phi_zeta[s - 1].get_value(q) + zb_q;
             const auto& hu_s        = phi_hu[s - 1].get_value(q);
@@ -698,9 +699,12 @@ namespace SW {
 
             flux += a[IMEX_stage - 1][s - 1]*dt*outer_product(hu_s, hu_s/h_s);
             non_cons_flux += a[IMEX_stage - 1][s - 1]*dt*EquationData::g*h_s*grad_zeta_s;
+
+            const auto& gamma_s = 0.0; // TODO: Add proper expression of the friction
+            friction += a_tilde[IMEX_stage - 1][s - 1]*dt*gamma_s*(hu_s/h_s);
           }
 
-          phi.submit_value(hu_old - non_cons_flux, q);
+          phi.submit_value(hu_old - non_cons_flux - friction, q);
           phi.submit_gradient(flux, q);
         }
 
@@ -744,7 +748,7 @@ namespace SW {
           /*--- Compute the quantites at the previous stages ---*/
           Tensor<2, dim, VectorizedArray<Number>> flux;
           Tensor<1, dim, VectorizedArray<Number>> non_cons_flux;
-          //Tensor<1, dim, VectorizedArray<Number>> friction;
+          Tensor<1, dim, VectorizedArray<Number>> friction;
           for(unsigned int s = 1; s <= IMEX_stage - 1; ++s) {
             const auto& h_s         = phi_zeta[s - 1].get_value(q) + zb_q;
             const auto& hu_s        = phi_hu[s - 1].get_value(q);
@@ -754,12 +758,11 @@ namespace SW {
             flux += b[s - 1]*dt*outer_product(hu_s, hu_s/h_s);
             non_cons_flux += b[s - 1]*dt*EquationData::g*h_s*grad_zeta_s;
 
-            /*--- const auto& gamma_s = 0.0; TODO: Add proper expression of the friction
-                friction += b_tilde[s-1]*dt*gamma_s*(hu_s/h_s); ---*/
+            const auto& gamma_s = 0.0; //TODO: Add proper expression of the friction
+            friction += b_tilde[s-1]*dt*gamma_s*(hu_s/h_s);
           }
 
-          //phi.submit_value(hu_old - non_cons_flux - friction, q);
-          phi.submit_value(hu_old - non_cons_flux, q);
+          phi.submit_value(hu_old - non_cons_flux - friction, q);
           phi.submit_gradient(flux, q);
         }
 
@@ -994,23 +997,23 @@ namespace SW {
     if(IMEX_stage <= n_stages) {
       /*--- Since here we have just one 'src' vector, but we also need to deal with the current height and discharge,
             we employ the auxiliary vectors where we set this information ---*/
-      /*FEEvaluation<dim, fe_degree_zeta, n_q_points_1d_hu, 1, Number> phi_zeta_curr(data, 0);
-      FEEvaluation<dim, fe_degree_hu, n_q_points_1d_hu, dim, Number> phi_hu_curr(data, 1);*/
+      FEEvaluation<dim, fe_degree_zeta, n_q_points_1d_hu, 1, Number> phi_zeta_curr(data, 0);
+      FEEvaluation<dim, fe_degree_hu, n_q_points_1d_hu, dim, Number> phi_hu_curr(data, 1);
 
       /*--- Loop over all cells ---*/
       for(unsigned int cell = cell_range.first; cell < cell_range.second; ++cell) {
-        /*phi_zeta_curr.reinit(cell);
+        phi_zeta_curr.reinit(cell);
         phi_zeta_curr.gather_evaluate(zeta_curr, EvaluationFlags::values);
 
         phi_hu_curr.reinit(cell);
-        phi_hu_curr.gather_evaluate(hu_curr, EvaluationFlags::values);*/
+        phi_hu_curr.gather_evaluate(hu_curr, EvaluationFlags::values);
 
         phi.reinit(cell);
         phi.gather_evaluate(src, EvaluationFlags::values);
 
         /*--- Loop over all quadrature points ---*/
         for(unsigned int q = 0; q < phi.n_q_points; ++q) {
-          /*const auto& point_vectorized = phi.quadrature_point(q);
+          const auto& point_vectorized = phi.quadrature_point(q);
           VectorizedArray<Number> zb_q;
           for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
             Point<dim> point;
@@ -1025,11 +1028,9 @@ namespace SW {
           const auto& hu_s     = phi_hu_curr.get_value(q);
           const auto& mod_hu_s = std::sqrt(scalar_product(hu_s, hu_s));
 
-          const auto& gamma    = 0.0; TODO: Add friction as a function of h_s and hu_s
+          const auto& gamma    = 0.0; // TODO: Add friction as a function of h_s and hu_s
 
-          phi.submit_value((1.0 + a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*gamma/h_s)*phi.get_value(q), q);*/
-
-          phi.submit_value(phi.get_value(q), q);
+          phi.submit_value((1.0 + a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*gamma/h_s)*phi.get_value(q), q);
         }
 
         phi.integrate_scatter(EvaluationFlags::values, dst);
@@ -1504,16 +1505,16 @@ namespace SW {
     if(IMEX_stage <= n_stages) {
       /*--- Since here we have just one 'src' vector, but we also need to deal with the current height and discharge,
             we employ the auxiliary vectors where we set this information ---*/
-      /*FEEvaluation<dim, fe_degree_zeta, n_q_points_1d_hu, 1, Number> phi_zeta_curr(data, 0);
-      FEEvaluation<dim, fe_degree_hu, n_q_points_1d_hu, dim, Number> phi_hu_curr(data, 1);*/
+      FEEvaluation<dim, fe_degree_zeta, n_q_points_1d_hu, 1, Number> phi_zeta_curr(data, 0);
+      FEEvaluation<dim, fe_degree_hu, n_q_points_1d_hu, dim, Number> phi_hu_curr(data, 1);
 
       /*--- Loop over all cells ---*/
       for(unsigned int cell = cell_range.first; cell < cell_range.second; ++cell) {
-        /*phi_zeta_curr.reinit(cell);
+        phi_zeta_curr.reinit(cell);
         phi_zeta_curr.gather_evaluate(zeta_curr, EvaluationFlags::values);
 
         phi_hu_curr.reinit(cell);
-        phi_hu_curr.gather_evaluate(hu_curr, EvaluationFlags::values);*/
+        phi_hu_curr.gather_evaluate(hu_curr, EvaluationFlags::values);
 
         phi.reinit(cell);
 
@@ -1527,7 +1528,7 @@ namespace SW {
 
           /*--- Loop over all quadrature points ---*/
           for(unsigned int q = 0; q < phi.n_q_points; ++q) {
-            /*const auto& point_vectorized = phi.quadrature_point(q);
+            const auto& point_vectorized = phi.quadrature_point(q);
             VectorizedArray<Number> zb_q;
             for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
               Point<dim> point;
@@ -1542,11 +1543,9 @@ namespace SW {
             const auto& hu_s     = phi_hu_curr.get_value(q);
             const auto& mod_hu_s = std::sqrt(scalar_product(hu_s, hu_s));
 
-            const auto& gamma    = 0.0; TODO: Add friction as a function of h_s and hu_s
+            const auto& gamma    = 0.0; // TODO: Add friction as a function of h_s and hu_s
 
-            phi.submit_value((1.0 + a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*gamma/h_s)*phi.get_value(q), q);*/
-
-            phi.submit_value(phi.get_value(q), q);
+            phi.submit_value((1.0 + a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*gamma/h_s)*phi.get_value(q), q);
           }
 
           phi.integrate(EvaluationFlags::values);

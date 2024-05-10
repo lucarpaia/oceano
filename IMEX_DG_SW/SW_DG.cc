@@ -189,8 +189,8 @@ private:
                  L1_error_per_cell_hc,
                  Linfty_error_per_cell_hc;  /*--- Auxiliary variables to compute the errors ---*/
 
-  /*MGLevelObject<LinearAlgebra::distributed::Vector<float>> level_projection_zeta,
-                                                           level_projection_hu;*/ /*--- Auxiliary variables for multigrid purposes ---*/
+  MGLevelObject<LinearAlgebra::distributed::Vector<float>> level_projection_zeta,
+                                                           level_projection_hu; /*--- Auxiliary variables for multigrid purposes ---*/
 
   double get_min_height(); /*--- Get minimum height ---*/
 
@@ -375,17 +375,17 @@ void SWSolver<dim>::setup_dofs() {
   dof_handler_discharge.distribute_mg_dofs();
   dof_handler_tracer.distribute_mg_dofs();
 
-  /*level_projection_zeta = MGLevelObject<LinearAlgebra::distributed::Vector<float>>(0, triangulation.n_global_levels() - 1);
-  level_projection_hu   = MGLevelObject<LinearAlgebra::distributed::Vector<float>>(0, triangulation.n_global_levels() - 1);*/
+  level_projection_zeta = MGLevelObject<LinearAlgebra::distributed::Vector<float>>(0, triangulation.n_global_levels() - 1);
+  level_projection_hu   = MGLevelObject<LinearAlgebra::distributed::Vector<float>>(0, triangulation.n_global_levels() - 1);
   mg_matrices_SW.resize(0, triangulation.n_global_levels() - 1);
   for(unsigned int level = 0; level < triangulation.n_global_levels(); ++level) {
-    /*typename MatrixFree<dim, float>::AdditionalData additional_data_mg;
+    typename MatrixFree<dim, float>::AdditionalData additional_data_mg;
     additional_data_mg.mg_level = level;
 
     std::shared_ptr<MatrixFree<dim, float>> mg_mf_storage_level(new MatrixFree<dim, float>());
     mg_mf_storage_level->reinit(mapping_mg, dof_handlers, constraints, quadratures, additional_data_mg);
     mg_mf_storage_level->initialize_dof_vector(level_projection_zeta[level], 0);
-    mg_mf_storage_level->initialize_dof_vector(level_projection_hu[level], 1);*/
+    mg_mf_storage_level->initialize_dof_vector(level_projection_hu[level], 1);
 
     mg_matrices_SW[level].set_dt(dt);
   }
@@ -957,7 +957,7 @@ void SWSolver<dim>::run(const bool verbose, const unsigned int output_interval) 
     pcout << "Maximum height " << get_max_height() << std::endl;
 
     verbose_cout << "  Update discharge stage 2" << std::endl;
-    /*SW_matrix.set_zeta_curr(zeta_tmp_2);
+    SW_matrix.set_zeta_curr(zeta_tmp_2);
     SW_matrix.set_hu_curr(hu_tmp_2);
     MGTransferMatrixFree<dim, float> mg_transfer;
     mg_transfer.build(dof_handler_height);
@@ -967,7 +967,7 @@ void SWSolver<dim>::run(const bool verbose, const unsigned int output_interval) 
     for(unsigned int level = 0; level < triangulation.n_global_levels(); ++level) {
       mg_matrices_SW[level].set_zeta_curr(level_projection_zeta[level]);
       mg_matrices_SW[level].set_hu_curr(level_projection_hu[level]);
-    }*/
+    }
     update_discharge();
 
     verbose_cout << "  Update tracer stage 2" << std::endl;
@@ -983,7 +983,7 @@ void SWSolver<dim>::run(const bool verbose, const unsigned int output_interval) 
     pcout << "Maximum height " << get_max_height() << std::endl;
 
     verbose_cout << "  Update discharge stage 3" << std::endl;
-    /*SW_matrix.set_zeta_curr(zeta_tmp_3);
+    SW_matrix.set_zeta_curr(zeta_tmp_3);
     SW_matrix.set_hu_curr(hu_tmp_3);
     mg_transfer.build(dof_handler_height);
     mg_transfer.interpolate_to_mg(dof_handler_height, level_projection_zeta, zeta_tmp_3);
@@ -992,7 +992,7 @@ void SWSolver<dim>::run(const bool verbose, const unsigned int output_interval) 
     for(unsigned int level = 0; level < triangulation.n_global_levels(); ++level) {
       mg_matrices_SW[level].set_zeta_curr(level_projection_zeta[level]);
       mg_matrices_SW[level].set_hu_curr(level_projection_hu[level]);
-    }*/
+    }
     update_discharge();
 
     verbose_cout << "  Update tracer stage 3" << std::endl;
