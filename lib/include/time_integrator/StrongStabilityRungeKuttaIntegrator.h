@@ -52,10 +52,7 @@ namespace TimeIntegrator
   // $\beta_i$ and $\alpha_i$ as shown in the introduction. As usual in Runge--Kutta
   // method, we can deduce time steps, $c_i = \sum_{j=1}^{i-2} b_i + a_{i-1}$
   // from those coefficients. The main advantage of this kind of scheme is the
-  // fact that ... lrp
-  //
-  // In this tutorial programs, we concentrate on a few variants of
-  // ... TODO!lrp
+  // non-linear stability.
   //
   // We define a single class for the four integrators, distinguished by the
   // enum described above. To each scheme, we then fill the vectors for the

@@ -156,7 +156,7 @@ namespace SpaceDiscretization
 
     void reinit(const Mapping<dim> &   mapping,
                 const DoFHandler<dim> &dof_handler_height,
-                const DoFHandler<dim> &dof_handler_discharge); //lrp
+                const DoFHandler<dim> &dof_handler_discharge);
 
     void apply(const double                                      current_time,
                const LinearAlgebra::distributed::Vector<Number> &src,
@@ -369,7 +369,7 @@ namespace SpaceDiscretization
   // Now we proceed to the local evaluators for the ocean problem. The
   // evaluators are relatively simple and follow what has been presented in
   // step-37, step-48, or step-59. The first notable difference is the fact
-  // that we use an FEEvaluation with a non-standard number of quadrature
+  // that we use a FEEvaluation with a non-standard number of quadrature
   // points. Whereas we previously always set the number of quadrature points
   // to equal the polynomial degree plus one (ensuring exact integration on
   // affine element shapes), we now set the number quadrature points as a
@@ -383,17 +383,12 @@ namespace SpaceDiscretization
   // The second difference is due to the fact that we are now evaluating a
   // multi-component system, as opposed to the scalar systems considered
   // previously. The matrix-free framework provides several ways to handle the
-  // multi-component case. The variant shown here utilizes an FEEvaluation
+  // multi-component case. One variant utilizes an FEEvaluation
   // object with multiple components embedded into it, specified by the fourth
-  // template argument `n_vars` for the components in the shallow water system. As a
-  // consequence, the return type of FEEvaluation::get_value() is not a scalar
-  // any more (that would return a VectorizedArray type, collecting data from
-  // several elements), but a Tensor of `n_vars` components. The functionality
-  // is otherwise similar to the scalar case; it is handled by a template
-  // specialization of a base class, called FEEvaluationAccess. An alternative
-  // variant would have been to use several FEEvaluation objects, a scalar one
-  // for the density, a vector-valued one with `dim` components for the
-  // momentum, and another scalar evaluator for the energy. To ensure that
+  // template argument `n_vars` for the components in the shallow water system.
+  // The alternative variant followed here uses several FEEvaluation objects, 
+  // a scalar one for the height, a vector-valued one with `dim` components for the
+  // momentum, and another scalar evaluator for the tracers. To ensure that
   // those components point to the correct part of the solution, the
   // constructor of FEEvaluation takes three optional integer arguments after
   // the required MatrixFree field, namely the number of the DoFHandler for
@@ -466,17 +461,7 @@ namespace SpaceDiscretization
         for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
           {
             const auto q_q = phi_discharge.get_value(q);
-//            const auto dw_q = phi.get_gradient(q);
-//
-//            Tensor<1, dim+3, VectorizedArray<Number>> data_q =
-//              evaluate_function<dim, Number, dim+3>(
-//                *bc->problem_data, phi.quadrature_point(q));
-
             phi_height.submit_gradient(model.massflux<dim, n_vars>(q_q), q);
-
-//            phi_height.submit_value(
-//              model.source<dim, n_vars>(w_q, dw_q[0], data_q),
-//              q);
           }
 
         phi_height.integrate_scatter(EvaluationFlags::gradients,
@@ -625,7 +610,6 @@ namespace SpaceDiscretization
                                                             phi_height_m.normal_vector(q),
                                                             data_m,
                                                             data_p);
-//            auto numerical_flux_m = -numerical_flux_p;
 
             phi_height_m.submit_value(-numerical_flux_p, q);
             phi_height_p.submit_value(numerical_flux_p, q);
@@ -666,6 +650,10 @@ namespace SpaceDiscretization
 
         for (unsigned int q = 0; q < phi_discharge_m.n_q_points; ++q)
           {
+            const auto z_m    = phi_height_m.get_value(q);
+            const auto z_p    = phi_height_p.get_value(q);
+            const auto normal = phi_discharge_m.normal_vector(q);
+
             const VectorizedArray<Number> data_m =
               evaluate_function<dim, Number>(*bc->problem_data,
                 phi_discharge_m.quadrature_point(q)-1e-12*phi_discharge_m.normal_vector(q), 0);
@@ -674,22 +662,22 @@ namespace SpaceDiscretization
                 phi_discharge_m.quadrature_point(q)+1e-12*phi_discharge_m.normal_vector(q), 0);
 
             auto numerical_flux_p =
-              num_flux.numerical_advflux_weak<dim, n_vars>(phi_height_m.get_value(q),
-                                                           phi_height_p.get_value(q),
+              num_flux.numerical_advflux_weak<dim, n_vars>(z_m,
+                                                           z_p,
                                                            phi_discharge_m.get_value(q),
                                                            phi_discharge_p.get_value(q),
-                                                           phi_discharge_m.normal_vector(q),
+                                                           normal,
                                                            data_m,
                                                            data_p);
             auto numerical_flux_m = -numerical_flux_p;
 
 #if defined MODEL_SHALLOWWATER
             auto pressure_numerical_flux =
-              num_flux.numerical_presflux_strong<dim, n_vars>(phi_height_m.get_value(q),
-                                                                  phi_height_p.get_value(q), //lrp: zq, qq as variable?
-                                                                  phi_discharge_m.normal_vector(q),
-                                                                  data_m,
-                                                                  data_p);
+              num_flux.numerical_presflux_strong<dim, n_vars>(z_m,
+                                                              z_p,
+                                                              normal,
+                                                              data_m,
+                                                              data_p);
             numerical_flux_m -= pressure_numerical_flux;
             numerical_flux_p -= pressure_numerical_flux;
 #endif
@@ -1475,7 +1463,7 @@ namespace SpaceDiscretization
     solution_discharge.zero_out_ghost_values();
     for (unsigned int cell = 0; cell < data.n_cell_batches(); ++cell)
       {
-        Tensor<1, dim, VectorizedArray<Number>> discharge; //lrp: Vectorized? or simple array
+        Tensor<1, dim, VectorizedArray<Number>> discharge;
         phi_discharge.reinit(cell);
         for (unsigned int q = 0; q < phi_discharge.n_q_points; ++q) 
           {
