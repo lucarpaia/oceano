@@ -32,7 +32,8 @@
 // using analytical functions. In order to not introduce in the optimized deal.II code 
 // call to virtual functions that would point, almost always, to the same derived class,
 // we use instead c++ preprocessors. C++ preprocessor allows to avoid interface classes
-// and to define just the classes actually used.
+// and to define just the classes actually used. Each pre-processor must begins with
+// the name of the class.
 
 // First come the numerics. The following preprocessor select the time integrator. For
 // now we have coded two explicit schemes that belong to the family of Runge-Kutta scheme.
@@ -49,16 +50,20 @@
 // We implement two different test cases. The first one is an analytical
 // solution in 2d, whereas the second is a channel flow around a cylinder as
 // described in the introduction.
-#undef ICBC_ISENTROPICVORTEX
-#undef ICBC_FLOWAROUNDCYLINDER
-#undef ICBC_IMPULSIVEWAVE
-#undef ICBC_SHALLOWWATERVORTEX
-#undef ICBC_STOMMELGYRE
+#undef  ICBC_ISENTROPICVORTEX
+#undef  ICBC_FLOWAROUNDCYLINDER
+#undef  ICBC_IMPULSIVEWAVE
+#undef  ICBC_SHALLOWWATERVORTEX
+#undef  ICBC_STOMMELGYRE
 #define ICBC_LAKEATREST
+#undef  ICBC_TRACERADVECTION
 // We have two models: a non-hydrostatic Euler model for perfect gas which was the
 // original model coded in the deal.II example and the shallow water model. The Euler model
-// is only used for debugging, to check consistency with the original deal.II example.
+// is only used for debugging, to check consistency with the original deal.II example and
+// it's not working in the present version.
+// Additionally we can add tracers to the shallow water model.
 #define MODEL_SHALLOWWATER
+#undef  MODEL_SHALLOWWATERWITHTRACER
 #undef  MODEL_EULER
 // Next come the physics. With the following cpp keys one can switch between the different
 // formulations of a given term in the right-hand side of the shallow water equations.
@@ -73,6 +78,19 @@
 // For the wind stress either
 #define PHYSICS_WINDSTRESSGENERAL
 #undef  PHYSICS_WINDSTRESSQUADRATIC
+//
+//
+//
+// Finally we assures that there are no inconsistencies in the choice of preprocessors.
+// We define a new preprocessor that permits a more compact `#if defined` statement.
+// This preprocessor does not identify a specific class but
+// rather it add a functionality to the scheme, namely the computation of tracer.
+// For this reason it starts with `OCEANO_WITH`.
+#undef OCEANO_WITH_TRACERS
+#if defined MODEL_SHALLOWWATERWITHTRACER
+#define OCEANO_WITH_TRACERS
+#endif
+
 // The include files are similar to the previous matrix-free tutorial programs
 // step-37, step-48, and step-59
 #include <deal.II/base/conditional_ostream.h>
@@ -111,18 +129,19 @@
 #include <deal.II/matrix_free/operators.h>
 
 // The following files include the oceano libraries:
-#if defined TIMEINTEGRATOR_LOWSTORAGERUNGEKUTTA
-#include <time_integrator/LowStorageRungeKuttaIntegrator.h>
-#elif defined TIMEINTEGRATOR_STRONGSTABILITYRUNGEKUTTA
-#include <time_integrator/StrongStabilityRungeKuttaIntegrator.h>
-#endif
 #include <space_discretization/OceanDG.h>
+#include <space_discretization/OceanDGWithTracer.h>
 #include <io/CommandLineParser.h>
 // The following files are included depending on
 // the Preprocessor keys. This is necessary because 
 // we have done a limited use of virtual classes; on the contrary 
 // each of these header files contains the same class definition, so they
-// cannot be linked together. 
+// cannot be linked together.
+#if defined TIMEINTEGRATOR_LOWSTORAGERUNGEKUTTA
+#include <time_integrator/LowStorageRungeKuttaIntegrator.h>
+#elif defined TIMEINTEGRATOR_STRONGSTABILITYRUNGEKUTTA
+#include <time_integrator/StrongStabilityRungeKuttaIntegrator.h>
+#endif
 #if defined ICBC_ISENTROPICVORTEX
 #include <icbc/Icbc_IsentropicVortex.h>
 #elif defined ICBC_FLOWAROUNDCYLINDER
@@ -135,6 +154,8 @@
 #include <icbc/Icbc_StommelGyre.h>
 #elif defined ICBC_LAKEATREST
 #include <icbc/Icbc_LakeAtRest.h>
+#elif defined ICBC_TRACERADVECTION
+#include <icbc/Icbc_TracerAdvection.h>
 #endif
 
 namespace Problem
@@ -151,11 +172,13 @@ namespace Problem
   constexpr unsigned int fe_degree            = 1;
   constexpr unsigned int n_q_points_1d        = fe_degree + 2;
 #if defined MODEL_EULER
-  constexpr unsigned int n_variables          = dimension + 2;
+  constexpr unsigned int n_tracers            = 1;
 #elif defined MODEL_SHALLOWWATER
-  constexpr unsigned int n_variables          = dimension + 1;
+  constexpr unsigned int n_tracers            = 0;
+#elif defined MODEL_SHALLOWWATERWITHTRACER
+  constexpr unsigned int n_tracers            = 1;
 #endif
-
+  constexpr unsigned int n_variables          = dimension + 1 + n_tracers;
 
   using Number = double;
 
@@ -181,7 +204,11 @@ namespace Problem
   //
   // Furthermore, we use a PostProcessor instance to write some additional
   // information to the output file, in similarity to what was done in
-  // step-33. The interface of the DataPostprocessor class is intuitive,
+  // step-33. Differently from step-33, the Postprocessor does not inherit
+  // from the deal.II class but has been re-written from skratch
+  // to handle the multi-component case with many solution vectors. We have
+  // however reused many functions.
+  // The interface of the DataPostprocessor class is intuitive,
   // requiring us to provide information about what needs to be evaluated
   // (typically only the values of the solution, but for vorticity we need 
   // also the gradients of the solution), and the names of what
@@ -190,16 +217,19 @@ namespace Problem
   // ParaView, but it is so much more convenient to do it already when writing
   // the output.
   //
-  // The class is templated with the dimension and the number of variables.
-  // Both are important because all templated members and methods
-  // (Tensor and Functions for example) that are defined in nested classes
-  // needs to inherit `dim` and `n_vars`.
-  template <int dim, int n_vars>
+  // The class is templated with the dimension and the number of tracers.
+  // Both are important because they define the number of equation (and of
+  // prognostic variables) in a multi-component system such as an ocean model,
+  // which reads `1+dim+n_tra`.
+  // FEEvaluation class needs to inherit both `dim` and `n_tra` and the same
+  // holds for all all templated members and methods
+  // (Tensor and Functions for example) that are defined in nested classes.
+  template <int dim, int n_tra>
   class OceanoProblem
   {
   public:
-    OceanoProblem(IO::ParameterHandler       &,
-                 ICBC::BcBase<dim, n_vars>* bc);
+    OceanoProblem(IO::ParameterHandler          &,
+                 ICBC::BcBase<dim, 1+dim+n_tra> *bc);
 
     void run();
 
@@ -208,6 +238,7 @@ namespace Problem
 
     LinearAlgebra::distributed::Vector<Number> solution_height;
     LinearAlgebra::distributed::Vector<Number> solution_discharge;
+    LinearAlgebra::distributed::Vector<Number> solution_tracer;
 
     ParameterHandler &prm;
 
@@ -221,35 +252,49 @@ namespace Problem
 
     FESystem<dim>   fe_height;
     FESystem<dim>   fe_discharge;
+#ifdef OCEANO_WITH_TRACERS
+    FESystem<dim>   fe_tracer;
+#endif
 
     MappingQ<dim>   mapping;
     DoFHandler<dim> dof_handler_height;
     DoFHandler<dim> dof_handler_discharge;
+    DoFHandler<dim> dof_handler_tracer;
 
     TimerOutput timer;
 
-    SpaceDiscretization::OceanoOperator<dim, n_vars, fe_degree, n_q_points_1d>
+#ifndef OCEANO_WITH_TRACERS
+    SpaceDiscretization::OceanoOperator<dim, n_tra, fe_degree, n_q_points_1d>
       oceano_operator;
+#else
+    SpaceDiscretization::OceanoOperatorWithTracer<dim, n_tra, fe_degree, n_q_points_1d>
+      oceano_operator;
+#endif
 
     double time, time_step;
 
    public:
-    class Postprocessor : public DataPostprocessor<dim>
+    class Postprocessor
     {
     public:
       Postprocessor(IO::ParameterHandler &param);
 
-      virtual void evaluate_vector_field(
-        const DataPostprocessorInputs::Vector<dim> &inputs,
-        std::vector<Vector<double>> &computed_quantities) const override;
+      void evaluate_vector_field(
+        const LinearAlgebra::distributed::Vector<Number>        &solution_height,
+        const LinearAlgebra::distributed::Vector<Number>        &solution_discharge,
+        const LinearAlgebra::distributed::Vector<Number>        &solution_tracer,
+        const std::vector<Point<dim>>                           &evaluation_points,
+        LinearAlgebra::distributed::Vector<Number>              &computed_vector_quantities,
+        std::vector<LinearAlgebra::distributed::Vector<Number>> &computed_scalar_quantities) const;
 
-      virtual std::vector<std::string> get_names() const override;
+      std::vector<std::string> get_names() const;
 
-      virtual std::vector<
+      std::vector<
         DataComponentInterpretation::DataComponentInterpretation>
-      get_data_component_interpretation() const override;
+      get_data_component_interpretation() const;
 
-      virtual UpdateFlags get_needed_update_flags() const override;
+      //UpdateFlags get_needed_update_flags() const;
+      unsigned int n_postproc_vars;
 
       bool do_error;
       double output_tick;
@@ -261,6 +306,8 @@ namespace Problem
       Model::Euler model;
 #elif defined MODEL_SHALLOWWATER
       Model::ShallowWater model;
+#elif defined MODEL_SHALLOWWATERWITHTRACER
+      Model::ShallowWaterWithTracer model;
 #endif
     };
 
@@ -274,8 +321,8 @@ namespace Problem
   // The constructor of the postprocessor class takes as arguments the parameters handler
   // class in order to read the output parameters defined from the parameter file. These
   // parameters are stored as class members.
-  template <int dim, int n_vars>
-  OceanoProblem<dim, n_vars>::Postprocessor::Postprocessor(
+  template <int dim, int n_tra>
+  OceanoProblem<dim, n_tra>::Postprocessor::Postprocessor(
     IO::ParameterHandler &prm)
     : prm(prm)
     , model(prm)
@@ -285,17 +332,18 @@ namespace Problem
     output_tick = prm.get_double("Output_tick");
     output_filename = prm.get("Output_filename");
     prm.leave_subsection();
+    n_postproc_vars = model.postproc_vars_name.size();
   }
 
 
 
   // For the main evaluation of the field variables, we first check that the
-  // lengths of the arrays equal the expected values (the lengths `2*dim+4` or
-  // `2*dim+5` are derived from the sizes of the names we specify in the
-  // get_names() function below). Then we loop over all evaluation points and
+  // lengths of the arrays equal the expected values (namely the length of the
+  // postprocessed variable vector equal the solution vector).
+  // Then we loop over all evaluation points and
   // fill the respective information. First we fill the primal solution
   // variables, the so called prognostic variables. Then we compute derived variables,
-  // the velocity $\mathbf u$ or the pressure $p$. These variables are defined in
+  // the velocity $\mathbf u$ or the depth $h$. These variables are defined in
   // the model class and they can change from model to model.
   // For now these variables can depend only on the solution and on given data. For the
   // implementation of output variables depending on given data see the deal.ii documentation:
@@ -309,52 +357,68 @@ namespace Problem
   // However the usual way to recover data is with
   // the `evaluate_function` that operates on vectorized data. With a few tricks the
   // the `evaluate_function` has been adapted to a non-vectorized loop.
-  template <int dim, int n_vars>
-  void OceanoProblem<dim, n_vars>::Postprocessor::evaluate_vector_field(
-    const DataPostprocessorInputs::Vector<dim> &inputs,
-    std::vector<Vector<double>> &               computed_quantities) const
+  template <int dim, int n_tra>
+  void OceanoProblem<dim, n_tra>::Postprocessor::evaluate_vector_field(
+    const LinearAlgebra::distributed::Vector<Number>        &solution_height,
+    const LinearAlgebra::distributed::Vector<Number>        &solution_discharge,
+    const LinearAlgebra::distributed::Vector<Number>        &solution_tracer,
+    const std::vector<Point<dim>>                           &evaluation_points,
+    LinearAlgebra::distributed::Vector<Number>              &computed_vector_quantities,
+    std::vector<LinearAlgebra::distributed::Vector<Number>> &computed_scalar_quantities) const
   {
-    const unsigned int n_evaluation_points = inputs.solution_values.size();
+    const unsigned int n_evaluation_points = solution_height.size();
     const std::vector<std::string> postproc_names = model.postproc_vars_name;
 
     //if (do_schlieren_plot == true)
     //  Assert(inputs.solution_gradients.size() == n_evaluation_points,
     //         ExcInternalError());
-
-    Assert(computed_quantities.size() == n_evaluation_points,
+    Assert(computed_vector_quantities.size() == n_evaluation_points*dim,
            ExcInternalError());
-    Assert(inputs.solution_values[0].size() == n_vars, ExcInternalError());
-    Assert(computed_quantities[0].size() ==
-             postproc_names.size(),
+    Assert(computed_scalar_quantities.size() == postproc_names.size()-dim,
            ExcInternalError());
+#ifndef OCEANO_WITH_TRACERS
+    (void) solution_tracer;
+#endif
 
     for (unsigned int p = 0; p < n_evaluation_points; ++p)
       {
-        Tensor<1, n_vars> solution;
-        for (unsigned int d = 0; d < n_vars; ++d)
-          solution[d] = inputs.solution_values[p](d);
-
+        const auto height = solution_height[p];
+        Tensor<1, dim> discharge;
+        for (unsigned int d = 0; d < dim; ++d)
+          discharge[d] = solution_discharge[dim*p+d];
+#ifdef OCEANO_WITH_TRACERS
+        Tensor<1, n_tra> tracer;
+        for (unsigned int t = 0; t < n_tra; ++t)
+          tracer[t] = solution_tracer[n_tra*p+t];
+#endif
         Point<dim, VectorizedArray<Number>> x_evaluation_points;
         for (unsigned int d = 0; d < dim; ++d)
-          x_evaluation_points[d] = inputs.evaluation_points[p][d];
-        const VectorizedArray<Number> data =
+          x_evaluation_points[d] = evaluation_points[p][d];
+        const auto data =
           SpaceDiscretization::evaluate_function<dim, Number>(
             ICBC::ProblemData<dim>(prm), x_evaluation_points, 0);
 
-        //const Tensor<1, dim> velocity = model.velocity<dim, n_vars>(solution, data[0]);
-        //const double         pressure = model.pressure<dim, n_vars>(solution, data[0]);
+        const Tensor<1, dim> velocity = model.velocity<dim>(height, discharge, data[0]);
 
         for (unsigned int d = 0; d < dim; ++d)
-          computed_quantities[p](d) = 0.;//velocity[d]; lrp: we have to rebranch postprocessing
+          computed_vector_quantities[dim*p+d] = velocity[d];
+
         for (unsigned int v = 0; v < postproc_names.size()-dim; ++v)
           {
-            if (postproc_names[dim+v] == "pressure")
-              computed_quantities[p](v+dim) = 0.;//pressure; lrp: we have to rebranch postprocessing
-            else if (postproc_names[dim+v] == "depth")
-              computed_quantities[p](v+dim) = solution[0] + data[0];
-            else if (postproc_names[dim+v] == "speed_of_sound")
-              computed_quantities[p](v+dim) = 0.;
-//                std::sqrt(model.square_wavespeed<dim, n_vars>(solution, data[0])); lrp:rebranch 
+            if (postproc_names[v+dim] == "pressure")
+              computed_scalar_quantities[v][p] =
+                model.pressure<dim>(height, data[0]);
+            else if (postproc_names[v+dim] == "depth")
+              computed_scalar_quantities[v][p] = height + data[0];
+            else if (postproc_names[v+dim] == "speed_of_sound")
+              computed_scalar_quantities[v][p] =
+                std::sqrt(model.square_wavespeed<dim>(height, data[0]));
+#ifdef OCEANO_WITH_TRACERS
+            else if (postproc_names[v+dim] == "tracer")
+              for (unsigned int t = 0; t < n_tra; ++t)
+                computed_scalar_quantities[v][p] =
+                  model.tracer<n_tra>(height, tracer, data[0])[t];
+#endif
             else
               {
                 std::cout << "Postprocessing variable " << postproc_names[dim+v]
@@ -372,8 +436,8 @@ namespace Problem
 
 
 
-  template <int dim, int n_vars>
-  std::vector<std::string> OceanoProblem<dim, n_vars>::Postprocessor::get_names() const
+  template <int dim, int n_tra>
+  std::vector<std::string> OceanoProblem<dim, n_tra>::Postprocessor::get_names() const
   {
     std::vector<std::string> postproc_names = model.postproc_vars_name;
 
@@ -382,12 +446,11 @@ namespace Problem
 
 
 
-  // For the interpretation of quantities, we have first the scalars: free-surface and
-  // a number of postprocessed variables specified in the model class. As vectors we have
-  // the momentum and the velocity.
-  template <int dim, int n_vars>
+  // For the interpretation of the postprocessed quantities, we have first the
+  // velocity vector and then the scalar quantities.
+  template <int dim, int n_tra>
   std::vector<DataComponentInterpretation::DataComponentInterpretation>
-  OceanoProblem<dim, n_vars>::Postprocessor::get_data_component_interpretation() const
+  OceanoProblem<dim, n_tra>::Postprocessor::get_data_component_interpretation() const
   {
     const std::vector<std::string> postproc_names = model.postproc_vars_name;
 
@@ -404,32 +467,16 @@ namespace Problem
 
 
 
-  // With respect to the necessary update flags, for the postprocessing we need the values for
-  // the quantities (of course!) and the coordinates of the evaluation points (if we need to evaluate data
-  // at some evaluation points, think to the bathymetry or heat flux coefficient).
-  // Some postprocessed variables are also based on the solution gradient but, for now, this choise
-  // has been commented and it is not available.
-  template <int dim, int n_vars>
-  UpdateFlags OceanoProblem<dim, n_vars>::Postprocessor::get_needed_update_flags() const
-  {
-    //if (do_schlieren_plot == true)
-    //  return update_values | update_quadrature_points | update_gradients;
-    //else
-    return update_values | update_quadrature_points;
-  }
-
-
-
   // The constructor for this class is unsurprising: We set up a parallel
   // triangulation based on the `MPI_COMM_WORLD` communicator, a vector finite
-  // element with `n_vars` components for density, momentum, and energy, a
+  // element with `1+dim+n_tra` components for density, momentum, and tracers, a
   // first-order mapping and initialize the time and time step to zero.
   // Deal.ii supports also high order mappings, in principle of the same degree
   // as the underlying finite element, but for ocean applications the use of such
   // high order elements is questionable.
-  template <int dim, int n_vars>
-  OceanoProblem<dim, n_vars>::OceanoProblem(IO::ParameterHandler      &param,
-                                          ICBC::BcBase<dim, n_vars>* bc)
+  template <int dim, int n_tra>
+  OceanoProblem<dim, n_tra>::OceanoProblem(IO::ParameterHandler           &param,
+                                           ICBC::BcBase<dim, 1+dim+n_tra> *bc)
     : prm(param)
     , pcout(std::cout, Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
 #ifdef DEAL_II_WITH_P4EST
@@ -437,9 +484,13 @@ namespace Problem
 #endif
     , fe_height(FE_DGQ<dim>(fe_degree), 1)
     , fe_discharge(FE_DGQ<dim>(fe_degree), dim)
+#ifdef OCEANO_WITH_TRACERS
+    , fe_tracer(FE_DGQ<dim>(fe_degree), n_tra)
+#endif
     , mapping(1)
     , dof_handler_height(triangulation)
     , dof_handler_discharge(triangulation)
+    , dof_handler_tracer(triangulation)
     , timer(pcout, TimerOutput::never, TimerOutput::wall_times)
     , oceano_operator(param, bc, timer)
     , time(0)
@@ -471,8 +522,8 @@ namespace Problem
   // can be other examples. Time and space functions are represented in deal.II with a Function
   // class. Here we set a pointer to Functions that defines such external data, both for
   // the boundary conditions and for data associated to it.
-  template <int dim, int n_vars>
-  void OceanoProblem<dim, n_vars>::make_grid_and_dofs()
+  template <int dim, int n_tra>
+  void OceanoProblem<dim, n_tra>::make_grid_and_dofs()
   {
     oceano_operator.bc->set_problem_data(std::make_unique<ICBC::ProblemData<dim>>(prm));
 
@@ -509,10 +560,17 @@ namespace Problem
 
     dof_handler_height.distribute_dofs(fe_height);
     dof_handler_discharge.distribute_dofs(fe_discharge);
-
-    oceano_operator.reinit(mapping, dof_handler_height, dof_handler_discharge);
+#ifdef OCEANO_WITH_TRACERS
+    dof_handler_tracer.distribute_dofs(fe_tracer);
+#endif
+    oceano_operator.reinit(mapping, dof_handler_height,
+                                    dof_handler_discharge,
+                                    dof_handler_tracer);
     oceano_operator.initialize_vector(solution_height, 0);
     oceano_operator.initialize_vector(solution_discharge, 1);
+#ifdef OCEANO_WITH_TRACERS
+    oceano_operator.initialize_vector(solution_tracer, 2);
+#endif
 
     // In the following, we output some statistics about the problem. Because we
     // often end up with quite large numbers of cells or degrees of freedom, we
@@ -522,9 +580,9 @@ namespace Problem
     // detail.
     std::locale s = pcout.get_stream().getloc();
     pcout.get_stream().imbue(std::locale(""));
-    pcout << "Number of degrees of freedom: "
-          << dof_handler_height.n_dofs() + dof_handler_discharge.n_dofs()
-          << " ( = " << (n_vars) << " [vars] x "
+    pcout << "Number of degrees of freedom: " << dof_handler_height.n_dofs()
+             + dof_handler_discharge.n_dofs() + dof_handler_tracer.n_dofs()
+          << " ( = " << ( 1 + dim + n_tra ) << " [vars] x "
           << triangulation.n_global_active_cells() << " [cells] x "
           << Utilities::pow(fe_degree + 1, dim) << " [dofs/cell/var] )"
           << std::endl;
@@ -533,7 +591,7 @@ namespace Problem
 
 
 
-  // For output, we first let the Euler operator compute the errors of the
+  // For output, we first let the Oceano operator compute the errors of the
   // numerical results. More precisely, we compute the error against the
   // analytical result for the analytical solution case, whereas we compute
   // the deviation against the background field with constant density and
@@ -581,16 +639,20 @@ namespace Problem
   //   line that sets `flags.write_higher_order_cells = true;`. On the other
   //   hand, Paraview is able to understand VTU files with higher order cells
   //   just fine.
-  template <int dim, int n_vars>
-  void OceanoProblem<dim, n_vars>::output_results(
+  template <int dim, int n_tra>
+  void OceanoProblem<dim, n_tra>::output_results(
     Postprocessor      &postprocessor,
     const unsigned int  result_number)
   {
-    const unsigned int n_tra = n_vars-dim-1;
-    const std::array<double, n_vars-dim+1> errors =
-      oceano_operator.compute_errors(
+    const std::array<double,2> errors_hydro =
+      oceano_operator.compute_errors_hydro(
         ICBC::ExactSolution<dimension, n_variables>(time),
         solution_height, solution_discharge);
+#ifdef OCEANO_WITH_TRACERS
+    const std::array<double,n_tra> errors_tracers =
+      oceano_operator.compute_errors_tracers(
+        ICBC::ExactSolution<dimension, n_variables>(time), solution_tracer);
+#endif
 
     const std::string quantity_name =
       postprocessor.do_error == 1 ? "error" : "norm";
@@ -600,12 +662,15 @@ namespace Problem
     pcout << "Time:" << std::setw(8) << std::setprecision(3) << time
           << ", dt: " << std::setw(8) << std::setprecision(2) << time_step
           << ", " << quantity_name  << " " + vars_names[0] + ": "
-          << std::setprecision(4) << std::setw(10) << errors[0] << ", " + vars_names[1]
-          + ": " << std::setprecision(4) << std::setw(10) << errors[1];
+          << std::setprecision(4) << std::setw(10) << errors_hydro[0]
+          << ", " + vars_names[1] + ": " << std::setprecision(4)
+          << std::setw(10) << errors_hydro[1];
 
+#ifdef OCEANO_WITH_TRACERS
     for (unsigned int t = 0; t < n_tra; ++t)
       pcout << ", "+ vars_names[dim+t+1] + ":" << std::setprecision(4)
-            << std::setw(10) << errors[t+2];
+            << std::setw(10) << errors_tracers[t];
+#endif
     pcout << std::endl;
 
     {
@@ -617,63 +682,76 @@ namespace Problem
       flags.write_higher_order_cells = true;
       data_out.set_flags(flags);
 
-      data_out.attach_dof_handler(dof_handler_height); //lrp: dof_handler_discharge?
+      data_out.attach_dof_handler(dof_handler_height);
       {
-        std::vector<DataComponentInterpretation::DataComponentInterpretation>
-          interpretation;
-        for (unsigned int d = 0; d < dim; ++d)
-          interpretation.push_back(
-            DataComponentInterpretation::component_is_part_of_vector);
         data_out.add_data_vector(dof_handler_height,
                                  solution_height,
                                  vars_names[0],
                                  {DataComponentInterpretation::component_is_scalar});
-        data_out.add_data_vector(dof_handler_discharge,
-                                 solution_discharge,
-                                 {vars_names[1],vars_names[2]},
-                                 interpretation);
-      }
 
-/*      {
-      //data_out.add_data_vector(solution, postprocessor); //lrp: rebranch postproc
-        LinearAlgebra::distributed::Vector<Number> postprocess_variables;
-        postprocess_variables.reinit(solution_discharge);
+        std::vector<Point<dim>> x_evaluation_points(solution_height.size());
+        DoFTools::map_dofs_to_support_points(mapping,
+                                             dof_handler_height,
+                                             x_evaluation_points);
+        LinearAlgebra::distributed::Vector<Number> postprocess_vector_variables;
+        postprocess_vector_variables.reinit(solution_discharge);
+        std::vector<LinearAlgebra::distributed::Vector<Number>>
+          postprocess_scalar_variables(postprocessor.n_postproc_vars-dim, solution_height);
+
+        postprocessor.evaluate_vector_field(solution_height,
+                                            solution_discharge,
+                                            solution_tracer,
+                                            x_evaluation_points,
+                                            postprocess_vector_variables,
+                                            postprocess_scalar_variables);
+
+        std::vector<std::string> names_postproc
+          = postprocessor.get_names();
+        std::vector<std::string> names_vector;
+        for (unsigned int d = 0; d < dim; ++d)
+          names_vector.emplace_back(names_postproc[d]);
         std::vector<DataComponentInterpretation::DataComponentInterpretation>
-          interpretation = postprocessor.get_data_component_interpretation();
-        std::vector<std::string> names = postprocessor.get_names();
-        postprocessor.compute(postprocess_variables, solution_height, solution_discharge);
+          interpretation_postproc
+          = postprocessor.get_data_component_interpretation();
+        std::vector<DataComponentInterpretation::DataComponentInterpretation>
+          interpretation_vector;
+        for (unsigned int d = 0; d < dim; ++d)
+          interpretation_vector.push_back(interpretation_postproc[d]);
+
         data_out.add_data_vector(dof_handler_discharge,
-                                 postprocess_variables,
-                                 {names[0],names[1]},
-                                 {interpretation[0],interpretation[1]});
-      }*/
+                                 postprocess_vector_variables,
+                                 names_vector,
+                                 interpretation_vector);
+        for (unsigned int v = 0; v < postprocessor.n_postproc_vars-dim; ++v)
+          data_out.add_data_vector(dof_handler_height,
+                                   postprocess_scalar_variables[v],
+                                   {names_postproc[dim+v]},
+                                   {interpretation_postproc[dim+v]});
+      }
 
       LinearAlgebra::distributed::Vector<Number> reference_height;
       LinearAlgebra::distributed::Vector<Number> reference_discharge;
+      LinearAlgebra::distributed::Vector<Number> reference_tracer;
 
       if (postprocessor.do_error && dim == 2)
         {
           reference_height.reinit(solution_height);
           reference_discharge.reinit(solution_discharge);
-          oceano_operator.project(ICBC::ExactSolution<dimension, n_variables>(time),
-                                  reference_height, reference_discharge);
+          oceano_operator.project_hydro(
+            ICBC::ExactSolution<dimension, n_variables>(time),
+            reference_height, reference_discharge);
           reference_height.sadd(-1., 1, solution_height);
           reference_discharge.sadd(-1., 1, solution_discharge);
 
           std::vector<std::string> names;
           for (unsigned int d = 0; d < dim; ++d)
             names.emplace_back("error_"+ vars_names[d+1]);
-          for (unsigned int t = 0; t < n_tra; ++t)
-            names.emplace_back("error_"+ vars_names[t+dim+1]);
 
           std::vector<DataComponentInterpretation::DataComponentInterpretation>
             interpretation;
           for (unsigned int d = 0; d < dim; ++d)
             interpretation.push_back(
               DataComponentInterpretation::component_is_part_of_vector);
-//          for (unsigned int t = 0; t < n_tra; ++t)
-//            interpretation.push_back(
-//              DataComponentInterpretation::component_is_scalar);
 
           data_out.add_data_vector(dof_handler_height,
                                    reference_height,
@@ -715,8 +793,8 @@ namespace Problem
   // size and print them to screen. For velocities and speeds of sound close
   // to unity as in this tutorial program, the predicted effective mesh size
   // will be close, but they could vary if scaling were different.
-  template <int dim, int n_vars>
-  void OceanoProblem<dim, n_vars>::run()
+  template <int dim, int n_tra>
+  void OceanoProblem<dim, n_tra>::run()
   {
     {
       const unsigned int n_vect_number = VectorizedArray<Number>::size();
@@ -734,8 +812,12 @@ namespace Problem
 
     make_grid_and_dofs();
 
-    oceano_operator.project(ICBC::Ic<dimension, n_variables>(),
-                            solution_height, solution_discharge);
+    oceano_operator.project_hydro(
+      ICBC::Ic<dimension, n_variables>(), solution_height, solution_discharge);
+#ifdef OCEANO_WITH_TRACERS
+    oceano_operator.project_tracers(
+      ICBC::Ic<dimension, n_variables>(), solution_tracer);
+#endif
 
     // Next off is the Courant number
     // that scales the time step size in terms of the formula $\Delta t =
@@ -762,11 +844,15 @@ namespace Problem
     LinearAlgebra::distributed::Vector<Number> rk_register_height_2;
     LinearAlgebra::distributed::Vector<Number> rk_register_discharge_1;
     LinearAlgebra::distributed::Vector<Number> rk_register_discharge_2;
+    LinearAlgebra::distributed::Vector<Number> rk_register_tracer_1;
+    LinearAlgebra::distributed::Vector<Number> rk_register_tracer_2;
 
     rk_register_height_1.reinit(solution_height);
     rk_register_height_2.reinit(solution_height);
     rk_register_discharge_1.reinit(solution_discharge);
     rk_register_discharge_2.reinit(solution_discharge);
+    rk_register_tracer_1.reinit(solution_tracer);
+    rk_register_tracer_2.reinit(solution_tracer);
 
 #elif defined TIMEINTEGRATOR_STRONGSTABILITYRUNGEKUTTA
     const TimeIntegrator::StrongStabilityRungeKuttaIntegrator integrator(rk_scheme);
@@ -775,11 +861,16 @@ namespace Problem
       rk_register_height_1(integrator.n_stages()+1, solution_height);
     std::vector<LinearAlgebra::distributed::Vector<Number>>
       rk_register_discharge_1(integrator.n_stages()+1, solution_discharge);
+    std::vector<LinearAlgebra::distributed::Vector<Number>>
+      rk_register_tracer_1(integrator.n_stages()+1, solution_tracer);
 
     LinearAlgebra::distributed::Vector<Number> rk_register_height_2;
     LinearAlgebra::distributed::Vector<Number> rk_register_discharge_2;
+    LinearAlgebra::distributed::Vector<Number> rk_register_tracer_2;
     rk_register_height_2.reinit(solution_height);
     rk_register_discharge_2.reinit(solution_discharge);
+    rk_register_tracer_2.reinit(solution_tracer);
+
 #endif
 
     double min_vertex_distance = std::numeric_limits<double>::max();
@@ -844,10 +935,13 @@ namespace Problem
                                        time_step,
                                        solution_height,
                                        solution_discharge,
+                                       solution_tracer,
                                        rk_register_height_1,
                                        rk_register_discharge_1,
+                                       rk_register_tracer_1,
                                        rk_register_height_2,
-                                       rk_register_discharge_2);
+                                       rk_register_discharge_2,
+                                       rk_register_tracer_2);
         }
 
         time += time_step;
@@ -918,6 +1012,8 @@ int main(int argc, char **argv)
       bc = new ICBC::BcStommelGyre<dimension, n_variables>; 
 #elif defined ICBC_LAKEATREST
       bc = new ICBC::BcLakeAtRest<dimension, n_variables>;
+#elif defined ICBC_TRACERADVECTION
+      bc = new ICBC::BcTracerAdvection<dimension, n_variables>;
 #else
       Assert(false, ExcNotImplemented());
       return 0.;
@@ -927,7 +1023,7 @@ int main(int argc, char **argv)
       // previously defined and that are filled at runtime. One is the pointer class
       // for the boundary conditions, the other is a reference to the parameter
       // class to read the paramteres from an external config file.     
-      OceanoProblem<dimension, n_variables> oceano_problem(prm, bc);
+      OceanoProblem<dimension, n_tracers> oceano_problem(prm, bc);
       oceano_problem.run();
       
       delete bc;

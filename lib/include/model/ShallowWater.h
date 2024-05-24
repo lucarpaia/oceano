@@ -116,7 +116,7 @@ namespace Model
 
     // The next function computes the velocity from the vector of conserved
     // variables
-    template <int dim, int n_vars, typename Number>
+    template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Number>
       velocity(const Number                  height,
@@ -129,7 +129,7 @@ namespace Model
     // specify the first template argument `dim` here because the compiler is
     // not able to deduce it from the arguments of the tensor, whereas the
     // third argument (number type) can be automatically deduced.
-    template <int dim, int n_vars, typename Number>
+    template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Number
       pressure(const Number height,
@@ -141,12 +141,12 @@ namespace Model
     // for the advective flux we need to compute the velocity.
     // The hydrostatic pressure is not included in the flux and it is treated with a
     // a double integration by parts.
-    template <int dim, int n_vars, typename Number>
+    template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Number>
       massflux(const Tensor<1, dim, Number> &discharge) const;
 
-    template <int dim, int n_vars, typename Number>
+    template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Tensor<1, dim, Number>>
       advectiveflux(const Number                  height,
@@ -159,7 +159,7 @@ namespace Model
     // gradient. Other forces includes the bottom and wind stress and the coriolis force.
     // The computation of the source term involves the conserved variables and $dim+3$
     // non-constant functions (e.g. the bottom friction coefficient).
-    template <int dim, int n_vars, typename Number>
+    template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Number>
       source(const Number                    height,
@@ -171,7 +171,7 @@ namespace Model
     // variables, using the formula $\lambda^2 =  \|\mathbf{u}\|^2+c^2$. The estimate
     // instead of the the true formula is justyfied by efficiency arguments (one evaluation of the square root
     // instead of four). Moroever for low Mach applications, the error committed is very small.
-    template <int dim, int n_vars, typename Number>
+    template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Number
       square_speed_estimate(
@@ -179,7 +179,7 @@ namespace Model
         const Tensor<1, dim, Number> &discharge,
         const Number                  bathymetry) const;
 
-    template <int dim, int n_vars, typename Number>
+    template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Number
       square_wavespeed(
@@ -187,7 +187,7 @@ namespace Model
         const Number bathymetry) const;
 
     // The next function computes the outgoing Riemann invariant:
-    template <int dim, int n_vars, typename Number>
+    template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Number
       riemann_invariant_p(
@@ -196,7 +196,7 @@ namespace Model
         const Tensor<1, dim, Number> &normal,
         const Number                  bathymetry) const;
 
-    template <int dim, int n_vars, typename Number>
+    template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Number
       riemann_invariant_m(
@@ -205,9 +205,9 @@ namespace Model
         const Tensor<1, dim, Number> &normal,
         const Number                  bathymetry) const;
   };
-  
-  
-  
+
+
+
   // For the model class we do not use an implementation file. This
   // is because of the fact the all the function called are templated
   // or inlined. Both templated and inlined functions are hard to be separated
@@ -228,11 +228,11 @@ namespace Model
     g = prm.get_double("g");
     prm.leave_subsection();
 
-    vars_name = {"free_surface", "momentum", "momentum"};
-    postproc_vars_name = {"velocity", "velocity", "pressure", "depth"};
+    vars_name = {"free_surface", "hu", "hu"};
+    postproc_vars_name = {"velocity", "velocity", "depth"};
   }
   
-  template <int dim, int n_vars, typename Number>
+  template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
     ShallowWater::velocity(const Number                  height,
@@ -245,7 +245,7 @@ namespace Model
     return discharge * inverse_depth;
   }
 
-  template <int dim, int n_vars, typename Number>
+  template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Number
     ShallowWater::pressure(const Number height,
@@ -255,7 +255,7 @@ namespace Model
     return 0.5 * g * depth*depth;
   }
 
-  template <int dim, int n_vars, typename Number>
+  template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
     ShallowWater::massflux(const Tensor<1, dim, Number> &discharge) const
@@ -263,7 +263,7 @@ namespace Model
     return discharge;
   }
 
-  template <int dim, int n_vars, typename Number>
+  template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Tensor<1, dim, Number>>
     ShallowWater::advectiveflux(const Number                  height,
@@ -271,7 +271,7 @@ namespace Model
                                 const Number                  bathymetry) const
   {
     const Tensor<1, dim, Number> v =
-      velocity<dim, n_vars>(height, discharge, bathymetry);
+      velocity<dim>(height, discharge, bathymetry);
     
     Tensor<1, dim, Tensor<1, dim, Number>> flux;
     for (unsigned int d = 0; d < dim; ++d)
@@ -281,7 +281,7 @@ namespace Model
     return flux;
   }
 
-  template <int dim, int n_vars, typename Number>
+  template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
     ShallowWater::source(const Number                    height,
@@ -290,7 +290,7 @@ namespace Model
                          const Tensor<1, dim+3, Number> &parameters) const
   {
     const Tensor<1, dim, Number> v =
-      velocity<dim, n_vars>(height, discharge, parameters[0]);
+      velocity<dim>(height, discharge, parameters[0]);
     const Number depth = height + parameters[0];
 
     const Tensor<1, dim, Number> bottomfric =
@@ -298,7 +298,7 @@ namespace Model
     const Tensor<1, dim, Number> windstress =
       wind_stress.source<dim, Number>(&parameters[2]);
     const Tensor<1, dim, Number> coriolis =
-      coriolis_force.source<dim, n_vars, Number>(discharge, parameters[4]);
+      coriolis_force.source<dim, Number>(discharge, parameters[4]);
 
     Tensor<1, dim, Number> source =
         - g * depth * gradient_height
@@ -309,7 +309,7 @@ namespace Model
     return source;
   }
 
-  template <int dim, int n_vars, typename Number>
+  template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Number
     ShallowWater::square_speed_estimate(
@@ -317,12 +317,12 @@ namespace Model
       const Tensor<1, dim, Number> &discharge,
       const Number                  bathymetry) const
   {
-    const auto v = velocity<dim, n_vars>(height, discharge, bathymetry);
+    const auto v = velocity<dim>(height, discharge, bathymetry);
 
     return v.norm_square() + g * (height + bathymetry);
   }
 
-  template <int dim, int n_vars, typename Number>
+  template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Number
     ShallowWater::square_wavespeed(
@@ -332,7 +332,7 @@ namespace Model
     return g * (height + bathymetry);
   }
 
-  template <int dim, int n_vars, typename Number>
+  template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Number
     ShallowWater::riemann_invariant_p(
@@ -341,15 +341,15 @@ namespace Model
       const Tensor<1, dim, Number> &normal,
       const Number                  bathymetry) const
   {
-    const auto v = velocity<dim, n_vars>(height, discharge, bathymetry);
+    const auto v = velocity<dim>(height, discharge, bathymetry);
     const auto c = std::sqrt(
-      square_wavespeed<dim, n_vars>(height, bathymetry));
+      square_wavespeed<dim>(height, bathymetry));
     Number u = v * normal;
 
     return u + 2. * c;
   }
 
-  template <int dim, int n_vars, typename Number>
+  template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Number
     ShallowWater::riemann_invariant_m(
@@ -358,9 +358,9 @@ namespace Model
       const Tensor<1, dim, Number> &normal,
       const Number                  bathymetry) const
   {
-    const auto v = velocity<dim, n_vars>(height, discharge, bathymetry);
+    const auto v = velocity<dim>(height, discharge, bathymetry);
     const auto c = std::sqrt(
-      square_wavespeed<dim, n_vars>(height, bathymetry));
+      square_wavespeed<dim>(height, bathymetry));
     Number u = v * normal;
 
     return u - 2. * c;

@@ -56,7 +56,7 @@ namespace NumericalFlux
     HartenVanLeer(IO::ParameterHandler &param);
     ~HartenVanLeer(){};
 
-    template <int dim, int n_vars, typename Number>
+    template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Number
       numerical_massflux_weak(const Number                  z_m,
@@ -67,7 +67,7 @@ namespace NumericalFlux
                               const Number                  data_m,
                               const Number                  data_p) const;
 
-    template <int dim, int n_vars, typename Number>
+    template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Number>
       numerical_advflux_weak(const Number                  z_m,
@@ -110,7 +110,7 @@ namespace NumericalFlux
   // form, we multiply by the result by the normal vector for all terms in the
   // equation. In these multiplications, the `operator*` defined above enables
   // a compact notation similar to the mathematical definition.
-  template <int dim, int n_vars, typename Number>
+  template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Number
     HartenVanLeer::numerical_massflux_weak(
@@ -122,14 +122,14 @@ namespace NumericalFlux
       const Number                      data_m,
       const Number                      data_p) const
   {
-    const auto velocity_m = model.velocity<dim, n_vars>(z_m, q_m, data_m);
-    const auto velocity_p = model.velocity<dim, n_vars>(z_p, q_p, data_p);
+    const auto velocity_m = model.velocity<dim>(z_m, q_m, data_m);
+    const auto velocity_p = model.velocity<dim>(z_p, q_p, data_p);
 
-    const auto csquare_m = model.square_wavespeed<dim, n_vars>(z_m, data_m);
-    const auto csquare_p = model.square_wavespeed<dim, n_vars>(z_p, data_m);
+    const auto csquare_m = model.square_wavespeed<dim>(z_m, data_m);
+    const auto csquare_p = model.square_wavespeed<dim>(z_p, data_m);
 
-    const auto flux_m = model.massflux<dim, n_vars>(q_m);
-    const auto flux_p = model.massflux<dim, n_vars>(q_p);
+    const auto flux_m = model.massflux<dim>(q_m);
+    const auto flux_p = model.massflux<dim>(q_p);
 
     const auto avg_velocity_normal =
       0.5 * ((velocity_m + velocity_p) * normal);
@@ -146,7 +146,7 @@ namespace NumericalFlux
            s_pos * s_neg * (z_m - z_p));
   }
 
-  template <int dim, int n_vars, typename Number>
+  template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
     HartenVanLeer::numerical_advflux_weak(
@@ -158,14 +158,14 @@ namespace NumericalFlux
       const Number                      data_m,
       const Number                      data_p) const
   {
-    const auto velocity_m = model.velocity<dim, n_vars>(z_m, q_m, data_m);
-    const auto velocity_p = model.velocity<dim, n_vars>(z_p, q_p, data_p);
+    const auto velocity_m = model.velocity<dim>(z_m, q_m, data_m);
+    const auto velocity_p = model.velocity<dim>(z_p, q_p, data_p);
 
-    const auto csquare_m = model.square_wavespeed<dim, n_vars>(z_m, data_m);
-    const auto csquare_p = model.square_wavespeed<dim, n_vars>(z_p, data_m);
+    const auto csquare_m = model.square_wavespeed<dim>(z_m, data_m);
+    const auto csquare_p = model.square_wavespeed<dim>(z_p, data_m);
 
-    const auto flux_m = model.advectiveflux<dim, n_vars>(z_m, q_m, data_m);
-    const auto flux_p = model.advectiveflux<dim, n_vars>(z_p, q_p, data_p);
+    const auto flux_m = model.advectiveflux<dim>(z_m, q_m, data_m);
+    const auto flux_p = model.advectiveflux<dim>(z_p, q_p, data_p);
 
     const auto avg_velocity_normal =
       0.5 * ((velocity_m + velocity_p) * normal);

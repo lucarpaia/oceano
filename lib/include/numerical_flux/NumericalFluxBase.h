@@ -68,8 +68,8 @@ namespace NumericalFlux
   // I would have liked to template the numerical flux class with 
   // <int dim, typename Number> which would have been cleaner. But I was not able 
   // to compile the call to the function `numerical_flux_weak()` which take
-  // as argument `Tensor<1, n_vars, Number>` while is receiving 
-  // `Tensor<1, n_vars, VectorizedArray<Number>>`. I don't know why, without
+  // as argument `Tensor<1, Number>` while is receiving
+  // `Tensor<1, VectorizedArray<Number>>`. I don't know why, without
   // a template class, everything works. I leave this for future work.  
   class NumericalFluxBase
   {
@@ -77,7 +77,7 @@ namespace NumericalFlux
     NumericalFluxBase(IO::ParameterHandler &param);
     ~NumericalFluxBase(){};
 
-    template <int dim, int n_vars, typename Number>
+    template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Number>
       numerical_presflux_strong(const Number                     z_m,
@@ -90,6 +90,8 @@ namespace NumericalFlux
     Model::Euler model;
 #elif defined MODEL_SHALLOWWATER
     Model::ShallowWater model;
+#elif defined MODEL_SHALLOWWATERWITHTRACER
+    Model::ShallowWaterWithTracer model;
 #endif
   };
 
@@ -102,7 +104,7 @@ namespace NumericalFlux
   // We implement the contribution to the numerical flux coming from the terms that
   // have been approximated with the strong formulation of discontinuos Galerkin.
   // This is the case for the pressure term in the shallow water equations.
-  template <int dim, int n_vars, typename Number>
+  template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
     NumericalFluxBase::numerical_presflux_strong(

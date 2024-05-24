@@ -43,7 +43,7 @@ namespace Physics
 
     // The next function is the one that actually computes the bottom friction.
     // It is overloaded by the same function defined in the derived classes.
-    template <int dim, int n_vars, typename Number>
+    template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Number>
       source(const Tensor<1, dim, Number> &discharge,
@@ -73,7 +73,7 @@ namespace Physics
     CoriolisBeta();
     ~CoriolisBeta(){};
 
-    template <int dim, int n_vars, typename Number>
+    template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Number>
       source(const Tensor<1, dim, Number> &discharge,
@@ -84,7 +84,7 @@ namespace Physics
     : CoriolisBase()
   {}
   
-  template <int dim, int n_vars, typename Number>
+  template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
     CoriolisBeta::source(const Tensor<1, dim, Number> &discharge,

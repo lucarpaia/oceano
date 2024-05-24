@@ -18,8 +18,8 @@
  *         Luca Arpaia,        2023
  *         Giuseppe Orlando,   2024
  */
-#ifndef EULERDG_HPP
-#define EULERDG_HPP 
+#ifndef OCEANDG_HPP
+#define OCEANDG_HPP
  
 #include <deal.II/base/conditional_ostream.h>
 #include <deal.II/base/function.h>
@@ -60,6 +60,8 @@
 #include <model/Euler.h>
 #elif defined MODEL_SHALLOWWATER
 #include <model/ShallowWater.h>
+#elif defined MODEL_SHALLOWWATERWITHTRACER
+#include <model/ShallowWaterWithTracer.h>
 #endif
 #include <numerical_flux/LaxFriedrichsModified.h>
 #include <numerical_flux/HartenVanLeer.h>
@@ -76,16 +78,17 @@ namespace SpaceDiscretization
 
   using Number = double;
 
-  // This and the next function are helper functions to provide compact
+  // This and the next functions are helper functions to provide compact
   // evaluation calls as multiple points get batched together via a
   // VectorizedArray argument (see the step-37 tutorial for details). This
-  // function is used for the supercritical outflow boundary conditions where we
-  // need to set the energy component to a prescribed value. The next one
-  // requests the solution on all components and is used for inflow boundaries
+  // functions are used for inquiry the data for the source terms and the
+  // initial/boundary conditions. The first one request a single data
+  // component. The second one requests the solution on all
+  // components and it is used for supercritical inflow flow boundaries
   // where all components of the solution are set.
   template <int dim, typename Number>
   VectorizedArray<Number>
-  evaluate_function(const Function<dim> &                      function,
+  evaluate_function(const Function<dim>                       &function,
                     const Point<dim, VectorizedArray<Number>> &p_vectorized,
                     const unsigned int                         component)
   {
@@ -103,10 +106,10 @@ namespace SpaceDiscretization
 
   template <int dim, typename Number, int n_vars>
   Tensor<1, n_vars, VectorizedArray<Number>>
-  evaluate_function(const Function<dim> &                      function,
+  evaluate_function(const Function<dim>                       &function,
                     const Point<dim, VectorizedArray<Number>> &p_vectorized)
   {
-    AssertDimension(function.n_components, n_vars);
+    Assert(function.n_components >= n_vars, ExcInternalError());
     Tensor<1, n_vars, VectorizedArray<Number>> result;
     for (unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v)
       {
@@ -118,7 +121,7 @@ namespace SpaceDiscretization
       }
     return result;
   }
-  
+
 
 
   // @sect3{The OceanoOperation class}
@@ -144,19 +147,20 @@ namespace SpaceDiscretization
   // to pass in various forms of boundary conditions on different parts of the
   // domain boundary marked by types::boundary_id variables, as well as
   // possible body forces.
-  template <int dim, int n_vars, int degree, int n_points_1d>
+  template <int dim, int n_tra, int degree, int n_points_1d>
   class OceanoOperator
   {
   public:
     static constexpr unsigned int n_quadrature_points_1d = n_points_1d;
 
     OceanoOperator(IO::ParameterHandler      &param,
-                  ICBC::BcBase<dim, n_vars> *bc,
+                  ICBC::BcBase<dim, 1+dim+n_tra> *bc,
                   TimerOutput               &timer_output);
 
     void reinit(const Mapping<dim> &   mapping,
                 const DoFHandler<dim> &dof_handler_height,
-                const DoFHandler<dim> &dof_handler_discharge);
+                const DoFHandler<dim> &dof_handler_discharge,
+                const DoFHandler<dim> &dof_handler_tracer);
 
     void apply(const double                                      current_time,
                const LinearAlgebra::distributed::Vector<Number> &src,
@@ -164,37 +168,38 @@ namespace SpaceDiscretization
 
 #if defined TIMEINTEGRATOR_LOWSTORAGERUNGEKUTTA
     void
-    perform_stage(const Number cur_time,
-                  const Number factor_solution,
-                  const Number factor_ai,
-                  const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
-                  LinearAlgebra::distributed::Vector<Number>       &vec_ki_height,
-                  LinearAlgebra::distributed::Vector<Number>       &vec_ki_discharge,
-                  LinearAlgebra::distributed::Vector<Number>       &solution_height,
-                  LinearAlgebra::distributed::Vector<Number>       &solution_discharge,
-                  LinearAlgebra::distributed::Vector<Number>       &next_ri_height,
-                  LinearAlgebra::distributed::Vector<Number>       &next_ri_discharge) const;
-
+    perform_stage_hydro(
+      const                                                          Number cur_time,
+      const                                                          Number factor_solution,
+      const                                                          Number factor_ai,
+      const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
+      LinearAlgebra::distributed::Vector<Number>                    &vec_ki_height,
+      LinearAlgebra::distributed::Vector<Number>                    &vec_ki_discharge,
+      LinearAlgebra::distributed::Vector<Number>                    &solution_height,
+      LinearAlgebra::distributed::Vector<Number>                    &solution_discharge,
+      LinearAlgebra::distributed::Vector<Number>                    &next_ri_height,
+      LinearAlgebra::distributed::Vector<Number>                    &next_ri_discharge) const;
 #elif defined TIMEINTEGRATOR_STRONGSTABILITYRUNGEKUTTA
     void 
-    perform_stage(const unsigned int                                             cur_stage,
-                  const Number                                                   cur_time,
-                  const Number                                                   factor_bi,
-                  const Number                                                  *factor_solution,
-                  const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
-                  LinearAlgebra::distributed::Vector<Number>                    &vec_ki_height,
-                  LinearAlgebra::distributed::Vector<Number>                    &vec_ki_discharge,
-                  LinearAlgebra::distributed::Vector<Number>                    &solution_height,
-                  LinearAlgebra::distributed::Vector<Number>                    &solution_discharge,
-                  std::vector<LinearAlgebra::distributed::Vector<Number>>       &next_ri_height,
-                  std::vector<LinearAlgebra::distributed::Vector<Number>>       &next_ri_discharge) const;
+    perform_stage_hydro(
+      const unsigned int                                             cur_stage,
+      const Number                                                   cur_time,
+      const Number                                                   factor_bi,
+      const Number                                                  *factor_solution,
+      const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
+      LinearAlgebra::distributed::Vector<Number>                    &vec_ki_height,
+      LinearAlgebra::distributed::Vector<Number>                    &vec_ki_discharge,
+      LinearAlgebra::distributed::Vector<Number>                    &solution_height,
+      LinearAlgebra::distributed::Vector<Number>                    &solution_discharge,
+      std::vector<LinearAlgebra::distributed::Vector<Number>>       &next_ri_height,
+      std::vector<LinearAlgebra::distributed::Vector<Number>>       &next_ri_discharge) const;
 #endif
 
-    void project(const Function<dim> &                       function,
-                 LinearAlgebra::distributed::Vector<Number> &solution_height,
-                 LinearAlgebra::distributed::Vector<Number> &solution_discharge) const;
+    void project_hydro(const Function<dim> &                       function,
+                       LinearAlgebra::distributed::Vector<Number> &solution_height,
+                       LinearAlgebra::distributed::Vector<Number> &solution_discharge) const;
 
-    std::array<double, n_vars-dim+1> compute_errors(
+    std::array<double, 2> compute_errors_hydro(
       const Function<dim> &                             function,
       const LinearAlgebra::distributed::Vector<Number> &solution_height,
       const LinearAlgebra::distributed::Vector<Number> &solution_discharge) const;
@@ -207,9 +212,9 @@ namespace SpaceDiscretization
     initialize_vector(LinearAlgebra::distributed::Vector<Number> &vector,
                       const unsigned int                          variable) const;
 
-    ICBC::BcBase<dim, n_vars> *bc;
+    ICBC::BcBase<dim, 1+dim+n_tra> *bc;
     
-  private:
+  protected:
     MatrixFree<dim, Number> data;
 
     TimerOutput &timer;
@@ -222,6 +227,8 @@ namespace SpaceDiscretization
     Model::Euler model;
 #elif defined MODEL_SHALLOWWATER
     Model::ShallowWater model;
+#elif defined MODEL_SHALLOWWATERWITHTRACER
+    Model::ShallowWaterWithTracer model;
 #else
     Assert(false, ExcNotImplemented());
     return 0.;
@@ -237,6 +244,7 @@ namespace SpaceDiscretization
     return 0.;
 #endif
 
+  private:
     void local_apply_inverse_mass_matrix_height(
       const MatrixFree<dim, Number> &                   data,
       LinearAlgebra::distributed::Vector<Number> &      dst,
@@ -288,10 +296,10 @@ namespace SpaceDiscretization
 
 
 
-  template <int dim, int n_vars, int degree, int n_points_1d>
-  OceanoOperator<dim, n_vars, degree, n_points_1d>::OceanoOperator(
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  OceanoOperator<dim, n_tra, degree, n_points_1d>::OceanoOperator(
     IO::ParameterHandler             &param,
-    ICBC::BcBase<dim, n_vars>        *bc,
+    ICBC::BcBase<dim, 1+dim+n_tra>   *bc,
     TimerOutput                      &timer)
     : bc(bc)
     , timer(timer)
@@ -319,15 +327,16 @@ namespace SpaceDiscretization
   // only on affine element shapes and not on deformed elements, it enables
   // the fast inversion of the mass matrix by tensor product techniques,
   // necessary to ensure optimal computational efficiency overall.
-  template <int dim, int n_vars, int degree, int n_points_1d>
-  void OceanoOperator<dim, n_vars, degree, n_points_1d>::reinit(
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_tra, degree, n_points_1d>::reinit(
     const Mapping<dim> &   mapping,
     const DoFHandler<dim> &dof_handler_height,
-    const DoFHandler<dim> &dof_handler_discharge)
+    const DoFHandler<dim> &dof_handler_discharge,
+    const DoFHandler<dim> &/*dof_handler_tracer*/)
   {
-    std::vector<const DoFHandler<dim> *> dof_handlers;
     const AffineConstraints<double>            dummy;
-    const std::vector<const AffineConstraints<double> *> 
+    std::vector<const DoFHandler<dim> *> dof_handlers;
+    std::vector<const AffineConstraints<double> *>
       constraints = {&dummy, &dummy};
     const std::vector<Quadrature<1>> quadratures = {QGauss<1>(n_points_1d),
                                                     QGauss<1>(degree + 1)};
@@ -354,8 +363,8 @@ namespace SpaceDiscretization
 
 
 
-  template <int dim, int n_vars, int degree, int n_points_1d>
-  void OceanoOperator<dim, n_vars, degree, n_points_1d>::initialize_vector(
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_tra, degree, n_points_1d>::initialize_vector(
     LinearAlgebra::distributed::Vector<Number> &vector,
     const unsigned int                          variable) const
   {
@@ -384,12 +393,12 @@ namespace SpaceDiscretization
   // multi-component system, as opposed to the scalar systems considered
   // previously. The matrix-free framework provides several ways to handle the
   // multi-component case. One variant utilizes an FEEvaluation
-  // object with multiple components embedded into it, specified by the fourth
+  // object with multiple components embedded into it, specified by an additional
   // template argument `n_vars` for the components in the shallow water system.
   // The alternative variant followed here uses several FEEvaluation objects, 
-  // a scalar one for the height, a vector-valued one with `dim` components for the
-  // momentum, and another scalar evaluator for the tracers. To ensure that
-  // those components point to the correct part of the solution, the
+  // a scalar one for the height and a vector-valued one with `dim` components for the
+  // momentum.
+  // To ensure that those components point to the correct part of the solution, the
   // constructor of FEEvaluation takes three optional integer arguments after
   // the required MatrixFree field, namely the number of the DoFHandler for
   // multi-DoFHandler systems (taking the first by default), the number of the
@@ -397,7 +406,7 @@ namespace SpaceDiscretization
   // below), and as a third argument the component within a vector system. As
   // we have a single vector for all components, we would go with the third
   // argument, and set it to `0` for the density, `1` for the vector-valued
-  // momentum, and `dim+1` for the energy slot. FEEvaluation then picks the
+  // momentum. FEEvaluation then picks the
   // appropriate subrange of the solution vector during
   // FEEvaluationBase::read_dof_values() and
   // FEEvaluation::distributed_local_to_global() or the more compact
@@ -442,8 +451,8 @@ namespace SpaceDiscretization
   // The interfaces imposes the present list of arguments, but since we are in
   // a member function where the MatrixFree object is already available as the
   // `data` variable, we stick with that to avoid confusion.
-  template <int dim, int n_vars, int degree, int n_points_1d>
-  void OceanoOperator<dim, n_vars, degree, n_points_1d>::local_apply_cell_height(
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_tra, degree, n_points_1d>::local_apply_cell_height(
     const MatrixFree<dim, Number> &,
     LinearAlgebra::distributed::Vector<Number>                    &dst,
     const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
@@ -461,7 +470,7 @@ namespace SpaceDiscretization
         for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
           {
             const auto q_q = phi_discharge.get_value(q);
-            phi_height.submit_gradient(model.massflux<dim, n_vars>(q_q), q);
+            phi_height.submit_gradient(model.massflux<dim>(q_q), q);
           }
 
         phi_height.integrate_scatter(EvaluationFlags::gradients,
@@ -469,8 +478,8 @@ namespace SpaceDiscretization
       }
   }
 
-  template <int dim, int n_vars, int degree, int n_points_1d>
-  void OceanoOperator<dim, n_vars, degree, n_points_1d>::local_apply_cell_discharge(
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_tra, degree, n_points_1d>::local_apply_cell_discharge(
     const MatrixFree<dim, Number> &,
     LinearAlgebra::distributed::Vector<Number>                    &dst,
     const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
@@ -498,10 +507,10 @@ namespace SpaceDiscretization
                 *bc->problem_data, phi_discharge.quadrature_point(q));
 
             phi_discharge.submit_gradient(
-              model.advectiveflux<dim, n_vars>(z_q, q_q, data_q[0]), q);
+              model.advectiveflux<dim>(z_q, q_q, data_q[0]), q);
 
             phi_discharge.submit_value(
-              model.source<dim, n_vars>(z_q, q_q, dz_q, data_q),
+              model.source<dim>(z_q, q_q, dz_q, data_q),
               q);
           }
 
@@ -565,8 +574,8 @@ namespace SpaceDiscretization
   // form goes with the same sign on both sides. For this reason we have used
   // another function to compute it.
   //
-  template <int dim, int n_vars, int degree, int n_points_1d>
-  void OceanoOperator<dim, n_vars, degree, n_points_1d>::local_apply_face_height(
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_tra, degree, n_points_1d>::local_apply_face_height(
     const MatrixFree<dim, Number> &,
     LinearAlgebra::distributed::Vector<Number>                    &dst,
     const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
@@ -603,13 +612,13 @@ namespace SpaceDiscretization
                 phi_height_m.quadrature_point(q)+1e-12*phi_height_m.normal_vector(q), 0);
 
             auto numerical_flux_p =
-              num_flux.numerical_massflux_weak<dim, n_vars>(phi_height_m.get_value(q),
-                                                            phi_height_p.get_value(q),
-                                                            phi_discharge_m.get_value(q),
-                                                            phi_discharge_p.get_value(q),
-                                                            phi_height_m.normal_vector(q),
-                                                            data_m,
-                                                            data_p);
+              num_flux.numerical_massflux_weak<dim>(phi_height_m.get_value(q),
+                                                    phi_height_p.get_value(q),
+                                                    phi_discharge_m.get_value(q),
+                                                    phi_discharge_p.get_value(q),
+                                                    phi_height_m.normal_vector(q),
+                                                    data_m,
+                                                    data_p);
 
             phi_height_m.submit_value(-numerical_flux_p, q);
             phi_height_p.submit_value(numerical_flux_p, q);
@@ -620,8 +629,8 @@ namespace SpaceDiscretization
       }
   }
 
-  template <int dim, int n_vars, int degree, int n_points_1d>
-  void OceanoOperator<dim, n_vars, degree, n_points_1d>::local_apply_face_discharge(
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_tra, degree, n_points_1d>::local_apply_face_discharge(
     const MatrixFree<dim, Number> &,
     LinearAlgebra::distributed::Vector<Number>                    &dst,
     const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
@@ -662,22 +671,22 @@ namespace SpaceDiscretization
                 phi_discharge_m.quadrature_point(q)+1e-12*phi_discharge_m.normal_vector(q), 0);
 
             auto numerical_flux_p =
-              num_flux.numerical_advflux_weak<dim, n_vars>(z_m,
-                                                           z_p,
-                                                           phi_discharge_m.get_value(q),
-                                                           phi_discharge_p.get_value(q),
-                                                           normal,
-                                                           data_m,
-                                                           data_p);
+              num_flux.numerical_advflux_weak<dim>(z_m,
+                                                   z_p,
+                                                   phi_discharge_m.get_value(q),
+                                                   phi_discharge_p.get_value(q),
+                                                   normal,
+                                                   data_m,
+                                                   data_p);
             auto numerical_flux_m = -numerical_flux_p;
 
 #if defined MODEL_SHALLOWWATER
             auto pressure_numerical_flux =
-              num_flux.numerical_presflux_strong<dim, n_vars>(z_m,
-                                                              z_p,
-                                                              normal,
-                                                              data_m,
-                                                              data_p);
+              num_flux.numerical_presflux_strong<dim>(z_m,
+                                                      z_p,
+                                                      normal,
+                                                      data_m,
+                                                      data_p);
             numerical_flux_m -= pressure_numerical_flux;
             numerical_flux_p -= pressure_numerical_flux;
 #endif
@@ -752,8 +761,8 @@ namespace SpaceDiscretization
   // noticeable, so we opt for the simpler code here. Also note that the final
   // `else` clause will catch the case when some part of the boundary was not
   // assigned any boundary condition via `OceanoOperator::set_..._boundary(...)`.
-  template <int dim, int n_vars, int degree, int n_points_1d>
-  void OceanoOperator<dim, n_vars, degree, n_points_1d>::local_apply_boundary_face_height(
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_tra, degree, n_points_1d>::local_apply_boundary_face_height(
     const MatrixFree<dim, Number> &,
     LinearAlgebra::distributed::Vector<Number>                    &dst,
     const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
@@ -761,6 +770,8 @@ namespace SpaceDiscretization
   {
     FEFaceEvaluation<dim, degree, n_points_1d, 1, Number> phi_height(data, true, 0);
     FEFaceEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge(data, true, 1);
+
+    const unsigned int n_vars = dim+1;
 
     for (unsigned int face = face_range.first; face < face_range.second; ++face)
       {
@@ -816,9 +827,9 @@ namespace SpaceDiscretization
                 z_p = w_p[0];
                 for (unsigned int d = 0; d < dim; ++d) q_p[d] = w_p[d+1];
                 const auto r_p
-                  = model.riemann_invariant_p<dim, n_vars>(z_m, q_m, normal, data_m);
+                  = model.riemann_invariant_p<dim>(z_m, q_m, normal, data_m);
                 const auto r_m
-                  = model.riemann_invariant_m<dim, n_vars>(z_p, q_p, normal, data_m);
+                  = model.riemann_invariant_m<dim>(z_p, q_p, normal, data_m);
                 const auto c_b = 0.25 * (r_p - r_m);
                 const auto h_b = c_b * c_b / model.g;
                 const auto u_b = 0.5 * (r_p + r_m);
@@ -835,8 +846,8 @@ namespace SpaceDiscretization
                                      "this part of the domain boundary?"));
 
             auto flux =
-              num_flux.numerical_massflux_weak<dim, n_vars>(z_m, z_p, q_m, q_p, 
-                                                            normal, data_m, data_m);
+              num_flux.numerical_massflux_weak<dim>(z_m, z_p, q_m, q_p,
+                                                    normal, data_m, data_m);
 
             phi_height.submit_value(-flux, q);
           }
@@ -845,8 +856,8 @@ namespace SpaceDiscretization
       }
   }
 
-  template <int dim, int n_vars, int degree, int n_points_1d>
-  void OceanoOperator<dim, n_vars, degree, n_points_1d>::local_apply_boundary_face_discharge(
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_tra, degree, n_points_1d>::local_apply_boundary_face_discharge(
     const MatrixFree<dim, Number> &,
     LinearAlgebra::distributed::Vector<Number>                    &dst,
     const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
@@ -854,6 +865,8 @@ namespace SpaceDiscretization
   {
     FEFaceEvaluation<dim, degree, n_points_1d, 1, Number> phi_height(data, true, 0);
     FEFaceEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge(data, true, 1);
+
+    const unsigned int n_vars = dim+1;
 
     for (unsigned int face = face_range.first; face < face_range.second; ++face)
       {
@@ -912,9 +925,9 @@ namespace SpaceDiscretization
                 z_p = w_p[0];
                 for (unsigned int d = 0; d < dim; ++d) q_p[d] = w_p[d+1];
                 const auto r_p
-                  = model.riemann_invariant_p<dim, n_vars>(z_m, q_m, normal, data_m);
+                  = model.riemann_invariant_p<dim>(z_m, q_m, normal, data_m);
                 const auto r_m
-                  = model.riemann_invariant_m<dim, n_vars>(z_p, q_p, normal, data_m);
+                  = model.riemann_invariant_m<dim>(z_p, q_p, normal, data_m);
                 const auto c_b = 0.25 * (r_p - r_m);
                 const auto h_b = c_b * c_b / model.g;
                 const auto u_b = 0.5 * (r_p + r_m);
@@ -931,11 +944,11 @@ namespace SpaceDiscretization
                                      "this part of the domain boundary?"));
 
             auto flux =
-              num_flux.numerical_advflux_weak<dim, n_vars>(z_m, z_p, q_m, q_p, normal, data_m, data_m);
+              num_flux.numerical_advflux_weak<dim>(z_m, z_p, q_m, q_p, normal, data_m, data_m);
 
 #if defined MODEL_SHALLOWWATER
             auto pressure_numerical_fluxes =
-              num_flux.numerical_presflux_strong<dim, n_vars>(z_m, z_p, normal, data_m, data_m);
+              num_flux.numerical_presflux_strong<dim>(z_m, z_p, normal, data_m, data_m);
             flux += pressure_numerical_fluxes;
 #endif
 
@@ -982,8 +995,8 @@ namespace SpaceDiscretization
   // `degree+1` in terms of the variable name) points for the mass
   // matrix. This leads to square contributions to the mass matrix and ensures
   // exact integration, as explained in the introduction.
-  template <int dim, int n_vars, int degree, int n_points_1d>
-  void OceanoOperator<dim, n_vars, degree, n_points_1d>::local_apply_inverse_mass_matrix_height(
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_tra, degree, n_points_1d>::local_apply_inverse_mass_matrix_height(
     const MatrixFree<dim, Number> &,
     LinearAlgebra::distributed::Vector<Number> &      dst,
     const LinearAlgebra::distributed::Vector<Number> &src,
@@ -1004,8 +1017,8 @@ namespace SpaceDiscretization
       }
   }
 
-  template <int dim, int n_vars, int degree, int n_points_1d>
-  void OceanoOperator<dim, n_vars, degree, n_points_1d>::local_apply_inverse_mass_matrix_discharge(
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_tra, degree, n_points_1d>::local_apply_inverse_mass_matrix_discharge(
     const MatrixFree<dim, Number> &,
     LinearAlgebra::distributed::Vector<Number> &      dst,
     const LinearAlgebra::distributed::Vector<Number> &src,
@@ -1060,8 +1073,8 @@ namespace SpaceDiscretization
   // Around all these functions, we put timer scopes to record the
   // computational time for statistics about the contributions of the various
   // parts.
-  template <int dim, int n_vars, int degree, int n_points_1d>
-  void OceanoOperator<dim, n_vars, degree, n_points_1d>::apply(
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_tra, degree, n_points_1d>::apply(
     const double                                      current_time,
     const LinearAlgebra::distributed::Vector<Number> &src,
     LinearAlgebra::distributed::Vector<Number> &      dst) const
@@ -1137,8 +1150,8 @@ namespace SpaceDiscretization
   // around 35% with the more optimized variant. In other words, this is a
   // speedup of around a third.
 #if defined TIMEINTEGRATOR_LOWSTORAGERUNGEKUTTA
-  template <int dim, int n_vars, int degree, int n_points_1d>
-  void OceanoOperator<dim, n_vars, degree, n_points_1d>::perform_stage(
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_tra, degree, n_points_1d>::perform_stage_hydro(
     const Number                                                   current_time,
     const Number                                                   factor_solution,
     const Number                                                   factor_ai,
@@ -1151,7 +1164,7 @@ namespace SpaceDiscretization
     LinearAlgebra::distributed::Vector<Number>                    &next_ri_discharge) const  
   {
     {
-      TimerOutput::Scope t(timer, "rk_stage - integrals L_h");
+      TimerOutput::Scope t(timer, "rk_stage hydro - integrals L_h");
 
       for (auto &i : bc->inflow_boundaries)
         i.second->set_time(current_time);
@@ -1181,7 +1194,7 @@ namespace SpaceDiscretization
 
 
     {
-      TimerOutput::Scope t(timer, "rk_stage - inv mass + vec upd");
+      TimerOutput::Scope t(timer, "rk_stage hydro - inv mass + vec upd");
       data.cell_loop(
         &OceanoOperator::local_apply_inverse_mass_matrix_height,
         this,
@@ -1252,8 +1265,8 @@ namespace SpaceDiscretization
   }
 
 #elif defined TIMEINTEGRATOR_STRONGSTABILITYRUNGEKUTTA
-  template <int dim, int n_vars, int degree, int n_points_1d>
-  void OceanoOperator<dim, n_vars, degree, n_points_1d>::perform_stage(
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_tra, degree, n_points_1d>::perform_stage_hydro(
     const unsigned int                                             current_stage,
     const Number                                                   current_time,
     const Number                                                   factor_bi,
@@ -1267,7 +1280,7 @@ namespace SpaceDiscretization
     std::vector<LinearAlgebra::distributed::Vector<Number>>       &next_ri_discharge) const
   {
     {
-      TimerOutput::Scope t(timer, "rk_stage - integrals L_h");
+      TimerOutput::Scope t(timer, "rk_stage hydro - integrals L_h");
 
       for (auto &i : bc->inflow_boundaries)
         i.second->set_time(current_time);
@@ -1298,7 +1311,7 @@ namespace SpaceDiscretization
 
     {
       unsigned int n_stages = next_ri_height.size()-1; //lrp: may be optimized passing as argument
-      TimerOutput::Scope t(timer, "rk_stage - inv mass + vec upd");
+      TimerOutput::Scope t(timer, "rk_stage hydro - inv mass + vec upd");
       data.cell_loop(
         &OceanoOperator::local_apply_inverse_mass_matrix_height,
         this,
@@ -1316,7 +1329,7 @@ namespace SpaceDiscretization
                   solution_height.local_element(i)  = factor_solution[0]  * sol_i + factor_bi * k_i;
 		  for (unsigned int j = 1; j < current_stage+1; ++j)
 		    {
-                      sol_i                      = next_ri_height[j].local_element(i);
+                      sol_i = next_ri_height[j].local_element(i);
                       solution_height.local_element(i) += factor_solution[j]  * sol_i;
                     }
                 }
@@ -1332,7 +1345,7 @@ namespace SpaceDiscretization
                   next_ri_height[ns].local_element(i) = factor_solution[0]  * sol_i + factor_bi * k_i;
 		  for (unsigned int j = 1; j < current_stage+1; ++j)
 		    {
-                      sol_i                         = next_ri_height[j].local_element(i);
+                      sol_i = next_ri_height[j].local_element(i);
                       next_ri_height[ns].local_element(i) += factor_solution[j]  * sol_i;
                     }
                 }
@@ -1358,7 +1371,7 @@ namespace SpaceDiscretization
                   solution_discharge.local_element(i)  = factor_solution[0]  * sol_i + factor_bi * k_i;
 		  for (unsigned int j = 1; j < current_stage+1; ++j)
 		    {
-                      sol_i                      = next_ri_discharge[j].local_element(i);
+                      sol_i = next_ri_discharge[j].local_element(i);
                       solution_discharge.local_element(i) += factor_solution[j]  * sol_i;
                     }
                 }
@@ -1374,7 +1387,7 @@ namespace SpaceDiscretization
                   next_ri_discharge[ns].local_element(i) = factor_solution[0]  * sol_i + factor_bi * k_i;
 		  for (unsigned int j = 1; j < current_stage+1; ++j)
 		    {
-                      sol_i                         = next_ri_discharge[j].local_element(i);
+                      sol_i = next_ri_discharge[j].local_element(i);
                       next_ri_discharge[ns].local_element(i) += factor_solution[j]  * sol_i;
                     }
                 }
@@ -1382,7 +1395,7 @@ namespace SpaceDiscretization
         },
         1);
     }
-  }  
+  }
 #endif
 
   // Having discussed the implementation of the functions that deal with
@@ -1427,13 +1440,14 @@ namespace SpaceDiscretization
   // accumulating the results as typical in integration tasks -- we can do
   // this because every vector entry has contributions from only a single
   // cell for discontinuous Galerkin discretizations.
+  //
   // The quadrature choosen to do the integral is the normal one stored in 
   // the finite element evaluation class, thus a Gaussian quadrature 
   // with the points lying at the interior
   // of the cell. This allows to mantain a discontinuous datum with
   // the jump passing through the edges of the cell.
-  template <int dim, int n_vars, int degree, int n_points_1d>
-  void OceanoOperator<dim, n_vars, degree, n_points_1d>::project(
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_tra, degree, n_points_1d>::project_hydro(
     const Function<dim> &                       function,
     LinearAlgebra::distributed::Vector<Number> &solution_height,
     LinearAlgebra::distributed::Vector<Number> &solution_discharge) const
@@ -1470,7 +1484,7 @@ namespace SpaceDiscretization
             for (unsigned int d = 0; d < dim; ++d)
               discharge[d] = evaluate_function<dim, Number>(function,
                                                 phi_discharge.quadrature_point(q),
-                                                d+1);
+                                                1+d);
             phi_discharge.submit_dof_value(discharge, q);
           }
         inverse_discharge.transform_from_q_points_to_basis(dim,
@@ -1505,20 +1519,16 @@ namespace SpaceDiscretization
   // has a remainder compared to the SIMD width.
   // 
   // Pay also attention to the implementation of the error formula. The error has
-  // dimension `n_vars-(dim-1)` because we compute only one error for all the
-  // momentum components. Also, the formula implies that the variables are stored
-  // in the following order $(h,\, hu^i,\, T^j)$ with $i=1,...dim$ and $j=0,...N_T$
-  // the number of tracers. First the error we compute the error on the depth,
-  // the momentum error and finally we loop over the tracers. The number of tracers
-  // is recovered from the number of variables and the problem dimension `n_vars-dim-1`.
-  template <int dim, int n_vars, int degree, int n_points_1d>
-  std::array<double, n_vars-dim+1> OceanoOperator<dim, n_vars, degree, n_points_1d>::compute_errors(
+  // dimension `2` because we compute only one error for all the
+  // momentum components.
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  std::array<double, 2> OceanoOperator<dim, n_tra, degree, n_points_1d>::compute_errors_hydro(
     const Function<dim> &                             function,
     const LinearAlgebra::distributed::Vector<Number> &solution_height,
     const LinearAlgebra::distributed::Vector<Number> &solution_discharge) const
   {
     TimerOutput::Scope t(timer, "compute errors");
-    const unsigned int n_err = n_vars-dim+1;
+    const unsigned int n_err = 2;
     double             errors_squared[n_err] = {};
     FEEvaluation<dim, degree, n_points_1d, 1, Number> phi_height(data, 0, 0);
     FEEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge(data, 1, 0);
@@ -1531,7 +1541,7 @@ namespace SpaceDiscretization
         phi_discharge.gather_evaluate(solution_discharge, EvaluationFlags::values);
 
         VectorizedArray<Number> local_errors_squared[n_err] = {};
-        Tensor<1, dim+1, VectorizedArray<Number>> error; 
+        Tensor<1, 1+dim, VectorizedArray<Number>> error;
         for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
           {
             error[0] = evaluate_function<dim, Number>(
@@ -1543,7 +1553,7 @@ namespace SpaceDiscretization
             local_errors_squared[0] += error[0] * error[0] * JxW;
           }
         for (unsigned int q = 0; q < phi_discharge.n_q_points; ++q)
-          {          
+          {
             for (unsigned int d = 0; d < dim; ++d)
               error[d+1] = evaluate_function<dim, Number>(
               			function, 
@@ -1553,9 +1563,8 @@ namespace SpaceDiscretization
             const auto JxW = phi_discharge.JxW(q);
             for (unsigned int d = 0; d < dim; ++d)
               local_errors_squared[1] += (error[d + 1] * error[d + 1]) * JxW;
-//            for (unsigned int t = 0; t < n_vars-dim-1; ++t)
-//              local_errors_squared[t+dim] += (error[t + dim + 1] * error[t + dim + 1]) * JxW;
-          }  
+          }
+
         for (unsigned int v = 0; v < data.n_active_entries_per_cell_batch(cell);
              ++v)
           for (unsigned int d = 0; d < n_err; ++d)
@@ -1611,8 +1620,8 @@ namespace SpaceDiscretization
   // are close to the maximal value anyway. In all other cases, convergence
   // will be quick. Thus, we can merely hardcode 5 iterations here and be
   // confident that the result is good.
-  template <int dim, int n_vars, int degree, int n_points_1d>
-  double OceanoOperator<dim, n_vars, degree, n_points_1d>::compute_cell_transport_speed(
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  double OceanoOperator<dim, n_tra, degree, n_points_1d>::compute_cell_transport_speed(
     const LinearAlgebra::distributed::Vector<Number> &solution_height,
     const LinearAlgebra::distributed::Vector<Number> &solution_discharge) const
   {
@@ -1635,7 +1644,7 @@ namespace SpaceDiscretization
                 *bc->problem_data, phi_height.quadrature_point(q), 0);
             const auto zq = phi_height.get_value(q);
             const auto qq = phi_discharge.get_value(q);
-            const auto velocity = model.velocity<dim, n_vars>(zq, qq, data_q);
+            const auto velocity = model.velocity<dim>(zq, qq, data_q);
 
             const auto inverse_jacobian = phi_height.inverse_jacobian(q);
             const auto convective_speed = inverse_jacobian * velocity;
@@ -1645,7 +1654,7 @@ namespace SpaceDiscretization
                 std::max(convective_limit, std::abs(convective_speed[d]));
 
             const auto speed_of_sound =
-              std::sqrt(model.square_wavespeed<dim, n_vars>(zq, data_q));
+              std::sqrt(model.square_wavespeed<dim>(zq, data_q));
 
             Tensor<1, dim, VectorizedArray<Number>> eigenvector;
             for (unsigned int d = 0; d < dim; ++d)
@@ -1683,4 +1692,4 @@ namespace SpaceDiscretization
 
 } // namespace SpaceDiscretization
 
-#endif //EULERDG_HPP
+#endif //OCEANDG_HPP

@@ -48,7 +48,15 @@ namespace TimeIntegrator
   // @sect3{Strong Stability Preserving explicit Runge--Kutta time integrators}
 
   // The next few lines implement the Strong Stability Preserving Runge--Kutta
-  // methods. These methods have specific tableaux with coefficients
+  // methods for the hydrodynamic and tracer equations. The hydrodynamics and
+  // the tracers must be solved with the same time-integrator for consistency
+  // reason (the so called "tracer consistency with the mass-equation"). We
+  // are obliged to time timestep both hydrodynamics and tracers variables
+  // with a unique call to `perform_time_step`. To distinguish the two cases,
+  // thus avoiding compiler warnings or fake loops when tracers are absent we
+  // use preprocessor. Although this may worsen the code readibility, we believe it is
+  // better then creating a derived class that overloads `perform_time_step`.
+  // The Strong Stability Preserving Runge-Kutta methods have specific tableaux with coefficients
   // $\beta_i$ and $\alpha_i$ as shown in the introduction. As usual in Runge--Kutta
   // method, we can deduce time steps, $c_i = \sum_{j=1}^{i-2} b_i + a_{i-1}$
   // from those coefficients. The main advantage of this kind of scheme is the
@@ -74,10 +82,13 @@ namespace TimeIntegrator
                            const double             time_step,
                            VectorType              &solution_height,
                            VectorType              &solution_discharge,
+                           VectorType              &solution_tracer,
                            std::vector<VectorType> &vec_ri_height,
                            std::vector<VectorType> &vec_ri_discharge,
+                           std::vector<VectorType> &vec_ri_tracer,
                            VectorType              &vec_ki_height,
-                           VectorType              &vec_ki_discharge) const;
+                           VectorType              &vec_ki_discharge,
+                           VectorType              &vec_ki_tracer) const;
 
   private:
     std::vector<std::vector<double>> ai;
@@ -152,41 +163,67 @@ namespace TimeIntegrator
     const double             time_step,
     VectorType              &solution_height,
     VectorType              &solution_discharge,
+    VectorType              &solution_tracer,
     std::vector<VectorType> &vec_ri_height,
     std::vector<VectorType> &vec_ri_discharge,
+    std::vector<VectorType> &vec_ri_tracer,
     VectorType              &vec_ki_height,
-    VectorType              &vec_ki_discharge) const
+    VectorType              &vec_ki_discharge,
+    VectorType              &vec_ki_tracer) const
   {
     AssertDimension(ci.size(), bi.size());
 
-    pde_operator.perform_stage(0,
-                               current_time,
-                               bi[0] * time_step,
-                               &ai[0][0],
-                               {solution_height, solution_discharge},
-                               vec_ki_height,
-                               vec_ki_discharge,
-                               solution_height,
-                               solution_discharge,
-                               vec_ri_height,
-                               vec_ri_discharge);
+#ifndef OCEANO_WITH_TRACERS
+    (void) solution_tracer;
+    (void) vec_ri_tracer;
+    (void) vec_ki_tracer;
+#endif
+
+    pde_operator.perform_stage_hydro(0,
+                                     current_time,
+                                     bi[0] * time_step,
+                                     &ai[0][0],
+                                     {solution_height, solution_discharge},
+                                     vec_ki_height,
+                                     vec_ki_discharge,
+                                     solution_height,
+                                     solution_discharge,
+                                     vec_ri_height,
+                                     vec_ri_discharge);
+#ifdef OCEANO_WITH_TRACERS
+    pde_operator.perform_stage_tracers(0,
+                                       bi[0] * time_step,
+                                       &ai[0][0],
+                                       {solution_height, solution_discharge, solution_tracer},
+                                       vec_ki_tracer,
+                                       solution_tracer,
+                                       vec_ri_tracer);
+#endif
 
     for (unsigned int stage = 1; stage < ci.size(); ++stage)
       {
         const double c_i = ci[stage];
 
-        pde_operator.perform_stage(stage,
-                                   current_time + c_i * time_step,
-                                   bi[stage] * time_step,
-                                   &ai[stage][0],
-                                   {vec_ri_height[stage], vec_ri_discharge[stage]},
-                                   vec_ki_height,
-                                   vec_ki_discharge,
-                                   solution_height,
-                                   solution_discharge,
-                                   vec_ri_height,
-                                   vec_ri_discharge);
-
+        pde_operator.perform_stage_hydro(stage,
+                                         current_time + c_i * time_step,
+                                         bi[stage] * time_step,
+                                         &ai[stage][0],
+                                         {vec_ri_height[stage], vec_ri_discharge[stage]},
+                                         vec_ki_height,
+                                         vec_ki_discharge,
+                                         solution_height,
+                                         solution_discharge,
+                                         vec_ri_height,
+                                         vec_ri_discharge);
+#ifdef OCEANO_WITH_TRACERS
+        pde_operator.perform_stage_tracers(stage,
+                                          bi[stage] * time_step,
+                                          &ai[stage][0],
+                                          {vec_ri_height[stage], vec_ri_discharge[stage], vec_ri_tracer[stage]},
+                                          vec_ki_tracer,
+                                          solution_tracer,
+                                          vec_ri_tracer);
+#endif
       }
   }
 

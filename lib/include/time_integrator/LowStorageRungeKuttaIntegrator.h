@@ -92,10 +92,13 @@ namespace TimeIntegrator
                            const double    time_step,
                            VectorType &    solution_height,
                            VectorType &    solution_discharge,
+                           VectorType &    solution_tracer,
                            VectorType &    vec_ri_height,
                            VectorType &    vec_ri_discharge,
+                           VectorType &    vec_ri_tracer,
                            VectorType &    vec_ki_height,
-                           VectorType &    vec_ki_discharge) const;
+                           VectorType &    vec_ki_discharge,
+                           VectorType &    vec_ki_tracer) const;
 
   private:
     std::vector<double> bi;
@@ -185,44 +188,72 @@ namespace TimeIntegrator
   // skip the computation of the vector $\mathbf{r}_{s+1}$ as there is no
   // coefficient $a_s$ available (nor will it be used).
   template <typename VectorType, typename Operator>
-  void LowStorageRungeKuttaIntegrator::perform_time_step(const Operator &pde_operator,
-                                                         const double    current_time,
-                         const double    time_step,
-                         VectorType &    solution_height,
-                         VectorType &    solution_discharge,
-                         VectorType &    vec_ri_height,
-                         VectorType &    vec_ri_discharge,
-                         VectorType &    vec_ki_height,
-                         VectorType &    vec_ki_discharge) const
+  void LowStorageRungeKuttaIntegrator::perform_time_step(
+    const Operator &pde_operator,
+    const double    current_time,
+    const double    time_step,
+    VectorType &    solution_height,
+    VectorType &    solution_discharge,
+    VectorType &    solution_tracer,
+    VectorType &    vec_ri_height,
+    VectorType &    vec_ri_discharge,
+    VectorType &    vec_ri_tracer,
+    VectorType &    vec_ki_height,
+    VectorType &    vec_ki_discharge,
+    VectorType &    vec_ki_tracer) const
   {
     AssertDimension(ai.size() + 1, bi.size());
 
-    pde_operator.perform_stage(current_time,
-                               bi[0] * time_step,
-                               ai[0] * time_step,
-                               {solution_height, solution_discharge},
-                               vec_ri_height,
-                               vec_ri_discharge,
-                               solution_height,
-                               solution_discharge,
-                               vec_ri_height,
-                               vec_ri_discharge);
+#ifndef OCEANO_WITH_TRACERS
+    (void) solution_tracer;
+    (void) vec_ri_tracer;
+    (void) vec_ki_tracer;
+#endif
+
+    pde_operator.perform_stage_hydro(current_time,
+                                     bi[0] * time_step,
+                                     ai[0] * time_step,
+                                     {solution_height, solution_discharge},
+                                     vec_ri_height,
+                                     vec_ri_discharge,
+                                     solution_height,
+                                     solution_discharge,
+                                     vec_ri_height,
+                                     vec_ri_discharge);
+#ifdef OCEANO_WITH_TRACERS
+    pde_operator.perform_stage_tracers(bi[0] * time_step,
+                                       ai[0] * time_step,
+                                       {solution_height, solution_discharge, solution_tracer},
+                                       vec_ri_tracer,
+                                       solution_tracer,
+                                       vec_ri_tracer);
+#endif
 
     for (unsigned int stage = 1; stage < bi.size(); ++stage)
       {
         const double c_i = ci[stage];
-        pde_operator.perform_stage(current_time + c_i * time_step,
-                                   bi[stage] * time_step,
-                                   (stage == bi.size() - 1 ?
-                                   0 :
-                                     ai[stage] * time_step),
-                                   {vec_ri_height, vec_ri_discharge},
-                                   vec_ki_height,
-                                   vec_ki_discharge,
-                                   solution_height,
-                                   solution_discharge,
-                                   vec_ri_height,
-                                   vec_ri_discharge);
+        pde_operator.perform_stage_hydro(current_time + c_i * time_step,
+                                         bi[stage] * time_step,
+                                         (stage == bi.size() - 1 ?
+                                           0 :
+                                           ai[stage] * time_step),
+                                         {vec_ri_height, vec_ri_discharge},
+                                         vec_ki_height,
+                                         vec_ki_discharge,
+                                         solution_height,
+                                         solution_discharge,
+                                         vec_ri_height,
+                                         vec_ri_discharge);
+#ifdef OCEANO_WITH_TRACERS
+        pde_operator.perform_stage_tracers(bi[stage] * time_step,
+                                           (stage == bi.size() - 1 ?
+                                             0 :
+                                             ai[stage] * time_step),
+                                           {vec_ri_height, vec_ri_discharge, vec_ri_tracer},
+                                           vec_ki_tracer,
+                                           solution_tracer,
+                                           vec_ri_tracer);
+#endif
       }
   }  
   

@@ -42,8 +42,8 @@ namespace NumericalFlux
   // I would have liked to template the numerical flux class with
   // <int dim, typename Number> which would have been cleaner. But I was not able
   // to compile the call to the function `numerical_flux_weak()` which take
-  // as argument `Tensor<1, n_vars, Number>` while is receiving
-  // `Tensor<1, n_vars, VectorizedArray<Number>>`. I don't know why, without
+  // as argument `Tensor<1, dim, Number>` while is receiving
+  // `Tensor<1, dim, VectorizedArray<Number>>`. I don't know why, without
   // a template class, everything works. I leave this for future work.
   //
   // In this and the following functions, we use `z` for the mass variable,
@@ -60,7 +60,7 @@ namespace NumericalFlux
     LaxFriedrichsModified(IO::ParameterHandler &param);
     ~LaxFriedrichsModified(){};
 
-    template <int dim, int n_vars, typename Number>
+    template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Number
       numerical_massflux_weak(const Number                  z_m,
@@ -71,7 +71,7 @@ namespace NumericalFlux
                               const Number                  data_m,
                               const Number                  data_p) const;
 
-    template <int dim, int n_vars, typename Number>
+    template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Number>
       numerical_advflux_weak(const Number                  z_m,
@@ -81,6 +81,32 @@ namespace NumericalFlux
                              const Tensor<1, dim, Number> &normal,
                              const Number                  data_m,
                              const Number                  data_p) const;
+
+    template <int dim, int n_tra, typename Number>
+    inline DEAL_II_ALWAYS_INLINE //
+      Tensor<1, n_tra, Number>
+      numerical_tracflux_weak(const Number                    z_m,
+                              const Number                    z_p,
+                              const Tensor<1, dim, Number>   &q_m,
+                              const Tensor<1, dim, Number>   &q_p,
+                              const Tensor<1, n_tra, Number> &t_m,
+                              const Tensor<1, n_tra, Number> &t_p,
+                              const Tensor<1, dim, Number>   &normal,
+                              const Number                    data_m,
+                              const Number                    data_p) const;
+
+    template <int dim, typename Number>
+    inline DEAL_II_ALWAYS_INLINE //
+      Number
+      numerical_tracflux_weak(const Number                  z_m,
+                              const Number                  z_p,
+                              const Tensor<1, dim, Number> &q_m,
+                              const Tensor<1, dim, Number> &q_p,
+                              const Number                  t_m,
+                              const Number                  t_p,
+                              const Tensor<1, dim, Number> &normal,
+                              const Number                  data_m,
+                              const Number                  data_p) const;
   };
 
 
@@ -126,7 +152,7 @@ namespace NumericalFlux
   // form, we multiply by the result by the normal vector for all terms in the
   // equation. In these multiplications, the `operator*` defined above enables
   // a compact notation similar to the mathematical definition.
-  template <int dim, int n_vars, typename Number>
+  template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Number
     LaxFriedrichsModified::numerical_massflux_weak(
@@ -138,8 +164,8 @@ namespace NumericalFlux
       const Number                      data_m,
       const Number                      data_p) const
   {
-    const auto lambda_m = model.square_speed_estimate<dim, n_vars>(z_m, q_m, data_m);
-    const auto lambda_p = model.square_speed_estimate<dim, n_vars>(z_p, q_p, data_p);
+    const auto lambda_m = model.square_speed_estimate<dim>(z_m, q_m, data_m);
+    const auto lambda_p = model.square_speed_estimate<dim>(z_p, q_p, data_p);
 
     const auto lambda =
       0.5 * std::sqrt(std::max(lambda_p, lambda_m));
@@ -148,7 +174,7 @@ namespace NumericalFlux
            0.5 * lambda * (z_m - z_p);
   }
 
-  template <int dim, int n_vars, typename Number>
+  template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
     LaxFriedrichsModified::numerical_advflux_weak(
@@ -160,11 +186,11 @@ namespace NumericalFlux
       const Number                   data_m,
       const Number                   data_p) const
   {
-    const auto lambda_m = model.square_speed_estimate<dim, n_vars>(z_m, q_m, data_m);
-    const auto lambda_p = model.square_speed_estimate<dim, n_vars>(z_p, q_p, data_p);
+    const auto lambda_m = model.square_speed_estimate<dim>(z_m, q_m, data_m);
+    const auto lambda_p = model.square_speed_estimate<dim>(z_p, q_p, data_p);
 
-    const auto flux_m = model.advectiveflux<dim, n_vars>(z_m, q_m, data_m);
-    const auto flux_p = model.advectiveflux<dim, n_vars>(z_p, q_p, data_p);
+    const auto flux_m = model.advectiveflux<dim>(z_m, q_m, data_m);
+    const auto flux_p = model.advectiveflux<dim>(z_p, q_p, data_p);
 
     const auto lambda =
       0.5 * std::sqrt(std::max(lambda_p, lambda_m));
@@ -172,6 +198,66 @@ namespace NumericalFlux
     return 0.5 * (flux_m * normal + flux_p * normal) +
            0.5 * lambda * (q_m - q_p);
   }
+
+#ifdef OCEANO_WITH_TRACERS
+  template <int dim, int n_tra, typename Number>
+  inline DEAL_II_ALWAYS_INLINE //
+    Tensor<1, n_tra, Number>
+    LaxFriedrichsModified::numerical_tracflux_weak(
+      const Number                    z_m,
+      const Number                    z_p,
+      const Tensor<1, dim, Number>   &q_m,
+      const Tensor<1, dim, Number>   &q_p,
+      const Tensor<1, n_tra, Number> &t_m,
+      const Tensor<1, n_tra, Number> &t_p,
+      const Tensor<1, dim, Number>   &normal,
+      const Number                    data_m,
+      const Number                    data_p) const
+  {
+    const auto lambda_m = model.square_speed_estimate<dim>(z_m, q_m, data_m);
+    const auto lambda_p = model.square_speed_estimate<dim>(z_p, q_p, data_p);
+
+    const auto flux_m = model.tracerflux<dim, n_tra>(z_m, q_m, t_m, data_m);
+    const auto flux_p = model.tracerflux<dim, n_tra>(z_p, q_p, t_p, data_p);
+
+    const auto lambda =
+      0.5 * std::sqrt(std::max(lambda_p, lambda_m));
+
+    Tensor<1, n_tra, Number> numflux;
+    for (unsigned int t = 0; t < n_tra; ++t)
+      numflux[t] = 0.5 * (flux_m[t] * normal + flux_p[t] * normal) +
+           0.5 * lambda * (t_m[t] - t_p[t]);
+
+     return numflux;
+  }
+
+  template <int dim, typename Number>
+  inline DEAL_II_ALWAYS_INLINE //
+    Number
+    LaxFriedrichsModified::numerical_tracflux_weak(
+      const Number                   z_m,
+      const Number                   z_p,
+      const Tensor<1, dim, Number>  &q_m,
+      const Tensor<1, dim, Number>  &q_p,
+      const Number                   t_m,
+      const Number                   t_p,
+      const Tensor<1, dim, Number>  &normal,
+      const Number                   data_m,
+      const Number                   data_p) const
+  {
+    const auto lambda_m = model.square_speed_estimate<dim>(z_m, q_m, data_m);
+    const auto lambda_p = model.square_speed_estimate<dim>(z_p, q_p, data_p);
+
+    const auto flux_m = model.tracerflux(z_m, q_m, t_m, data_m);
+    const auto flux_p = model.tracerflux(z_p, q_p, t_p, data_p);
+
+    const auto lambda =
+      0.5 * std::sqrt(std::max(lambda_p, lambda_m));
+
+    return 0.5 * (flux_m * normal + flux_p * normal) +
+           0.5 * lambda * (t_m - t_p);
+  }
+#endif
 } // namespace NumericalFlux
 
 #endif //LAXFRIEDRICHSMODIFIED_HPP
