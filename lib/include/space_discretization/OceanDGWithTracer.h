@@ -132,6 +132,16 @@ namespace SpaceDiscretization
       LinearAlgebra::distributed::Vector<Number>                    &vec_ki_tracer,
       LinearAlgebra::distributed::Vector<Number>                    &solution_tracer,
       std::vector<LinearAlgebra::distributed::Vector<Number>>       &next_ri_tracer) const;
+#elif defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
+
+    void
+    perform_stage_tracers(
+      const unsigned int                                             cur_stage,
+      const Number                                                  *factor_residual,
+      const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
+      std::vector<LinearAlgebra::distributed::Vector<Number>>       &vec_ki_tracer,
+      LinearAlgebra::distributed::Vector<Number>                    &solution_tracer,
+      LinearAlgebra::distributed::Vector<Number>                    &next_ri_tracer) const;
 
 #endif
     void project_tracers(const Function<dim> &                       function,
@@ -884,6 +894,76 @@ namespace SpaceDiscretization
 		    {
                       sol_i = next_ri_tracer[j].local_element(i);
                       next_ri_tracer[ns].local_element(i) += factor_solution[j]  * sol_i;
+                    }
+                }
+            }
+        },
+        2);
+    }
+  }
+
+#elif defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperatorWithTracer<dim, n_tra, degree, n_points_1d>::perform_stage_tracers(
+    const unsigned int                                             current_stage,
+    const Number                                                  *factor_residual,
+    const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
+    std::vector<LinearAlgebra::distributed::Vector<Number>>       &vec_ki_tracer,
+    LinearAlgebra::distributed::Vector<Number>                    &solution_tracer,
+    LinearAlgebra::distributed::Vector<Number>                    &next_ri_tracer) const
+  {
+    {
+      TimerOutput::Scope t(timer, "rk_stage tracer - integrals L_h");
+
+      data.loop(&OceanoOperatorWithTracer::local_apply_cell_tracer,
+                &OceanoOperatorWithTracer::local_apply_face_tracer,
+                &OceanoOperatorWithTracer::local_apply_boundary_face_tracer,
+                this,
+                vec_ki_tracer.front(),
+                current_ri,
+                true,
+                MatrixFree<dim, Number>::DataAccessOnFaces::values,
+                MatrixFree<dim, Number>::DataAccessOnFaces::values);
+    }
+
+
+    {
+      unsigned int n_stages = vec_ki_tracer.size()-1; //lrp: may be optimized passing as argument
+      TimerOutput::Scope t(timer, "rk_stage tracer - inv mass + vec upd");
+      data.cell_loop(
+        &OceanoOperatorWithTracer::local_apply_inverse_mass_matrix_tracer,
+        this,
+        vec_ki_tracer[current_stage+1],
+        vec_ki_tracer.front(),
+        std::function<void(const unsigned int, const unsigned int)>(),
+        [&](const unsigned int start_range, const unsigned int end_range) {
+          if (current_stage == n_stages-1)
+            {
+              /* DEAL_II_OPENMP_SIMD_PRAGMA */
+              for (unsigned int i = start_range; i < end_range; ++i)
+                {
+                  Number k_i           = vec_ki_tracer[1].local_element(i);
+                  const Number sol_i   = solution_tracer.local_element(i);
+                  solution_tracer.local_element(i)  = sol_i + factor_residual[0]  * k_i;
+		  for (unsigned int j = 1; j < current_stage+1; ++j)
+		    {
+                      k_i = vec_ki_tracer[j+1].local_element(i);
+                      solution_tracer.local_element(i) += factor_residual[j]  * k_i;
+                    }
+                }
+            }
+          else
+            {
+              /* DEAL_II_OPENMP_SIMD_PRAGMA */
+              for (unsigned int i = start_range; i < end_range; ++i)
+                {
+                  Number k_i            = vec_ki_tracer[1].local_element(i);
+                  const Number sol_i    = solution_tracer.local_element(i);
+                  next_ri_tracer.local_element(i) = sol_i + factor_residual[0]  * k_i;
+		  for (unsigned int j = 1; j < current_stage+1; ++j)
+		    {
+                      k_i = vec_ki_tracer[j+1].local_element(i);
+                      next_ri_tracer.local_element(i) += factor_residual[j]  * k_i;
                     }
                 }
             }

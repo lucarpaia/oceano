@@ -193,6 +193,19 @@ namespace SpaceDiscretization
       LinearAlgebra::distributed::Vector<Number>                    &solution_discharge,
       std::vector<LinearAlgebra::distributed::Vector<Number>>       &next_ri_height,
       std::vector<LinearAlgebra::distributed::Vector<Number>>       &next_ri_discharge) const;
+#elif defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
+    void
+    perform_stage_hydro(
+      const unsigned int                                             cur_stage,
+      const Number                                                   cur_time,
+      const Number                                                  *factor_residual,
+      const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
+      std::vector<LinearAlgebra::distributed::Vector<Number>>       &vec_ki_height,
+      std::vector<LinearAlgebra::distributed::Vector<Number>>       &vec_ki_discharge,
+      LinearAlgebra::distributed::Vector<Number>                    &solution_height,
+      LinearAlgebra::distributed::Vector<Number>                    &solution_discharge,
+      LinearAlgebra::distributed::Vector<Number>                    &next_ri_height,
+      LinearAlgebra::distributed::Vector<Number>                    &next_ri_discharge) const;
 #endif
 
     void project_hydro(const Function<dim> &                       function,
@@ -1389,6 +1402,136 @@ namespace SpaceDiscretization
 		    {
                       sol_i = next_ri_discharge[j].local_element(i);
                       next_ri_discharge[ns].local_element(i) += factor_solution[j]  * sol_i;
+                    }
+                }
+            }
+        },
+        1);
+    }
+  }
+
+#elif defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_tra, degree, n_points_1d>::perform_stage_hydro(
+    const unsigned int                                             current_stage,
+    const Number                                                   current_time,
+    const Number                                                  *factor_residual,
+    const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
+    std::vector<LinearAlgebra::distributed::Vector<Number>>       &vec_ki_height,
+    std::vector<LinearAlgebra::distributed::Vector<Number>>       &vec_ki_discharge,
+    LinearAlgebra::distributed::Vector<Number>                    &solution_height,
+    LinearAlgebra::distributed::Vector<Number>                    &solution_discharge,
+    LinearAlgebra::distributed::Vector<Number>                    &next_ri_height,
+    LinearAlgebra::distributed::Vector<Number>                    &next_ri_discharge) const
+  {
+    {
+      TimerOutput::Scope t(timer, "rk_stage hydro - integrals L_h");
+
+      for (auto &i : bc->inflow_boundaries)
+        i.second->set_time(current_time);
+      for (auto &i : bc->supercritical_outflow_boundaries)
+        i.second->set_time(current_time);
+
+      data.loop(&OceanoOperator::local_apply_cell_height,
+                &OceanoOperator::local_apply_face_height,
+                &OceanoOperator::local_apply_boundary_face_height,
+                this,
+                vec_ki_height.front(),
+                current_ri,
+                true,
+                MatrixFree<dim, Number>::DataAccessOnFaces::values,
+                MatrixFree<dim, Number>::DataAccessOnFaces::values);
+
+      data.loop(&OceanoOperator::local_apply_cell_discharge,
+                &OceanoOperator::local_apply_face_discharge,
+                &OceanoOperator::local_apply_boundary_face_discharge,
+                this,
+                vec_ki_discharge.front(),
+                current_ri,
+                true,
+                MatrixFree<dim, Number>::DataAccessOnFaces::values,
+                MatrixFree<dim, Number>::DataAccessOnFaces::values);
+    }
+
+
+    {
+      unsigned int n_stages = vec_ki_height.size()-1;
+      TimerOutput::Scope t(timer, "rk_stage hydro - inv mass + vec upd");
+      data.cell_loop(
+        &OceanoOperator::local_apply_inverse_mass_matrix_height,
+        this,
+        vec_ki_height[current_stage+1],
+        vec_ki_height.front(),
+        std::function<void(const unsigned int, const unsigned int)>(),
+        [&](const unsigned int start_range, const unsigned int end_range) {
+          if (current_stage == n_stages-1)
+            {
+              /* DEAL_II_OPENMP_SIMD_PRAGMA */
+              for (unsigned int i = start_range; i < end_range; ++i)
+                {
+                  Number k_i           = vec_ki_height[1].local_element(i);
+                  const Number sol_i   = solution_height.local_element(i);
+                  solution_height.local_element(i)  = sol_i + factor_residual[0] * k_i;
+		  for (unsigned int j = 1; j < current_stage+1; ++j)
+		    {
+                      k_i = vec_ki_height[j+1].local_element(i);
+                      solution_height.local_element(i) += factor_residual[j]  * k_i;
+                    }
+                }
+            }
+          else
+            {
+              /* DEAL_II_OPENMP_SIMD_PRAGMA */
+              for (unsigned int i = start_range; i < end_range; ++i)
+                {
+                  Number k_i            = vec_ki_height[1].local_element(i);
+                  const Number sol_i    = solution_height.local_element(i);
+                  next_ri_height.local_element(i) = sol_i + factor_residual[0]  * k_i;
+		  for (unsigned int j = 1; j < current_stage+1; ++j)
+		    {
+                      k_i = vec_ki_height[j+1].local_element(i);
+                      next_ri_height.local_element(i) += factor_residual[j]  * k_i;
+                    }
+                }
+            }
+        },
+        0);
+
+
+      data.cell_loop(
+        &OceanoOperator::local_apply_inverse_mass_matrix_discharge,
+        this,
+        vec_ki_discharge[current_stage+1],
+        vec_ki_discharge.front(),
+        std::function<void(const unsigned int, const unsigned int)>(),
+        [&](const unsigned int start_range, const unsigned int end_range) {
+          if (current_stage == n_stages-1)
+            {
+              /* DEAL_II_OPENMP_SIMD_PRAGMA */
+              for (unsigned int i = start_range; i < end_range; ++i)
+                {
+                  Number k_i           = vec_ki_discharge[1].local_element(i);
+                  const Number sol_i   = solution_discharge.local_element(i);
+                  solution_discharge.local_element(i)  = sol_i + factor_residual[0] * k_i;
+		  for (unsigned int j = 1; j < current_stage+1; ++j)
+		    {
+                      k_i = vec_ki_discharge[j+1].local_element(i);
+                      solution_discharge.local_element(i) += factor_residual[j]  * k_i;
+                    }
+                }
+            }
+          else
+            {
+              /* DEAL_II_OPENMP_SIMD_PRAGMA */
+              for (unsigned int i = start_range; i < end_range; ++i)
+                {
+                  Number k_i            = vec_ki_discharge[1].local_element(i);
+                  const Number sol_i    = solution_discharge.local_element(i);
+                  next_ri_discharge.local_element(i) = sol_i + factor_residual[0]  * k_i;
+		  for (unsigned int j = 1; j < current_stage+1; ++j)
+		    {
+                      k_i = vec_ki_discharge[j+1].local_element(i);
+                      next_ri_discharge.local_element(i) += factor_residual[j]  * k_i;
                     }
                 }
             }

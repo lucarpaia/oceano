@@ -39,7 +39,8 @@
 // now we have coded two explicit schemes that belong to the family of Runge-Kutta scheme.
 // The low-storage scheme privileges the rapidity of accessing the memory. The
 // strong-stability-preserving scheme privileges non-linear stability.
-#define TIMEINTEGRATOR_STRONGSTABILITYRUNGEKUTTA
+#undef  TIMEINTEGRATOR_STRONGSTABILITYRUNGEKUTTA
+#define TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
 #undef  TIMEINTEGRATOR_LOWSTORAGERUNGEKUTTA
 // The numerical flux (Riemann solver) at the faces between cells. For this
 // program, we have implemented a modified variant of the Lax--Friedrichs
@@ -141,6 +142,8 @@
 #include <time_integrator/LowStorageRungeKuttaIntegrator.h>
 #elif defined TIMEINTEGRATOR_STRONGSTABILITYRUNGEKUTTA
 #include <time_integrator/StrongStabilityRungeKuttaIntegrator.h>
+#elif defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
+#include <time_integrator/ExplicitRungeKuttaIntegrator.h>
 #endif
 #if defined ICBC_ISENTROPICVORTEX
 #include <icbc/Icbc_IsentropicVortex.h>
@@ -187,6 +190,8 @@ namespace Problem
   constexpr TimeIntegrator::LowStorageRungeKuttaScheme rk_scheme = TimeIntegrator::stage_3_order_3;
 #elif defined TIMEINTEGRATOR_STRONGSTABILITYRUNGEKUTTA
   constexpr TimeIntegrator::StrongStabilityRungeKuttaScheme rk_scheme = TimeIntegrator::stage_3_order_3;
+#elif defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
+  constexpr TimeIntegrator::ExplicitRungeKuttaScheme rk_scheme = TimeIntegrator::stage_3_order_3;
 #endif
 
   // @sect3{The OceanoProblem class}
@@ -870,6 +875,23 @@ namespace Problem
     rk_register_height_2.reinit(solution_height);
     rk_register_discharge_2.reinit(solution_discharge);
     rk_register_tracer_2.reinit(solution_tracer);
+
+#elif defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
+    const TimeIntegrator::ExplicitRungeKuttaIntegrator integrator(rk_scheme);
+
+    std::vector<LinearAlgebra::distributed::Vector<Number>>
+      rk_register_height_2(integrator.n_stages()+1, solution_height);
+    std::vector<LinearAlgebra::distributed::Vector<Number>>
+      rk_register_discharge_2(integrator.n_stages()+1, solution_discharge);
+    std::vector<LinearAlgebra::distributed::Vector<Number>>
+      rk_register_tracer_2(integrator.n_stages()+1, solution_tracer);
+
+    LinearAlgebra::distributed::Vector<Number> rk_register_height_1;
+    LinearAlgebra::distributed::Vector<Number> rk_register_discharge_1;
+    LinearAlgebra::distributed::Vector<Number> rk_register_tracer_1;
+    rk_register_height_1.reinit(solution_height);
+    rk_register_discharge_1.reinit(solution_discharge);
+    rk_register_tracer_1.reinit(solution_tracer);
 
 #endif
 
