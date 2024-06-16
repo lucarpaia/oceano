@@ -36,10 +36,9 @@
 // the name of the class.
 
 // First come the numerics. The following preprocessor select the time integrator. For
-// now we have coded two explicit schemes that belong to the family of Runge-Kutta scheme.
-// The low-storage scheme privileges the rapidity of accessing the memory. The
-// strong-stability-preserving scheme privileges non-linear stability.
-#undef  TIMEINTEGRATOR_STRONGSTABILITYRUNGEKUTTA
+// now we have coded general explicit schemes that belong to the family of Runge-Kutta scheme.
+// Apart from standard scheme we have also coded low-storage schemes privileges the rapidity
+// of accessing the memory.
 #define TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
 #undef  TIMEINTEGRATOR_LOWSTORAGERUNGEKUTTA
 // The numerical flux (Riemann solver) at the faces between cells. For this
@@ -140,8 +139,6 @@
 // cannot be linked together.
 #if defined TIMEINTEGRATOR_LOWSTORAGERUNGEKUTTA
 #include <time_integrator/LowStorageRungeKuttaIntegrator.h>
-#elif defined TIMEINTEGRATOR_STRONGSTABILITYRUNGEKUTTA
-#include <time_integrator/StrongStabilityRungeKuttaIntegrator.h>
 #elif defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
 #include <time_integrator/ExplicitRungeKuttaIntegrator.h>
 #endif
@@ -188,8 +185,6 @@ namespace Problem
   // Next off are some details of the time integrator:
 #if defined TIMEINTEGRATOR_LOWSTORAGERUNGEKUTTA
   constexpr TimeIntegrator::LowStorageRungeKuttaScheme rk_scheme = TimeIntegrator::stage_3_order_3;
-#elif defined TIMEINTEGRATOR_STRONGSTABILITYRUNGEKUTTA
-  constexpr TimeIntegrator::StrongStabilityRungeKuttaScheme rk_scheme = TimeIntegrator::stage_3_order_3;
 #elif defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
   constexpr TimeIntegrator::ExplicitRungeKuttaScheme rk_scheme = TimeIntegrator::stage_3_order_3;
 #endif
@@ -828,15 +823,16 @@ namespace Problem
     // that scales the time step size in terms of the formula $\Delta t =
     // \text{CFL}\frac{h}{(\|\mathbf{u} +
     // c)_\text{max}}$, as well as a selection of a few explicit Runge--Kutta
-    // methods belonging to the low-storage family and to the strong stability one.
+    // methods.
     // The Courant number depends on the number of stages, on the degree of the finite
     // element approximation as well as on the specific time integrator. The correct choice
     // of the courant number is left to the user that must specify it in the parameter file.
     // A possible expression can be $CFL=\frac{1}{p^{1.5}}*n_{stages}$. For TODO (Cockburn and Shu)
     // $CFL=\frac{1}{2p+1}$.
     // For the low storage schemes we need only to auxiliary vectors per stage. For
-    // strong stability preserving schemes we need also table to store the updated solution vector
-    // at each stage. We blend one of the two auxiliary vectors with this table in a single entity.
+    // general runge-kutta schemes with Butcher tableau we need also table
+    // to store the updated solution vector at each stage. We blend one of the
+    // two auxiliary vectors with this table in a single entity.
     prm.enter_subsection("Time parameters");
     const double final_time = prm.get_double("Final_time");
     const double courant_number = prm.get_double("CFL");
@@ -857,23 +853,6 @@ namespace Problem
     rk_register_discharge_1.reinit(solution_discharge);
     rk_register_discharge_2.reinit(solution_discharge);
     rk_register_tracer_1.reinit(solution_tracer);
-    rk_register_tracer_2.reinit(solution_tracer);
-
-#elif defined TIMEINTEGRATOR_STRONGSTABILITYRUNGEKUTTA
-    const TimeIntegrator::StrongStabilityRungeKuttaIntegrator integrator(rk_scheme);
-
-    std::vector<LinearAlgebra::distributed::Vector<Number>>
-      rk_register_height_1(integrator.n_stages()+1, solution_height);
-    std::vector<LinearAlgebra::distributed::Vector<Number>>
-      rk_register_discharge_1(integrator.n_stages()+1, solution_discharge);
-    std::vector<LinearAlgebra::distributed::Vector<Number>>
-      rk_register_tracer_1(integrator.n_stages()+1, solution_tracer);
-
-    LinearAlgebra::distributed::Vector<Number> rk_register_height_2;
-    LinearAlgebra::distributed::Vector<Number> rk_register_discharge_2;
-    LinearAlgebra::distributed::Vector<Number> rk_register_tracer_2;
-    rk_register_height_2.reinit(solution_height);
-    rk_register_discharge_2.reinit(solution_discharge);
     rk_register_tracer_2.reinit(solution_tracer);
 
 #elif defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA

@@ -122,16 +122,6 @@ namespace SpaceDiscretization
       LinearAlgebra::distributed::Vector<Number>                    &solution_tracer,
       LinearAlgebra::distributed::Vector<Number>                    &next_ri_tracer) const;
 
-#elif defined TIMEINTEGRATOR_STRONGSTABILITYRUNGEKUTTA
-    void 
-    perform_stage_tracers(
-      const unsigned int                                             cur_stage,
-      const Number                                                   factor_bi,
-      const Number                                                  *factor_solution,
-      const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
-      LinearAlgebra::distributed::Vector<Number>                    &vec_ki_tracer,
-      LinearAlgebra::distributed::Vector<Number>                    &solution_tracer,
-      std::vector<LinearAlgebra::distributed::Vector<Number>>       &next_ri_tracer) const;
 #elif defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
 
     void
@@ -828,78 +818,6 @@ namespace SpaceDiscretization
         },
         2);
     }    
-  }
-
-#elif defined TIMEINTEGRATOR_STRONGSTABILITYRUNGEKUTTA
-  template <int dim, int n_tra, int degree, int n_points_1d>
-  void OceanoOperatorWithTracer<dim, n_tra, degree, n_points_1d>::perform_stage_tracers(
-    const unsigned int                                             current_stage,
-    const Number                                                   factor_bi,
-    const Number                                                  *factor_solution,
-    const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
-    LinearAlgebra::distributed::Vector<Number>                    &vec_ki_tracer,
-    LinearAlgebra::distributed::Vector<Number>                    &solution_tracer,
-    std::vector<LinearAlgebra::distributed::Vector<Number>>       &next_ri_tracer) const
-  {
-    {
-      TimerOutput::Scope t(timer, "rk_stage tracer - integrals L_h");
-
-      data.loop(&OceanoOperatorWithTracer::local_apply_cell_tracer,
-                &OceanoOperatorWithTracer::local_apply_face_tracer,
-                &OceanoOperatorWithTracer::local_apply_boundary_face_tracer,
-                this,
-                vec_ki_tracer,
-                current_ri,
-                true,
-                MatrixFree<dim, Number>::DataAccessOnFaces::values,
-                MatrixFree<dim, Number>::DataAccessOnFaces::values);
-    }
-
-
-    {
-      unsigned int n_stages = next_ri_tracer.size()-1; //lrp: may be optimized passing as argument
-      TimerOutput::Scope t(timer, "rk_stage tracer - inv mass + vec upd");
-      data.cell_loop(
-        &OceanoOperatorWithTracer::local_apply_inverse_mass_matrix_tracer,
-        this,
-        next_ri_tracer.front(),
-        vec_ki_tracer,
-        std::function<void(const unsigned int, const unsigned int)>(),
-        [&](const unsigned int start_range, const unsigned int end_range) {
-          if (current_stage == n_stages-1)
-            {
-              /* DEAL_II_OPENMP_SIMD_PRAGMA */
-              for (unsigned int i = start_range; i < end_range; ++i)
-                {
-                  const Number k_i           = next_ri_tracer.front().local_element(i);
-                  Number sol_i               = solution_tracer.local_element(i);
-                  solution_tracer.local_element(i)  = factor_solution[0]  * sol_i + factor_bi * k_i;
-		  for (unsigned int j = 1; j < current_stage+1; ++j)
-		    {
-                      sol_i = next_ri_tracer[j].local_element(i);
-                      solution_tracer.local_element(i) += factor_solution[j]  * sol_i;
-                    }
-                }
-            }
-          else
-            {
-              /* DEAL_II_OPENMP_SIMD_PRAGMA */
-              for (unsigned int i = start_range; i < end_range; ++i)
-                {
-                  const unsigned int ns       = current_stage+1;
-                  const Number k_i            = next_ri_tracer.front().local_element(i);
-                  Number       sol_i          = solution_tracer.local_element(i);
-                  next_ri_tracer[ns].local_element(i) = factor_solution[0]  * sol_i + factor_bi * k_i;
-		  for (unsigned int j = 1; j < current_stage+1; ++j)
-		    {
-                      sol_i = next_ri_tracer[j].local_element(i);
-                      next_ri_tracer[ns].local_element(i) += factor_solution[j]  * sol_i;
-                    }
-                }
-            }
-        },
-        2);
-    }
   }
 
 #elif defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
