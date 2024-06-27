@@ -122,8 +122,7 @@ namespace SpaceDiscretization
       LinearAlgebra::distributed::Vector<Number>                    &solution_tracer,
       LinearAlgebra::distributed::Vector<Number>                    &next_ri_tracer) const;
 
-#elif defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
-
+#elif defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA || defined TIMEINTEGRATOR_ADDITIVERUNGEKUTTA
     void
     perform_stage_tracers(
       const unsigned int                                             cur_stage,
@@ -131,7 +130,7 @@ namespace SpaceDiscretization
       const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
       std::vector<LinearAlgebra::distributed::Vector<Number>>       &vec_ki_tracer,
       LinearAlgebra::distributed::Vector<Number>                    &solution_tracer,
-      LinearAlgebra::distributed::Vector<Number>                    &next_ri_tracer) const;
+      LinearAlgebra::distributed::Vector<Number>                    &next_ri_tracer) const
 
 #endif
     void project_tracers(const Function<dim> &                       function,
@@ -820,7 +819,7 @@ namespace SpaceDiscretization
     }    
   }
 
-#elif defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
+#elif defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA || defined TIMEINTEGRATOR_ADDITIVERUNGEKUTTA
   template <int dim, int n_tra, int degree, int n_points_1d>
   void OceanoOperatorWithTracer<dim, n_tra, degree, n_points_1d>::perform_stage_tracers(
     const unsigned int                                             current_stage,
@@ -889,6 +888,7 @@ namespace SpaceDiscretization
         2);
     }
   }
+
 #endif
 
   // Having discussed the implementation of the functions that deal with

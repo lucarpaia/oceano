@@ -41,6 +41,7 @@
 // of accessing the memory.
 #define TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
 #undef  TIMEINTEGRATOR_LOWSTORAGERUNGEKUTTA
+#undef  TIMEINTEGRATOR_ADDITIVERUNGEKUTTA
 // The numerical flux (Riemann solver) at the faces between cells. For this
 // program, we have implemented a modified variant of the Lax--Friedrichs
 // flux and the Harten--Lax--van Leer (HLL) flux:
@@ -141,6 +142,8 @@
 #include <time_integrator/LowStorageRungeKuttaIntegrator.h>
 #elif defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
 #include <time_integrator/ExplicitRungeKuttaIntegrator.h>
+#elif defined TIMEINTEGRATOR_ADDITIVERUNGEKUTTA
+#include <time_integrator/AdditiveRungeKuttaIntegrator.h>
 #endif
 #if defined ICBC_ISENTROPICVORTEX
 #include <icbc/Icbc_IsentropicVortex.h>
@@ -186,7 +189,9 @@ namespace Problem
 #if defined TIMEINTEGRATOR_LOWSTORAGERUNGEKUTTA
   constexpr TimeIntegrator::LowStorageRungeKuttaScheme rk_scheme = TimeIntegrator::stage_3_order_3;
 #elif defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
-  constexpr TimeIntegrator::ExplicitRungeKuttaScheme rk_scheme = TimeIntegrator::stage_3_order_3;
+  constexpr TimeIntegrator::ExplicitRungeKuttaScheme rk_scheme = TimeIntegrator::stage_3_order_2;
+#elif defined TIMEINTEGRATOR_ADDITIVERUNGEKUTTA
+  constexpr TimeIntegrator::AdditiveRungeKuttaScheme rk_scheme = TimeIntegrator::stage_3_order_2;
 #endif
 
   // @sect3{The OceanoProblem class}
@@ -830,9 +835,16 @@ namespace Problem
     // A possible expression can be $CFL=\frac{1}{p^{1.5}}*n_{stages}$. For TODO (Cockburn and Shu)
     // $CFL=\frac{1}{2p+1}$.
     // For the low storage schemes we need only to auxiliary vectors per stage. For
-    // general runge-kutta schemes with Butcher tableau we need also table
-    // to store the updated solution vector at each stage. We blend one of the
-    // two auxiliary vectors with this table in a single entity.
+    // a general Runge--Kutta schemes with Butcher tableau we need also a table
+    // to store the updated residual vector at each stage. We blend one of the
+    // two auxiliary vectors with this table in a single entity, so at the end
+    // `rk_register_2` has size equal to the number of stage plus one. For
+    // the Additive Runge--Kutta the number of stored residuals is doubled
+    // because of the explicit and the implicit residuals. We blend the two residuals
+    // per stage in a table, that should have size equal to twice the number of stages plus one.
+    // However the last stage has common residuals so we can save one residual and
+    // the final dimension is just twice the number of stages. Please note that, for now, ARK
+    // is used only for the discharge equation.
     prm.enter_subsection("Time parameters");
     const double final_time = prm.get_double("Final_time");
     const double courant_number = prm.get_double("CFL");
@@ -872,6 +884,22 @@ namespace Problem
     rk_register_discharge_1.reinit(solution_discharge);
     rk_register_tracer_1.reinit(solution_tracer);
 
+#elif defined TIMEINTEGRATOR_ADDITIVERUNGEKUTTA
+    const TimeIntegrator::AdditiveRungeKuttaIntegrator integrator(rk_scheme);
+
+    std::vector<LinearAlgebra::distributed::Vector<Number>>
+      rk_register_height_2(integrator.n_stages()+1, solution_height);
+    std::vector<LinearAlgebra::distributed::Vector<Number>>
+      rk_register_discharge_2(2*integrator.n_stages(), solution_discharge);
+    std::vector<LinearAlgebra::distributed::Vector<Number>>
+      rk_register_tracer_2(integrator.n_stages()+1, solution_tracer);
+
+    LinearAlgebra::distributed::Vector<Number> rk_register_height_1;
+    LinearAlgebra::distributed::Vector<Number> rk_register_discharge_1;
+    LinearAlgebra::distributed::Vector<Number> rk_register_tracer_1;
+    rk_register_height_1.reinit(solution_height);
+    rk_register_discharge_1.reinit(solution_discharge);
+    rk_register_tracer_1.reinit(solution_tracer);
 #endif
 
     double min_vertex_distance = std::numeric_limits<double>::max();

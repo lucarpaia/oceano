@@ -153,6 +153,8 @@ namespace SpaceDiscretization
   public:
     static constexpr unsigned int n_quadrature_points_1d = n_points_1d;
 
+    double factor_matrix;
+
     OceanoOperator(IO::ParameterHandler      &param,
                   ICBC::BcBase<dim, 1+dim+n_tra> *bc,
                   TimerOutput               &timer_output);
@@ -185,6 +187,20 @@ namespace SpaceDiscretization
       const unsigned int                                             cur_stage,
       const Number                                                   cur_time,
       const Number                                                  *factor_residual,
+      const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
+      std::vector<LinearAlgebra::distributed::Vector<Number>>       &vec_ki_height,
+      std::vector<LinearAlgebra::distributed::Vector<Number>>       &vec_ki_discharge,
+      LinearAlgebra::distributed::Vector<Number>                    &solution_height,
+      LinearAlgebra::distributed::Vector<Number>                    &solution_discharge,
+      LinearAlgebra::distributed::Vector<Number>                    &next_ri_height,
+      LinearAlgebra::distributed::Vector<Number>                    &next_ri_discharge) const;
+#elif defined TIMEINTEGRATOR_ADDITIVERUNGEKUTTA
+    void
+    perform_stage_hydro(
+      const unsigned int                                             cur_stage,
+      const Number                                                   cur_time,
+      const Number                                                  *factor_residual,
+      const Number                                                  *factor_tilde_residual,
       const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
       std::vector<LinearAlgebra::distributed::Vector<Number>>       &vec_ki_height,
       std::vector<LinearAlgebra::distributed::Vector<Number>>       &vec_ki_discharge,
@@ -245,16 +261,22 @@ namespace SpaceDiscretization
 
   private:
     void local_apply_inverse_mass_matrix_height(
-      const MatrixFree<dim, Number> &                   data,
-      LinearAlgebra::distributed::Vector<Number> &      dst,
+      const MatrixFree<dim, Number>                    &data,
+      LinearAlgebra::distributed::Vector<Number>       &dst,
       const LinearAlgebra::distributed::Vector<Number> &src,
-      const std::pair<unsigned int, unsigned int> &     cell_range) const;
+      const std::pair<unsigned int, unsigned int>      &cell_range) const;
 
     void local_apply_inverse_mass_matrix_discharge(
-      const MatrixFree<dim, Number> &                   data,
-      LinearAlgebra::distributed::Vector<Number> &      dst,
+      const MatrixFree<dim, Number>                    &data,
+      LinearAlgebra::distributed::Vector<Number>       &dst,
       const LinearAlgebra::distributed::Vector<Number> &src,
-      const std::pair<unsigned int, unsigned int> &     cell_range) const;
+      const std::pair<unsigned int, unsigned int>      &cell_range) const;
+
+    void local_apply_inverse_modified_mass_matrix_discharge(
+      const MatrixFree<dim, Number>                                 &data,
+      LinearAlgebra::distributed::Vector<Number>                    &dst,
+      const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
+      const std::pair<unsigned int, unsigned int>                   &cell_range) const;
 
     void local_apply_cell_height(
       const MatrixFree<dim, Number>                                 &data,
@@ -266,6 +288,24 @@ namespace SpaceDiscretization
       const MatrixFree<dim, Number>                                 &data,
       LinearAlgebra::distributed::Vector<Number>                    &dst,
       const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
+      const std::pair<unsigned int, unsigned int>                   &cell_range) const;
+
+    void local_apply_cell_nonstiff_discharge(
+      const MatrixFree<dim, Number>                                 &data,
+      LinearAlgebra::distributed::Vector<Number>                    &dst,
+      const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
+      const std::pair<unsigned int, unsigned int>                   &cell_range) const;
+
+    void local_apply_cell_stiff_discharge(
+      const MatrixFree<dim, Number>                                 &data,
+      LinearAlgebra::distributed::Vector<Number>                    &dst,
+      const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
+      const std::pair<unsigned int, unsigned int>                   &cell_range) const;
+
+    void local_apply_cell_mass_discharge(
+      const MatrixFree<dim, Number>                                 &data,
+      LinearAlgebra::distributed::Vector<Number>                    &dst,
+      const LinearAlgebra::distributed::Vector<Number>              &src,
       const std::pair<unsigned int, unsigned int>                   &cell_range) const;
 
     void local_apply_face_height(
@@ -515,6 +555,109 @@ namespace SpaceDiscretization
 
         phi_discharge.integrate_scatter(EvaluationFlags::values |
                                         EvaluationFlags::gradients,
+                                       dst);
+      }
+  }
+
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_tra, degree, n_points_1d>::local_apply_cell_nonstiff_discharge(
+    const MatrixFree<dim, Number> &,
+    LinearAlgebra::distributed::Vector<Number>                    &dst,
+    const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
+    const std::pair<unsigned int, unsigned int>                   &cell_range) const
+  {
+    FEEvaluation<dim, degree, n_points_1d, 1, Number> phi_height(data,0);
+    FEEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge(data,1);
+
+    for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
+      {
+        phi_height.reinit(cell);
+        phi_height.gather_evaluate(src[0], EvaluationFlags::values
+                              | EvaluationFlags::gradients);
+        phi_discharge.reinit(cell);
+        phi_discharge.gather_evaluate(src[1], EvaluationFlags::values);
+
+        for (unsigned int q = 0; q < phi_discharge.n_q_points; ++q)
+          {
+            const auto q_q = phi_discharge.get_value(q);
+            const auto z_q = phi_height.get_value(q);
+            const auto dz_q = phi_height.get_gradient(q);
+
+            Tensor<1, dim+3, VectorizedArray<Number>> data_q =
+              evaluate_function<dim, Number, dim+3>(
+                *bc->problem_data, phi_discharge.quadrature_point(q));
+
+            phi_discharge.submit_gradient(
+              model.advectiveflux<dim>(z_q, q_q, data_q[0]), q);
+
+            phi_discharge.submit_value(
+              model.source_nonstiff<dim>(z_q, q_q, dz_q, data_q),
+              q);
+          }
+
+        phi_discharge.integrate_scatter(EvaluationFlags::values |
+                                        EvaluationFlags::gradients,
+                                       dst);
+      }
+  }
+
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_tra, degree, n_points_1d>::local_apply_cell_stiff_discharge(
+    const MatrixFree<dim, Number> &,
+    LinearAlgebra::distributed::Vector<Number>                    &dst,
+    const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
+    const std::pair<unsigned int, unsigned int>                   &cell_range) const
+  {
+    FEEvaluation<dim, degree, n_points_1d, 1, Number> phi_height(data,0);
+    FEEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge(data,1);
+
+    for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
+      {
+        phi_height.reinit(cell);
+        phi_height.gather_evaluate(src[0], EvaluationFlags::values);
+        phi_discharge.reinit(cell);
+        phi_discharge.gather_evaluate(src[1], EvaluationFlags::values);
+
+        for (unsigned int q = 0; q < phi_discharge.n_q_points; ++q)
+          {
+            const auto q_q = phi_discharge.get_value(q);
+            const auto z_q = phi_height.get_value(q);
+
+            Tensor<1, 2, VectorizedArray<Number>> data_q =
+              evaluate_function<dim, Number, 2>(
+                *bc->problem_data, phi_discharge.quadrature_point(q));
+
+            phi_discharge.submit_value(
+              model.source_stiff<dim>(z_q, q_q, data_q),
+              q);
+          }
+
+        phi_discharge.integrate_scatter(EvaluationFlags::values,
+                                       dst);
+      }
+  }
+
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_tra, degree, n_points_1d>::local_apply_cell_mass_discharge(
+    const MatrixFree<dim, Number> &,
+    LinearAlgebra::distributed::Vector<Number>                    &dst,
+    const LinearAlgebra::distributed::Vector<Number>              &src,
+    const std::pair<unsigned int, unsigned int>                   &cell_range) const
+  {
+    FEEvaluation<dim, degree, degree + 1, dim, Number> phi_discharge(data,1,1);
+
+    for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
+      {
+        phi_discharge.reinit(cell);
+        phi_discharge.gather_evaluate(src, EvaluationFlags::values);
+
+        for (unsigned int q = 0; q < phi_discharge.n_q_points; ++q)
+          {
+            const auto q_q = phi_discharge.get_value(q);
+            phi_discharge.submit_value(q_q, q);
+          }
+
+        phi_discharge.integrate_scatter(EvaluationFlags::values,
                                        dst);
       }
   }
@@ -1038,6 +1181,58 @@ namespace SpaceDiscretization
       }
   }
 
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_tra, degree, n_points_1d>::local_apply_inverse_modified_mass_matrix_discharge(
+    const MatrixFree<dim, Number> &,
+    LinearAlgebra::distributed::Vector<Number>                    &dst,
+    const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
+    const std::pair<unsigned int, unsigned int>                   &cell_range) const
+  {
+    FEEvaluation<dim, degree, degree + 1, dim, Number> phi_discharge(data, 1, 1);
+    FEEvaluation<dim, degree, degree + 1, 1, Number> phi_height_ri(data, 0, 1);
+    FEEvaluation<dim, degree, degree + 1, dim, Number> phi_discharge_ri(data, 1, 1);
+    MatrixFreeOperators::CellwiseInverseMassMatrix<dim, degree, dim, Number>
+      inverse(phi_discharge);
+
+    for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
+      {
+        phi_discharge.reinit(cell);
+        phi_discharge.read_dof_values(src[0]);
+
+        phi_height_ri.reinit(cell);
+        phi_height_ri.gather_evaluate(src[1], EvaluationFlags::values);
+        phi_discharge_ri.reinit(cell);
+        phi_discharge_ri.gather_evaluate(src[2], EvaluationFlags::values);
+
+	AlignedVector<VectorizedArray<Number>> inverse_jxw(phi_discharge.n_q_points);
+	inverse.fill_inverse_JxW_values(inverse_jxw);
+
+        for (unsigned int q = 0; q < phi_discharge.n_q_points; ++q)
+          {
+            const VectorizedArray<Number> data_q =
+              evaluate_function<dim, Number>(
+                *bc->problem_data, phi_discharge.quadrature_point(q), 0);
+            const VectorizedArray<Number> drag_q =
+              evaluate_function<dim, Number>(
+                *bc->problem_data, phi_discharge.quadrature_point(q), 1);
+            const auto z_q = phi_height_ri.get_value(q);
+            const auto q_q = phi_discharge_ri.get_value(q);
+
+            inverse_jxw[q] *= 1. / ( 1. + factor_matrix
+              * model.bottom_friction.jacobian<dim>(model.velocity<dim>(z_q, q_q, data_q),
+                                                    drag_q,
+                                                    z_q+data_q)
+                                   );
+          }
+
+        inverse.apply(inverse_jxw, dim, phi_discharge.begin_dof_values(),
+          phi_discharge.begin_dof_values());
+//        inverse.apply(phi_discharge.begin_dof_values(), phi_discharge.begin_dof_values());
+
+        phi_discharge.set_dof_values(dst);
+      }
+  }
+
   // @sect4{The apply() and related functions}
 
   // We now come to the function which implements the evaluation of the ocean
@@ -1111,8 +1306,7 @@ namespace SpaceDiscretization
 
   // Let us move to the function that does an entire stage of a Runge--Kutta
   // update. It calls OceanoOperator::apply() followed by some updates
-  // to the vectors, namely `next_ri = solution + factor_ai * k_i` and
-  // `solution += factor_solution * k_i`. Rather than performing these
+  // to the vectors. Rather than performing these
   // steps through the vector interfaces, we here present an alternative
   // strategy that is faster on cache-based architectures. As the memory
   // consumed by the vectors is often much larger than what fits into caches,
@@ -1263,6 +1457,17 @@ namespace SpaceDiscretization
     }    
   }
 
+  // We apply the same concepts to the explicit Runge-Kutta method written
+  // in the standard Butcher tableau form. This kind of method are generals then
+  // the low storage ones, although less optimized. We update one single vector at
+  // at every stage (`next_ri` for internal stages and `solution` for the last stage)
+  // so we cannot benefit of loop fusion. Moreover we access to `n_stages` vector
+  // (`n_stages-1` residual plus the solution) compared to only two vectors of the
+  // low-storage scheme. For a low number of stage the difference is comparable.
+  // We still use to perform the loop immediately when the mass matrix inversion has
+  // finished on a part of the vector. The second `std::function` is in fact called
+  // after the loop last touches an entry. A different code path is again used for
+  // the last stage when we do not need to update the `next_ri` vector.
 #elif defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
   template <int dim, int n_tra, int degree, int n_points_1d>
   void OceanoOperator<dim, n_tra, degree, n_points_1d>::perform_stage_hydro(
@@ -1390,6 +1595,212 @@ namespace SpaceDiscretization
             }
         },
         1);
+    }
+  }
+
+  // We apply the same concepts to the Additive Runge-Kutta method. The cost of
+  // ARK scheme are quite higher. The main problem is memory access: the vectors to access
+  // at each stage are `2 * (n_stages-1) +1`, the factor two is related to the presence of
+  // the stiff and non-stiff part of the residual. Since ARK is needed only for the momentum
+  // equation we mantain the explicit code of the previous section for the continuity equation
+  // and we use a different code for the momemtum equation. For the latter we compute the
+  // stiff and non-stiff residuals. Note that for the stiff residual we need to build the
+  // residual associated to the friction term which can be done with only a cell loop.
+  //
+  // Another overhead is related to the fact that we cannot update the vector with a single
+  // call to `cell_loop()`. First we have to perform vector updates (assemble the right-hand-side
+  // composed of the old solution times the mass-matrix plus the ImEx residuals.
+  // This is cumulated into the auxiliary `vec_ki_discharge.front()`.
+  // Only after we invert the mass-matrix and we put the result into the new solution.
+  // The mass-matrix is modified by the Implicit scheme (it contains the Jacobian of
+  // the implicit part) and this is why we have a different call to the mass matrix inversion.
+  // Moreover this should explain why, into the last `cell_loop()`, the src vector contains
+  // the last updated solution: it is needed to compute the Jacobian of the bottom friction.
+  //
+  // As usual we use a different code path for the last stage. For the ARK scheme we benefit
+  // from two facts: the last stage `b_i` coefficients must be equal between the explicit and the
+  // implicit schemes, the mass-matrix is the standard one. Thus we assemble the residual once
+  // per stage (instead of twice) and we re-assemble vector assemble and mass-inversion in a
+  // single call.
+#elif defined TIMEINTEGRATOR_ADDITIVERUNGEKUTTA
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_tra, degree, n_points_1d>::perform_stage_hydro(
+    const unsigned int                                             current_stage,
+    const Number                                                   current_time,
+    const Number                                                  *factor_residual,
+    const Number                                                  *factor_tilde_residual,
+    const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
+    std::vector<LinearAlgebra::distributed::Vector<Number>>       &vec_ki_height,
+    std::vector<LinearAlgebra::distributed::Vector<Number>>       &vec_ki_discharge,
+    LinearAlgebra::distributed::Vector<Number>                    &solution_height,
+    LinearAlgebra::distributed::Vector<Number>                    &solution_discharge,
+    LinearAlgebra::distributed::Vector<Number>                    &next_ri_height,
+    LinearAlgebra::distributed::Vector<Number>                    &next_ri_discharge) const
+  {
+
+    unsigned int n_stages = vec_ki_height.size()-1;
+
+    {
+      TimerOutput::Scope t(timer, "rk_stage hydro - integrals L_h");
+
+      for (auto &i : bc->inflow_boundaries)
+        i.second->set_time(current_time);
+      for (auto &i : bc->supercritical_outflow_boundaries)
+        i.second->set_time(current_time);
+
+      data.loop(&OceanoOperator::local_apply_cell_height,
+                &OceanoOperator::local_apply_face_height,
+                &OceanoOperator::local_apply_boundary_face_height,
+                this,
+                vec_ki_height.front(),
+                current_ri,
+                true,
+                MatrixFree<dim, Number>::DataAccessOnFaces::values,
+                MatrixFree<dim, Number>::DataAccessOnFaces::values);
+
+      if (current_stage == n_stages-1)
+        {
+          data.loop(
+                &OceanoOperator::local_apply_cell_discharge,
+                &OceanoOperator::local_apply_face_discharge,
+                &OceanoOperator::local_apply_boundary_face_discharge,
+                this,
+                vec_ki_discharge[2*current_stage+1],
+                current_ri,
+                true,
+                MatrixFree<dim, Number>::DataAccessOnFaces::values,
+                MatrixFree<dim, Number>::DataAccessOnFaces::values);
+        }
+      else
+        {
+          data.loop(
+                &OceanoOperator::local_apply_cell_nonstiff_discharge,
+                &OceanoOperator::local_apply_face_discharge,
+                &OceanoOperator::local_apply_boundary_face_discharge,
+                this,
+                vec_ki_discharge[2*current_stage+1],
+                current_ri,
+                true,
+                MatrixFree<dim, Number>::DataAccessOnFaces::values,
+                MatrixFree<dim, Number>::DataAccessOnFaces::values);
+          data.cell_loop(
+                &OceanoOperator::local_apply_cell_stiff_discharge,
+                this,
+                vec_ki_discharge[2*current_stage+2],
+                current_ri,
+                true);
+        }
+    }
+
+
+    {
+      TimerOutput::Scope t(timer, "rk_stage hydro - inv mass + vec upd");
+      data.cell_loop(
+        &OceanoOperator::local_apply_inverse_mass_matrix_height,
+        this,
+        vec_ki_height[current_stage+1],
+        vec_ki_height.front(),
+        std::function<void(const unsigned int, const unsigned int)>(),
+        [&](const unsigned int start_range, const unsigned int end_range) {
+          if (current_stage == n_stages-1)
+            {
+              /* DEAL_II_OPENMP_SIMD_PRAGMA */
+              for (unsigned int i = start_range; i < end_range; ++i)
+                {
+                  Number k_i           = vec_ki_height[1].local_element(i);
+                  const Number sol_i   = solution_height.local_element(i);
+                  solution_height.local_element(i)  = sol_i + factor_residual[0] * k_i;
+		  for (unsigned int j = 1; j < current_stage+1; ++j)
+		    {
+                      k_i = vec_ki_height[j+1].local_element(i);
+                      solution_height.local_element(i) += factor_residual[j]  * k_i;
+                    }
+                }
+            }
+          else
+            {
+              /* DEAL_II_OPENMP_SIMD_PRAGMA */
+              for (unsigned int i = start_range; i < end_range; ++i)
+                {
+                  Number k_i            = vec_ki_height[1].local_element(i);
+                  const Number sol_i    = solution_height.local_element(i);
+                  next_ri_height.local_element(i) = sol_i + factor_residual[0]  * k_i;
+		  for (unsigned int j = 1; j < current_stage+1; ++j)
+		    {
+                      k_i = vec_ki_height[j+1].local_element(i);
+                      next_ri_height.local_element(i) += factor_residual[j]  * k_i;
+                    }
+                }
+            }
+        },
+        0);
+
+      if (current_stage == n_stages-1)
+        {
+          data.cell_loop(
+            &OceanoOperator::local_apply_inverse_mass_matrix_discharge,
+            this,
+            next_ri_discharge,
+            vec_ki_discharge.front(),
+            [&](const unsigned int start_range, const unsigned int end_range) {
+              /* DEAL_II_OPENMP_SIMD_PRAGMA */
+              for (unsigned int i = start_range; i < end_range; ++i)
+                {
+                  Number kex_i           = vec_ki_discharge[1].local_element(i);
+                  vec_ki_discharge.front().local_element(i)  = factor_residual[0] * kex_i;
+		  for (unsigned int j = 1; j < current_stage+1; ++j)
+		    {
+                      kex_i              = vec_ki_discharge[2*j+1].local_element(i);
+                      const Number kim_i = vec_ki_discharge[2*j].local_element(i);
+                      vec_ki_discharge.front().local_element(i) += factor_residual[j]   * kex_i
+                                                                 + factor_residual[j-1] * kim_i;
+                    }
+                }
+            },
+            [&](const unsigned int start_range, const unsigned int end_range) {
+              /* DEAL_II_OPENMP_SIMD_PRAGMA */
+              for (unsigned int i = start_range; i < end_range; ++i)
+                {
+                  const Number sol_i     = next_ri_discharge.local_element(i);
+                  solution_discharge.local_element(i)  += sol_i;
+                }
+            },
+            1);
+        }
+      else
+        {
+          data.cell_loop(
+            &OceanoOperator::local_apply_cell_mass_discharge,
+            this,
+            vec_ki_discharge.front(),
+            solution_discharge,
+            [&](const unsigned int start_range, const unsigned int end_range) {
+              /* DEAL_II_OPENMP_SIMD_PRAGMA */
+              for (unsigned int i = start_range; i < end_range; ++i)
+                {
+                  Number kex_i           = vec_ki_discharge[1].local_element(i);
+                  Number kim_i           = vec_ki_discharge[2].local_element(i);
+                  vec_ki_discharge.front().local_element(i)  = factor_residual[0]       * kex_i
+                                                             + factor_tilde_residual[0] * kim_i;
+                  for (unsigned int j = 1; j < current_stage+1; ++j)
+		    {
+		      kex_i              = vec_ki_discharge[j+1].local_element(i);
+	              kim_i              = vec_ki_discharge[j+2].local_element(i);
+		      vec_ki_discharge.front().local_element(i) += factor_residual[j]        * kex_i
+		                                                 + factor_tilde_residual[j]  * kim_i;
+		    }
+                }
+	    },
+            std::function<void(const unsigned int, const unsigned int)>(),
+            1);
+
+          data.cell_loop(
+            &OceanoOperator::local_apply_inverse_modified_mass_matrix_discharge,
+            this,
+            next_ri_discharge,
+            {vec_ki_discharge.front(), current_ri[0], current_ri[1]},
+            true);
+        }
     }
   }
 #endif

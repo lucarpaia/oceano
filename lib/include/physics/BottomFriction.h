@@ -50,6 +50,18 @@ namespace Physics
       source(const Tensor<1, dim, Number> &velocity,
              const Number                  drag_parameter,
              const Number                  depth) const;
+
+    // The next function is the one that compute the Jacobian of the bottom
+    // friction with respect to the discharge variable. Given the symmetry of
+    // bottom friction with respect to the discharge components, the Jacobian
+    // results with two equal components and it is thus represented with a scalar.
+    // It is overloaded by the same function defined in the derived classes.
+    template <int dim, typename Number>
+    inline DEAL_II_ALWAYS_INLINE //
+      Number
+      jacobian(const Tensor<1, dim, Number> &velocity,
+               const Number                  drag_parameter,
+               const Number                  depth) const;
   };
     
   // Not surprisingly, the constructor of the base class takes as arguments 
@@ -85,6 +97,13 @@ namespace Physics
       source(const Tensor<1, dim, Number> &velocity,
              const Number                  drag_coefficient,
              const Number                  depth) const;
+
+    template <int dim, typename Number>
+    inline DEAL_II_ALWAYS_INLINE //
+      Number
+      jacobian(const Tensor<1, dim, Number> &velocity,
+               const Number                  drag_coefficient,
+               const Number                  depth) const;
   };
 
   BottomFrictionLinear::BottomFrictionLinear(
@@ -105,6 +124,17 @@ namespace Physics
       source[d] = drag_coefficient * depth * velocity[d];
 
     return source;
+  }
+
+  template <int dim, typename Number>
+  inline DEAL_II_ALWAYS_INLINE //
+    Number
+    BottomFrictionLinear::jacobian(
+      const Tensor<1, dim, Number> &/*velocity*/,
+      const Number                  drag_coefficient,
+      const Number                  /*depth*/) const
+  {
+    return drag_coefficient;
   }
 
 
@@ -137,6 +167,13 @@ namespace Physics
       source(const Tensor<1, dim, Number> &velocity,
              const Number                  manning,
              const Number                  depth) const;
+
+    template <int dim, typename Number>
+    inline DEAL_II_ALWAYS_INLINE //
+      Number
+      jacobian(const Tensor<1, dim, Number> &velocity,
+               const Number                  manning,
+               const Number                  depth) const;
   };
 
   BottomFrictionManning::BottomFrictionManning(
@@ -160,6 +197,20 @@ namespace Physics
         * velocity[d];
 
     return source;
+  }
+
+  template <int dim, typename Number>
+  inline DEAL_II_ALWAYS_INLINE //
+    Number
+    BottomFrictionManning::jacobian(
+      const Tensor<1, dim, Number> &velocity,
+      const Number                  manning,
+      const Number                  depth) const
+  {
+    Number inv_depth = 1. / ( std::exp( std::log(depth) * 1.33333333 ) );
+    Number velocity_norm = velocity.norm();
+
+    return g * manning * manning * inv_depth * velocity_norm;
   }
 #endif
 

@@ -167,6 +167,25 @@ namespace Model
              const Tensor<1, dim, Number>   &gradient_height,
              const Tensor<1, dim+3, Number> &parameters) const;
 
+    // For ImEx time integration strategy, we separate the source term in a stiff and
+    // a non-stiff part. For now the stiff part of the source term is only the bottom friction.
+    // If a realistic Manning model is used, the bottom friction term may become very large in
+    // shallow area and an extremely small time step would be necessary to integrate it.
+    template <int dim, typename Number>
+    inline DEAL_II_ALWAYS_INLINE //
+      Tensor<1, dim, Number>
+      source_nonstiff(const Number                    height,
+                      const Tensor<1, dim, Number>   &discharge,
+                      const Tensor<1, dim, Number>   &gradient_height,
+                      const Tensor<1, dim+3, Number> &parameters) const;
+
+    template <int dim, typename Number>
+    inline DEAL_II_ALWAYS_INLINE //
+      Tensor<1, dim, Number>
+      source_stiff(const Number                  height,
+                   const Tensor<1, dim, Number> &discharge,
+                   const Tensor<1, 2, Number>   &parameters) const;
+
     // The next function computes an estimate of the square of the speed from the vector of conserved
     // variables, using the formula $\lambda^2 =  \|\mathbf{u}\|^2+c^2$. The estimate
     // instead of the the true formula is justyfied by efficiency arguments (one evaluation of the square root
@@ -307,6 +326,45 @@ namespace Model
         + coriolis;
 
     return source;
+  }
+
+  template <int dim, typename Number>
+  inline DEAL_II_ALWAYS_INLINE //
+    Tensor<1, dim, Number>
+    ShallowWater::source_nonstiff(
+      const Number                    height,
+      const Tensor<1, dim, Number>   &discharge,
+      const Tensor<1, dim, Number>   &gradient_height,
+      const Tensor<1, dim+3, Number> &parameters) const
+  {
+    const Number depth = height + parameters[0];
+
+    const Tensor<1, dim, Number> windstress =
+      wind_stress.source<dim, Number>(&parameters[2]);
+    const Tensor<1, dim, Number> coriolis =
+      coriolis_force.source<dim, Number>(discharge, parameters[4]);
+
+    Tensor<1, dim, Number> source =
+        - g * depth * gradient_height
+        + windstress
+        + coriolis;
+
+    return source;
+  }
+
+  template <int dim, typename Number>
+  inline DEAL_II_ALWAYS_INLINE //
+    Tensor<1, dim, Number>
+    ShallowWater::source_stiff(
+      const Number                  height,
+      const Tensor<1, dim, Number> &discharge,
+      const Tensor<1, 2, Number>   &parameters) const
+  {
+    const Tensor<1, dim, Number> v =
+      velocity<dim>(height, discharge, parameters[0]);
+    const Number depth = height + parameters[0];
+
+    return -bottom_friction.source<dim, Number>(v, parameters[1], depth);
   }
 
   template <int dim, typename Number>
