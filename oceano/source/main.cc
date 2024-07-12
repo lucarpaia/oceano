@@ -285,15 +285,10 @@ namespace Problem
     class Postprocessor
     {
     public:
-      Postprocessor(IO::ParameterHandler &param);
+      Postprocessor(IO::ParameterHandler     &param,
+                    std::vector<std::string>  postproc_vars_name);
 
-      void evaluate_vector_field(
-        const LinearAlgebra::distributed::Vector<Number>        &solution_height,
-        const LinearAlgebra::distributed::Vector<Number>        &solution_discharge,
-        const LinearAlgebra::distributed::Vector<Number>        &solution_tracer,
-        const std::vector<Point<dim>>                           &evaluation_points,
-        LinearAlgebra::distributed::Vector<Number>              &computed_vector_quantities,
-        std::vector<LinearAlgebra::distributed::Vector<Number>> &computed_scalar_quantities) const;
+      ParameterHandler &prm;
 
       std::vector<std::string> get_names() const;
 
@@ -302,21 +297,12 @@ namespace Problem
       get_data_component_interpretation() const;
 
       //UpdateFlags get_needed_update_flags() const;
+      std::vector<std::string> postproc_vars_name;
       unsigned int n_postproc_vars;
 
       bool do_error;
       double output_tick;
       std::string output_filename;
-
-      ParameterHandler &prm;
-
-#if defined MODEL_EULER
-      Model::Euler model;
-#elif defined MODEL_SHALLOWWATER
-      Model::ShallowWater model;
-#elif defined MODEL_SHALLOWWATERWITHTRACER
-      Model::ShallowWaterWithTracer model;
-#endif
     };
 
    private:
@@ -331,117 +317,18 @@ namespace Problem
   // parameters are stored as class members.
   template <int dim, int n_tra>
   OceanoProblem<dim, n_tra>::Postprocessor::Postprocessor(
-    IO::ParameterHandler &prm)
+    IO::ParameterHandler     &prm,
+    std::vector<std::string>  postproc_vars_name)
     : prm(prm)
-    , model(prm)
+    , postproc_vars_name(postproc_vars_name)
   {
     prm.enter_subsection("Output parameters");
     do_error = prm.get_double("Output_error");
     output_tick = prm.get_double("Output_tick");
     output_filename = prm.get("Output_filename");
     prm.leave_subsection();
-    n_postproc_vars = model.postproc_vars_name.size();
-  }
 
-
-
-  // For the main evaluation of the field variables, we first check that the
-  // lengths of the arrays equal the expected values (namely the length of the
-  // postprocessed variable vector equal the solution vector).
-  // Then we loop over all evaluation points and
-  // fill the respective information. First we fill the primal solution
-  // variables, the so called prognostic variables. Then we compute derived variables,
-  // the velocity $\mathbf u$ or the depth $h$. These variables are defined in
-  // the model class and they can change from model to model.
-  // For now these variables can depend only on the solution and on given data. For the
-  // implementation of output variables depending on given data see the deal.ii documentation:
-  // https://www.dealii.org/current/doxygen/deal.II/classDataPostprocessorVector.html
-  // In general the output can also depend on the solution gradient (think for example to the
-  // vorticity) but this part has been commented for now, see `do_schlieren_plot`.
-  // For the postprocessed variables, a well defined order must be followed: first the
-  // velocity vector, then all the scalars.
-  //
-  // The loop over the evaluation points seems not vectorized.
-  // However the usual way to recover data is with
-  // the `evaluate_function` that operates on vectorized data. With a few tricks the
-  // the `evaluate_function` has been adapted to a non-vectorized loop.
-  template <int dim, int n_tra>
-  void OceanoProblem<dim, n_tra>::Postprocessor::evaluate_vector_field(
-    const LinearAlgebra::distributed::Vector<Number>        &solution_height,
-    const LinearAlgebra::distributed::Vector<Number>        &solution_discharge,
-    const LinearAlgebra::distributed::Vector<Number>        &solution_tracer,
-    const std::vector<Point<dim>>                           &evaluation_points,
-    LinearAlgebra::distributed::Vector<Number>              &computed_vector_quantities,
-    std::vector<LinearAlgebra::distributed::Vector<Number>> &computed_scalar_quantities) const
-  {
-    const unsigned int n_evaluation_points = solution_height.size();
-    const std::vector<std::string> postproc_names = model.postproc_vars_name;
-
-    //if (do_schlieren_plot == true)
-    //  Assert(inputs.solution_gradients.size() == n_evaluation_points,
-    //         ExcInternalError());
-    Assert(computed_vector_quantities.size() == n_evaluation_points*dim,
-           ExcInternalError());
-    Assert(computed_scalar_quantities.size() == postproc_names.size()-dim,
-           ExcInternalError());
-#ifndef OCEANO_WITH_TRACERS
-    (void) solution_tracer;
-#endif
-
-    for (unsigned int p = 0; p < n_evaluation_points; ++p)
-      {
-        const auto height = solution_height[p];
-        Tensor<1, dim> discharge;
-        for (unsigned int d = 0; d < dim; ++d)
-          discharge[d] = solution_discharge[dim*p+d];
-#ifdef OCEANO_WITH_TRACERS
-        Tensor<1, n_tra> tracer;
-        for (unsigned int t = 0; t < n_tra; ++t)
-          tracer[t] = solution_tracer[n_tra*p+t];
-#endif
-        Point<dim, VectorizedArray<Number>> x_evaluation_points;
-        for (unsigned int d = 0; d < dim; ++d)
-          x_evaluation_points[d] = evaluation_points[p][d];
-
-        VectorizedArray<Number> data = 0.7415549102;
-//        const auto data =                //lrp: rebranch bathy in postproc
-//          SpaceDiscretization::evaluate_function<dim, Number>(
-//            ICBC::ProblemData<dim>(prm), x_evaluation_points, 0);
-
-        const Tensor<1, dim> velocity = model.velocity<dim>(height, discharge, data[0]);
-
-        for (unsigned int d = 0; d < dim; ++d)
-          computed_vector_quantities[dim*p+d] = velocity[d];
-
-        for (unsigned int v = 0; v < postproc_names.size()-dim; ++v)
-          {
-            if (postproc_names[v+dim] == "pressure")
-              computed_scalar_quantities[v][p] =
-                model.pressure<dim>(height, data[0]);
-            else if (postproc_names[v+dim] == "depth")
-              computed_scalar_quantities[v][p] = height + data[0];
-            else if (postproc_names[v+dim] == "speed_of_sound")
-              computed_scalar_quantities[v][p] =
-                std::sqrt(model.square_wavespeed<dim>(height, data[0]));
-#ifdef OCEANO_WITH_TRACERS
-            else if (postproc_names[v+dim] == "tracer")
-              for (unsigned int t = 0; t < n_tra; ++t)
-                computed_scalar_quantities[v][p] =
-                  model.tracer<n_tra>(height, tracer, data[0])[t];
-#endif
-            else
-              {
-                std::cout << "Postprocessing variable " << postproc_names[dim+v]
-                          << " does not exist. Consider to code it in your model"
-                          << std::endl;
-                 Assert(false, ExcNotImplemented());
-              }
-          }
-
-        //if (do_schlieren_plot == true)
-        //  computed_quantities[p](n_vars) =
-        //    inputs.solution_gradients[p][0] * inputs.solution_gradients[p][0];
-      }
+    n_postproc_vars = postproc_vars_name.size();
   }
 
 
@@ -449,9 +336,7 @@ namespace Problem
   template <int dim, int n_tra>
   std::vector<std::string> OceanoProblem<dim, n_tra>::Postprocessor::get_names() const
   {
-    std::vector<std::string> postproc_names = model.postproc_vars_name;
-
-    return postproc_names;
+    return postproc_vars_name;
   }
 
 
@@ -462,14 +347,12 @@ namespace Problem
   std::vector<DataComponentInterpretation::DataComponentInterpretation>
   OceanoProblem<dim, n_tra>::Postprocessor::get_data_component_interpretation() const
   {
-    const std::vector<std::string> postproc_names = model.postproc_vars_name;
-
     std::vector<DataComponentInterpretation::DataComponentInterpretation>
       interpretation;
     for (unsigned int d = 0; d < dim; ++d)
       interpretation.push_back(
         DataComponentInterpretation::component_is_part_of_vector);
-    for (unsigned int v = 0; v < postproc_names.size()-dim; ++v)
+    for (unsigned int v = 0; v < postproc_vars_name.size()-dim; ++v)
       interpretation.push_back(DataComponentInterpretation::component_is_scalar);
 
     return interpretation;
@@ -666,7 +549,7 @@ namespace Problem
     const std::string quantity_name =
       postprocessor.do_error == 1 ? "error" : "norm";
 
-    std::vector<std::string> vars_names = postprocessor.model.vars_name;
+    std::vector<std::string> vars_names = oceano_operator.model.vars_name;
 
     pcout << "Time:" << std::setw(8) << std::setprecision(3) << time
           << ", dt: " << std::setw(8) << std::setprecision(2) << time_step
@@ -707,13 +590,20 @@ namespace Problem
         std::vector<LinearAlgebra::distributed::Vector<Number>>
           postprocess_scalar_variables(postprocessor.n_postproc_vars-dim, solution_height);
 
-        postprocessor.evaluate_vector_field(solution_height,
-                                            solution_discharge,
-                                            solution_tracer,
-                                            x_evaluation_points,
-                                            postprocess_vector_variables,
-                                            postprocess_scalar_variables);
-
+#ifdef OCEANO_WITH_TRACERS
+        oceano_operator.evaluate_vector_field(solution_height,
+                                              solution_discharge,
+                                              solution_tracer,
+                                              x_evaluation_points,
+                                              postprocess_vector_variables,
+                                              postprocess_scalar_variables);
+#else
+        oceano_operator.evaluate_vector_field(solution_height,
+                                              solution_discharge,
+                                              x_evaluation_points,
+                                              postprocess_vector_variables,
+                                              postprocess_scalar_variables);
+#endif
         std::vector<std::string> names_postproc
           = postprocessor.get_names();
         std::vector<std::string> names_vector;
@@ -930,7 +820,7 @@ namespace Problem
     // functions that postprocess the solution. For now there the postprocess
     // consists of only one function that print the solution and compute an
     // error or norm of the solution.
-    Postprocessor postprocessor(prm);
+    Postprocessor postprocessor(prm, oceano_operator.model.postproc_vars_name);
 
     output_results(postprocessor, 0);
 

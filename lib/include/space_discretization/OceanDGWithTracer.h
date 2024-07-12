@@ -130,7 +130,7 @@ namespace SpaceDiscretization
       const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
       std::vector<LinearAlgebra::distributed::Vector<Number>>       &vec_ki_tracer,
       LinearAlgebra::distributed::Vector<Number>                    &solution_tracer,
-      LinearAlgebra::distributed::Vector<Number>                    &next_ri_tracer) const
+      LinearAlgebra::distributed::Vector<Number>                    &next_ri_tracer) const;
 
 #endif
     void project_tracers(const Function<dim> &                       function,
@@ -139,6 +139,14 @@ namespace SpaceDiscretization
     std::array<double, n_tra> compute_errors_tracers(
       const Function<dim> &                             function,
       const LinearAlgebra::distributed::Vector<Number> &solution_tracer) const;
+
+    void evaluate_vector_field(
+      const LinearAlgebra::distributed::Vector<Number>        &solution_height,
+      const LinearAlgebra::distributed::Vector<Number>        &solution_discharge,
+      const LinearAlgebra::distributed::Vector<Number>        &solution_tracer,
+      const std::vector<Point<dim>>                           &evaluation_points,
+      LinearAlgebra::distributed::Vector<Number>              &computed_vector_quantities,
+      std::vector<LinearAlgebra::distributed::Vector<Number>> &computed_scalar_quantities) const;
 
     using OceanoOperator<dim, n_tra, degree, n_points_1d>::bc;
     
@@ -1038,6 +1046,97 @@ namespace SpaceDiscretization
       errors[d] = std::sqrt(errors_squared[d]);
 
     return errors;
+  }
+
+  // For the main evaluation of the field variables, we first check that the
+  // lengths of the arrays equal the expected values (namely the length of the
+  // postprocessed variable vector equal the solution vector).
+  // Then we loop over all evaluation points and
+  // fill the respective information. First we fill the primal solution
+  // variables, the so called prognostic variables. Then we compute derived variables,
+  // the velocity $\mathbf u$ or the depth $h$. These variables are defined in
+  // the model class and they can change from model to model.
+  // For now these variables can depend only on the solution and on given data. For the
+  // implementation of output variables depending on given data see the deal.ii documentation:
+  // https://www.dealii.org/current/doxygen/deal.II/classDataPostprocessorVector.html
+  // In general the output can also depend on the solution gradient (think for example to the
+  // vorticity) but this part has been commented for now, see `do_schlieren_plot`.
+  // For the postprocessed variables, a well defined order must be followed: first the
+  // velocity vector, then all the scalars.
+  //
+  // The loop over the evaluation points seems not vectorized.
+  // However the usual way to recover data is with
+  // the `evaluate_function` that operates on vectorized data. With a few tricks the
+  // the `evaluate_function` has been adapted to a non-vectorized loop.
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperatorWithTracer<dim, n_tra, degree, n_points_1d>::evaluate_vector_field(
+    const LinearAlgebra::distributed::Vector<Number>        &solution_height,
+    const LinearAlgebra::distributed::Vector<Number>        &solution_discharge,
+    const LinearAlgebra::distributed::Vector<Number>        &solution_tracer,
+    const std::vector<Point<dim>>                           &evaluation_points,
+    LinearAlgebra::distributed::Vector<Number>              &computed_vector_quantities,
+    std::vector<LinearAlgebra::distributed::Vector<Number>> &computed_scalar_quantities) const
+  {
+    const unsigned int n_evaluation_points = solution_height.size();
+    const std::vector<std::string> postproc_names = model.postproc_vars_name;
+
+    //if (do_schlieren_plot == true)
+    //  Assert(inputs.solution_gradients.size() == n_evaluation_points,
+    //         ExcInternalError());
+    Assert(computed_vector_quantities.size() == n_evaluation_points*dim,
+           ExcInternalError());
+    Assert(computed_scalar_quantities.size() == postproc_names.size()-dim,
+           ExcInternalError());
+
+    for (unsigned int p = 0; p < n_evaluation_points; ++p)
+      {
+        const auto height = solution_height[p];
+        Tensor<1, dim> discharge;
+        for (unsigned int d = 0; d < dim; ++d)
+          discharge[d] = solution_discharge[dim*p+d];
+        Tensor<1, n_tra> tracer;
+        for (unsigned int t = 0; t < n_tra; ++t)
+          tracer[t] = solution_tracer[n_tra*p+t];
+
+        Point<dim, VectorizedArray<Number>> x_evaluation_points;
+        for (unsigned int d = 0; d < dim; ++d)
+          x_evaluation_points[d] = evaluation_points[p][d];
+
+        const auto data = evaluate_function<dim, Number>(
+            *bc->problem_data, x_evaluation_points, 0);
+
+        const Tensor<1, dim> velocity = model.velocity<dim>(height, discharge, data[0]);
+
+        for (unsigned int d = 0; d < dim; ++d)
+          computed_vector_quantities[dim*p+d] = velocity[d];
+
+        for (unsigned int v = 0; v < postproc_names.size()-dim; ++v)
+          {
+            if (postproc_names[v+dim] == "pressure")
+              computed_scalar_quantities[v][p] =
+                model.pressure<dim>(height, data[0]);
+            else if (postproc_names[v+dim] == "depth")
+              computed_scalar_quantities[v][p] = height + data[0];
+            else if (postproc_names[v+dim] == "speed_of_sound")
+              computed_scalar_quantities[v][p] =
+                std::sqrt(model.square_wavespeed<dim>(height, data[0]));
+            else if (postproc_names[v+dim] == "tracer")
+              for (unsigned int t = 0; t < n_tra; ++t)
+                computed_scalar_quantities[v][p] =
+                  model.tracer<n_tra>(height, tracer, data[0])[t];
+            else
+              {
+                std::cout << "Postprocessing variable " << postproc_names[dim+v]
+                          << " does not exist. Consider to code it in your model"
+                          << std::endl;
+                 Assert(false, ExcNotImplemented());
+              }
+          }
+
+        //if (do_schlieren_plot == true)
+        //  computed_quantities[p](n_vars) =
+        //    inputs.solution_gradients[p][0] * inputs.solution_gradients[p][0];
+      }
   }
 
 } // namespace SpaceDiscretization

@@ -223,21 +223,25 @@ namespace SpaceDiscretization
       const LinearAlgebra::distributed::Vector<Number> &solution_height,
       const LinearAlgebra::distributed::Vector<Number> &solution_discharge) const;
 
+    void evaluate_vector_field(
+      const LinearAlgebra::distributed::Vector<Number>        &solution_height,
+      const LinearAlgebra::distributed::Vector<Number>        &solution_discharge,
+      const std::vector<Point<dim>>                           &evaluation_points,
+      LinearAlgebra::distributed::Vector<Number>              &computed_vector_quantities,
+      std::vector<LinearAlgebra::distributed::Vector<Number>> &computed_scalar_quantities) const;
+
     void
     initialize_vector(LinearAlgebra::distributed::Vector<Number> &vector,
                       const unsigned int                          variable) const;
 
     ICBC::BcBase<dim, 1+dim+n_tra> *bc;
-    
-  protected:
-    MatrixFree<dim, Number> data;
 
-    TimerOutput &timer;
-
-    // The switch between the different model is realized with
+    // The switch between the different models is realized with
     // Preprocessor keys. As already explained we have avoided pointers to 
     // interface classes. The Euler and the Shallow Water class must expose
-    // the same interfaces with identical member functions.
+    // the same interfaces with identical member functions. Note that the
+    // model class is public beacause it must be accessed, during postprocessing
+    // outside the OceanoOperator class
 #if defined MODEL_EULER
     Model::Euler model;
 #elif defined MODEL_SHALLOWWATER
@@ -249,6 +253,7 @@ namespace SpaceDiscretization
     return 0.;
 #endif
 
+   protected:
     // Similarly the switch between the different numerical flux:
 #if defined NUMERICALFLUX_LAXFRIEDRICHSMODIFIED
     NumericalFlux::LaxFriedrichsModified num_flux;
@@ -258,6 +263,10 @@ namespace SpaceDiscretization
     Assert(false, ExcNotImplemented());
     return 0.;
 #endif
+
+    MatrixFree<dim, Number> data;
+
+    TimerOutput &timer;
 
   private:
     void local_apply_inverse_mass_matrix_height(
@@ -341,9 +350,9 @@ namespace SpaceDiscretization
     ICBC::BcBase<dim, 1+dim+n_tra>   *bc,
     TimerOutput                      &timer)
     : bc(bc)
-    , timer(timer)
     , model(param)
     , num_flux(param)
+    , timer(timer)
   {}
 
 
@@ -2095,6 +2104,89 @@ namespace SpaceDiscretization
     max_transport = Utilities::MPI::max(max_transport, MPI_COMM_WORLD);
 
     return max_transport;
+  }
+
+  // For the main evaluation of the field variables, we first check that the
+  // lengths of the arrays equal the expected values (namely the length of the
+  // postprocessed variable vector equal the solution vector).
+  // Then we loop over all evaluation points and
+  // fill the respective information. First we fill the primal solution
+  // variables, the so called prognostic variables. Then we compute derived variables,
+  // the velocity $\mathbf u$ or the depth $h$. These variables are defined in
+  // the model class and they can change from model to model.
+  // For now these variables can depend only on the solution and on given data. For the
+  // implementation of output variables depending on given data see the deal.ii documentation:
+  // https://www.dealii.org/current/doxygen/deal.II/classDataPostprocessorVector.html
+  // In general the output can also depend on the solution gradient (think for example to the
+  // vorticity) but this part has been commented for now, see `do_schlieren_plot`.
+  // For the postprocessed variables, a well defined order must be followed: first the
+  // velocity vector, then all the scalars.
+  //
+  // The loop over the evaluation points seems not vectorized.
+  // However the usual way to recover data is with
+  // the `evaluate_function` that operates on vectorized data. With a few tricks the
+  // the `evaluate_function` has been adapted to a non-vectorized loop.
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_tra, degree, n_points_1d>::evaluate_vector_field(
+    const LinearAlgebra::distributed::Vector<Number>        &solution_height,
+    const LinearAlgebra::distributed::Vector<Number>        &solution_discharge,
+    const std::vector<Point<dim>>                           &evaluation_points,
+    LinearAlgebra::distributed::Vector<Number>              &computed_vector_quantities,
+    std::vector<LinearAlgebra::distributed::Vector<Number>> &computed_scalar_quantities) const
+  {
+    const unsigned int n_evaluation_points = solution_height.size();
+    const std::vector<std::string> postproc_names = model.postproc_vars_name;
+
+    //if (do_schlieren_plot == true)
+    //  Assert(inputs.solution_gradients.size() == n_evaluation_points,
+    //         ExcInternalError());
+    Assert(computed_vector_quantities.size() == n_evaluation_points*dim,
+           ExcInternalError());
+    Assert(computed_scalar_quantities.size() == postproc_names.size()-dim,
+           ExcInternalError());
+
+    for (unsigned int p = 0; p < n_evaluation_points; ++p)
+      {
+        const auto height = solution_height[p];
+        Tensor<1, dim> discharge;
+        for (unsigned int d = 0; d < dim; ++d)
+          discharge[d] = solution_discharge[dim*p+d];
+
+        Point<dim, VectorizedArray<Number>> x_evaluation_points;
+        for (unsigned int d = 0; d < dim; ++d)
+          x_evaluation_points[d] = evaluation_points[p][d];
+
+        const auto data = evaluate_function<dim, Number>(
+            *bc->problem_data, x_evaluation_points, 0);
+
+        const Tensor<1, dim> velocity = model.velocity<dim>(height, discharge, data[0]);
+
+        for (unsigned int d = 0; d < dim; ++d)
+          computed_vector_quantities[dim*p+d] = velocity[d];
+
+        for (unsigned int v = 0; v < postproc_names.size()-dim; ++v)
+          {
+            if (postproc_names[v+dim] == "pressure")
+              computed_scalar_quantities[v][p] =
+                model.pressure<dim>(height, data[0]);
+            else if (postproc_names[v+dim] == "depth")
+              computed_scalar_quantities[v][p] = height + data[0];
+            else if (postproc_names[v+dim] == "speed_of_sound")
+              computed_scalar_quantities[v][p] =
+                std::sqrt(model.square_wavespeed<dim>(height, data[0]));
+            else
+              {
+                std::cout << "Postprocessing variable " << postproc_names[dim+v]
+                          << " does not exist. Consider to code it in your model"
+                          << std::endl;
+                 Assert(false, ExcNotImplemented());
+              }
+          }
+
+        //if (do_schlieren_plot == true)
+        //  computed_quantities[p](n_vars) =
+        //    inputs.solution_gradients[p][0] * inputs.solution_gradients[p][0];
+      }
   }
 
 } // namespace SpaceDiscretization
