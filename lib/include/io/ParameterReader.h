@@ -100,7 +100,7 @@ namespace IO
     // water density, $\rho_{air}$ and $\rho_0$.
     // They need to lie in the half-open interval $[0,\infty)$
     // represented by calling the `Patterns::Double` class with only the 
-    // left end-point as argument 
+    // left end-point as argument
     prm.enter_subsection("Physical constants");
     {
       prm.declare_entry("g", "9.81", Patterns::Double(0), "Gravity");
@@ -129,6 +129,25 @@ namespace IO
                         "2e-11",
                         Patterns::Double(0),
                         "Wind drag coefficient");
+    }
+    prm.leave_subsection();
+
+    // A physical model may need some external data. For the Shallow Water
+    // equations these are typically the bathymetry or the wind field.
+    // To better handle large dataseta, data are inputted via txt compressed
+    // file (e.g. ".txt.gz"). The next subsection fills the different data file
+    // names.
+    prm.enter_subsection("Input data files");
+    {
+      prm.declare_entry("Bathymetry_filename",
+                        "bathymetry.txt.gz",
+                        Patterns::Anything(),
+                        "Bathymetry structured txt file name");
+
+      prm.declare_entry("Exact_solution_filename",
+                        "exact_solution.txt.gz",
+                        Patterns::Anything(),
+                        "Bathymetry structured txt file name");
     }
     prm.leave_subsection();
 

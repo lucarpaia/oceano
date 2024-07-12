@@ -56,8 +56,9 @@
 #undef  ICBC_IMPULSIVEWAVE
 #undef  ICBC_SHALLOWWATERVORTEX
 #undef  ICBC_STOMMELGYRE
-#define ICBC_LAKEATREST
+#undef  ICBC_LAKEATREST
 #undef  ICBC_TRACERADVECTION
+#define ICBC_CHANNELFLOW
 // We have two models: a non-hydrostatic Euler model for perfect gas which was the
 // original model coded in the deal.II example and the shallow water model. The Euler model
 // is only used for debugging, to check consistency with the original deal.II example and
@@ -159,6 +160,8 @@
 #include <icbc/Icbc_LakeAtRest.h>
 #elif defined ICBC_TRACERADVECTION
 #include <icbc/Icbc_TracerAdvection.h>
+#elif defined ICBC_CHANNELFLOW
+#include <icbc/Icbc_ChannelFlow.h>
 #endif
 
 namespace Problem
@@ -399,9 +402,11 @@ namespace Problem
         Point<dim, VectorizedArray<Number>> x_evaluation_points;
         for (unsigned int d = 0; d < dim; ++d)
           x_evaluation_points[d] = evaluation_points[p][d];
-        const auto data =
-          SpaceDiscretization::evaluate_function<dim, Number>(
-            ICBC::ProblemData<dim>(prm), x_evaluation_points, 0);
+
+        VectorizedArray<Number> data = 0.7415549102;
+//        const auto data =                //lrp: rebranch bathy in postproc
+//          SpaceDiscretization::evaluate_function<dim, Number>(
+//            ICBC::ProblemData<dim>(prm), x_evaluation_points, 0);
 
         const Tensor<1, dim> velocity = model.velocity<dim>(height, discharge, data[0]);
 
@@ -556,7 +561,6 @@ namespace Problem
          
     std::ifstream f(current_working_directory+slash+file_msh);
     pcout << "Reading mesh file: " << file_msh << std::endl;
-    pcout << "Reading mesh file: " << current_working_directory+slash+file_msh << std::endl;
     gridin.read_msh(f);
  
     oceano_operator.bc->set_boundary_conditions();
@@ -1043,6 +1047,8 @@ int main(int argc, char **argv)
       bc = new ICBC::BcLakeAtRest<dimension, n_variables>;
 #elif defined ICBC_TRACERADVECTION
       bc = new ICBC::BcTracerAdvection<dimension, n_variables>;
+#elif defined ICBC_CHANNELFLOW
+      bc = new ICBC::BcChannelFlow<dimension, n_variables>;
 #else
       Assert(false, ExcNotImplemented());
       return 0.;
