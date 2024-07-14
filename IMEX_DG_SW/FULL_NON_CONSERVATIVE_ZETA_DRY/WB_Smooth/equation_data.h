@@ -25,8 +25,8 @@ namespace EquationData {
 
   /*--- Polynomial degrees. We typically consider the same polynomial degree for all the variables ---*/
   static const unsigned int degree_zeta = 1;
-  static const unsigned int degree_hu   = 1;
-  static const unsigned int degree_hc   = 1;
+  static const unsigned int degree_u    = 1;
+  static const unsigned int degree_c    = 1;
 
   static const double g = 9.81; /*--- Acceleration of gravity ---*/
 
@@ -67,12 +67,12 @@ namespace EquationData {
   }
 
 
-  // We declare now the class that describes the initial condition for the discharge.
+  // We declare now the class that describes the initial condition for the velocity.
   //
   template<int dim>
-  class Discharge: public Function<dim> {
+  class Velocity: public Function<dim> {
   public:
-    Discharge(const double initial_time = 0.0); /*--- Class constructor ---*/
+    Velocity(const double initial_time = 0.0); /*--- Class constructor ---*/
 
     virtual double value(const Point<dim>&  p,
                          const unsigned int component = 0) const override; /*--- Evaluation of the discharge for each component ---*/
@@ -84,21 +84,21 @@ namespace EquationData {
   // Constructor which relies on the 'Function' constructor.
   //
   template<int dim>
-  Discharge<dim>::Discharge(const double initial_time): Function<dim>(dim, initial_time) {}
+  Velocity<dim>::Velocity(const double initial_time): Function<dim>(dim, initial_time) {}
 
   // Specify the value for each spatial component. This function is overriden.
   //
   template<int dim>
-  double Discharge<dim>::value(const Point<dim>& p, const unsigned int component) const {
+  double Velocity<dim>::value(const Point<dim>& p, const unsigned int component) const {
     AssertIndexRange(component, dim);
 
     return 0.0;
   }
 
-  // Put together for a vector evalutation of the discharge.
+  // Put together for a vector evalutation of the velocity.
   //
   template<int dim>
-  void Discharge<dim>::vector_value(const Point<dim>& p, Vector<double>& values) const {
+  void Velocity<dim>::vector_value(const Point<dim>& p, Vector<double>& values) const {
     Assert(values.size() == dim, ExcDimensionMismatch(values.size(), dim));
 
     for(unsigned int i = 0; i < dim; ++i) {

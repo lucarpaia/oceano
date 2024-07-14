@@ -39,14 +39,14 @@ namespace SW {
 
     void set_SW_stage(const unsigned int stage); /*--- Setter of the equation currently under solution. ---*/
 
-    void set_zeta_curr(const Vec& src); /*--- Setter of the current height. This is for the assembling of the bilinear forms
+    void set_zeta_curr(const Vec& src); /*--- Setter of the current elevation. This is for the assembling of the bilinear forms
                                               where only one source vector can be passed in input. ---*/
 
     void set_hu_curr(const Vec& src); /*--- Setter of the current discharge. This is for the assembling of the bilinear forms
                                             where only one source vector can be passed in input. ---*/
 
     void vmult_rhs_zeta(Vec& dst, const std::vector<Vec>& src) const; /*--- Auxiliary function to assemble the rhs
-                                                                            for the height. ---*/
+                                                                            for the elevation. ---*/
 
     void vmult_rhs_hu(Vec& dst, const std::vector<Vec>& src) const;  /*--- Auxiliary function to assemble the rhs
                                                                            for the discharge. ---*/
@@ -92,7 +92,7 @@ namespace SW {
     /*-- Auxiliary function for the bathymetry ---*/
     EquationData::Bathymetry<dim, Number> zb;
 
-    /*--- Assembler functions for the rhs related to the height equation. Here, and also in the following,
+    /*--- Assembler functions for the rhs related to the elevation equation. Here, and also in the following,
           we distinguish between the contribution for cells, faces and boundary. ---*/
     void assemble_rhs_cell_term_zeta(const MatrixFree<dim, Number>&               data,
                                      Vec&                                         dst,
@@ -107,7 +107,7 @@ namespace SW {
                                          const std::vector<Vec>&                      src,
                                          const std::pair<unsigned int, unsigned int>& face_range) const {}
 
-    /*--- Assembler function related to the bilinear form of the height equation. Only cell contribution is present,
+    /*--- Assembler function related to the bilinear form of the elevation equation. Only cell contribution is present,
           since, basically, we end up with a mass matrix. ---*/
     void assemble_cell_term_zeta(const MatrixFree<dim, Number>&               data,
                                  Vec&                                         dst,
@@ -154,7 +154,7 @@ namespace SW {
                                const Vec&                                   src,
                                const std::pair<unsigned int, unsigned int>& cell_range) const;
 
-    /*--- Assembler functions for the diagonal part of the matrix for the height equation. ---*/
+    /*--- Assembler functions for the diagonal part of the matrix for the elevation equation. ---*/
     void assemble_diagonal_cell_term_zeta(const MatrixFree<dim, Number>&               data,
                                           Vec&                                         dst,
                                           const unsigned int&                          src,
@@ -211,7 +211,6 @@ namespace SW {
     b_tilde = b;
   }
 
-
   // Constructor with runtime parameters storage
   //
   template<int dim, unsigned int n_stages,
@@ -262,7 +261,6 @@ namespace SW {
     dt = time_step;
   }
 
-
   // Setter of IMEX stage (this can be known only during the effective execution
   // and so it has to be demanded to the class that really solves the problem)
   //
@@ -278,7 +276,6 @@ namespace SW {
 
     IMEX_stage = stage;
   }
-
 
   // Setter of SW stage (this can be known only during the effective execution
   // and so it has to be demanded to the class that really solves the problem)
@@ -296,8 +293,7 @@ namespace SW {
     SW_stage = stage;
   }
 
-
-  // Setter of current height
+  // Setter of current elevation
   //
   template<int dim, unsigned int n_stages,
            int fe_degree_zeta, int fe_degree_hu, int fe_degree_hc,
@@ -309,7 +305,6 @@ namespace SW {
     zeta_curr = src;
     zeta_curr.update_ghost_values();
   }
-
 
   // Setter of current discharge
   //
@@ -325,7 +320,7 @@ namespace SW {
   }
 
 
-  // Assemble rhs cell term for the height equation
+  // Assemble rhs cell term for the elevation equation
   //
   template<int dim, unsigned int n_stages,
            int fe_degree_zeta, int fe_degree_hu, int fe_degree_hc,
@@ -346,7 +341,7 @@ namespace SW {
       /*--- We first start by declaring the suitable instances to read the density and
       the velocity and previous stages. 'phi' will be used only to 'submit' the result.
       The second argument specifies which dof handler has to be used (in this implementation 0 stands for
-      height, 1 for discharge (aka mass flux) and 2 for tracer). ---*/
+      elevation, 1 for discharge (aka mass flux) and 2 for tracer). ---*/
       FEEvaluation_zeta            phi(data, 0),
                                    phi_zeta_old(data, 0);
       std::vector<FEEvaluation_hu> phi_hu(IMEX_stage - 1, FEEvaluation_hu(data, 1));
@@ -367,7 +362,7 @@ namespace SW {
 
         /*--- Loop over quadrature points of each cell ---*/
         for(unsigned int q = 0; q < phi.n_q_points; ++q) {
-          /*--- Compute the height at the previous step (always needed) ---*/
+          /*--- Compute the elevation at the previous step (always needed). ---*/
           const auto& zeta_old = phi_zeta_old.get_value(q);
 
           /*--- Compute the quantities at the previous stages for the flux ---*/
@@ -429,8 +424,7 @@ namespace SW {
     }
   }
 
-
-  // Assemble rhs face term for the height
+  // Assemble rhs face term for the elevation
   //
   template<int dim, unsigned int n_stages,
            int fe_degree_zeta, int fe_degree_hu, int fe_degree_hc,
@@ -584,8 +578,7 @@ namespace SW {
     }
   }
 
-
-  // Put together all the previous steps for height
+  // Put together all the previous steps for elevation
   //
   template<int dim, unsigned int n_stages,
            int fe_degree_zeta, int fe_degree_hu, int fe_degree_hc,
@@ -606,8 +599,7 @@ namespace SW {
                      MatrixFree<dim, Number>::DataAccessOnFaces::unspecified);
   }
 
-
-  // Assemble cell term for the height
+  // Assemble cell term for the elevation
   //
   template<int dim, unsigned int n_stages,
            int fe_degree_zeta, int fe_degree_hu, int fe_degree_hc,
@@ -684,7 +676,8 @@ namespace SW {
             zb_q[v] = zb.value(point);
           }
 
-          /*--- Compute the discharge at the previous step (always necessary) ---*/
+          /*--- Compute the discharge at the previous step (always necessary).
+                Notice that this is ok because of explicit method. ---*/
           const auto& hu_old = phi_hu[0].get_value(q);
 
           /*--- Compute the quantites at the previous stages ---*/
@@ -701,7 +694,7 @@ namespace SW {
             non_cons_flux += a[IMEX_stage - 1][s - 1]*dt*EquationData::g*h_s*grad_zeta_s;
 
             const auto& gamma_s = 0.0; // TODO: Add proper expression of the friction
-            friction += a_tilde[IMEX_stage - 1][s - 1]*dt*gamma_s*(hu_s/h_s);
+            friction += a_tilde[IMEX_stage - 1][s - 1]*dt*(gamma_s*(hu_s/h_s));
           }
 
           phi.submit_value(hu_old - non_cons_flux - friction, q);
@@ -742,7 +735,8 @@ namespace SW {
             zb_q[v] = zb.value(point);
           }
 
-          /*--- Compute the discharge at the previous step (always necessary) ---*/
+          /*--- Compute the discharge at the previous step (always necessary).
+                Notice that this is ok because of explicit method.---*/
           const auto& hu_old = phi_hu[0].get_value(q);
 
           /*--- Compute the quantites at the previous stages ---*/
@@ -759,7 +753,7 @@ namespace SW {
             non_cons_flux += b[s - 1]*dt*EquationData::g*h_s*grad_zeta_s;
 
             const auto& gamma_s = 0.0; //TODO: Add proper expression of the friction
-            friction += b_tilde[s-1]*dt*gamma_s*(hu_s/h_s);
+            friction += b_tilde[s-1]*dt*(gamma_s*(hu_s/h_s));
           }
 
           phi.submit_value(hu_old - non_cons_flux - friction, q);
@@ -770,7 +764,6 @@ namespace SW {
       }
     }
   }
-
 
   // Assemble rhs face term for the discharge
   //
@@ -956,7 +949,6 @@ namespace SW {
     }
   }
 
-
   // Put together all the previous steps for the discharge
   //
   template<int dim, unsigned int n_stages,
@@ -995,7 +987,7 @@ namespace SW {
     FEEvaluation<dim, fe_degree_hu, n_q_points_1d_hu, dim, Number> phi(data, 1);
 
     if(IMEX_stage <= n_stages) {
-      /*--- Since here we have just one 'src' vector, but we also need to deal with the current height and discharge,
+      /*--- Since here we have just one 'src' vector, but we also need to deal with the current elevation and discharge,
             we employ the auxiliary vectors where we set this information ---*/
       FEEvaluation<dim, fe_degree_zeta, n_q_points_1d_hu, 1, Number> phi_zeta_curr(data, 0);
       FEEvaluation<dim, fe_degree_hu, n_q_points_1d_hu, dim, Number> phi_hu_curr(data, 1);
@@ -1030,7 +1022,7 @@ namespace SW {
 
           const auto& gamma    = 0.0; // TODO: Add friction as a function of h_s and hu_s
 
-          phi.submit_value((1.0 + a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*gamma/h_s)*phi.get_value(q), q);
+          phi.submit_value((1.0 + a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*(gamma/h_s))*phi.get_value(q), q);
         }
 
         phi.integrate_scatter(EvaluationFlags::values, dst);
@@ -1104,7 +1096,8 @@ namespace SW {
             zb_q[v] = zb.value(point);
           }
 
-          /*--- Compute the tracer at the previous step (always needed) ---*/
+          /*--- Compute the tracer at the previous step (always needed).
+                Notice that this is ok because of explicit method. ---*/
           const auto& hc_old = phi_hc[0].get_value(q);
 
           /*--- Compute the quantities at the previous stages for the flux ---*/
@@ -1159,7 +1152,8 @@ namespace SW {
             zb_q[v] = zb.value(point);
           }
 
-          /*--- Compute the tracer at the previous step (always needed) ---*/
+          /*--- Compute the tracer at the previous step (always needed).
+                Notice that this is ok because of explicit method. ---*/
           const auto& hc_old = phi_hc[0].get_value(q);
 
           /*--- Compute the quantities at the previous stages for the flux ---*/
@@ -1181,7 +1175,6 @@ namespace SW {
       }
     }
   }
-
 
   // Assemble rhs face term for the tracer
   //
@@ -1350,7 +1343,6 @@ namespace SW {
     }
   }
 
-
   // Put together all the previous steps for the tracer
   //
   template<int dim, unsigned int n_stages,
@@ -1371,7 +1363,6 @@ namespace SW {
                      MatrixFree<dim, Number>::DataAccessOnFaces::unspecified,
                      MatrixFree<dim, Number>::DataAccessOnFaces::unspecified);
   }
-
 
   // Assemble cell term for the tracer
   //
@@ -1433,7 +1424,7 @@ namespace SW {
   }
 
 
-  // Assemble diagonal cell term for the height
+  // Assemble diagonal cell term for the elevation
   //
   template<int dim, unsigned int n_stages,
            int fe_degree_zeta, int fe_degree_hu, int fe_degree_hc,
@@ -1503,7 +1494,7 @@ namespace SW {
     }
 
     if(IMEX_stage <= n_stages) {
-      /*--- Since here we have just one 'src' vector, but we also need to deal with the current height and discharge,
+      /*--- Since here we have just one 'src' vector, but we also need to deal with the current elevation and discharge,
             we employ the auxiliary vectors where we set this information ---*/
       FEEvaluation<dim, fe_degree_zeta, n_q_points_1d_hu, 1, Number> phi_zeta_curr(data, 0);
       FEEvaluation<dim, fe_degree_hu, n_q_points_1d_hu, dim, Number> phi_hu_curr(data, 1);
@@ -1545,7 +1536,7 @@ namespace SW {
 
             const auto& gamma    = 0.0; // TODO: Add friction as a function of h_s and hu_s
 
-            phi.submit_value((1.0 + a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*gamma/h_s)*phi.get_value(q), q);
+            phi.submit_value((1.0 + a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*(gamma/h_s))*phi.get_value(q), q);
           }
 
           phi.integrate(EvaluationFlags::values);

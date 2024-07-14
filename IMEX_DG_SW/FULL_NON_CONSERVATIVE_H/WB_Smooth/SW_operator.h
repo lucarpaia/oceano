@@ -22,8 +22,8 @@ namespace SW {
   // @sect{ <code>SWOperator::SWOperator</code> }
   //
   template<int dim, unsigned int n_stages,
-           int fe_degree_zeta, int fe_degree_hu, int fe_degree_hc,
-           int n_q_points_1d_zeta, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
+           int fe_degree_h, int fe_degree_hu, int fe_degree_hc,
+           int n_q_points_1d_h, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
   class SWOperator: public MatrixFreeOperators::Base<dim, Vec> {
   public:
     using Number = typename Vec::value_type;
@@ -39,14 +39,14 @@ namespace SW {
 
     void set_SW_stage(const unsigned int stage); /*--- Setter of the equation currently under solution. ---*/
 
-    void set_zeta_curr(const Vec& src); /*--- Setter of the current elevation. This is for the assembling of the bilinear forms
-                                              where only one source vector can be passed in input. ---*/
+    void set_h_curr(const Vec& src); /*--- Setter of the current depth. This is for the assembling of the bilinear forms
+                                           where only one source vector can be passed in input. ---*/
 
     void set_hu_curr(const Vec& src); /*--- Setter of the current discharge. This is for the assembling of the bilinear forms
                                             where only one source vector can be passed in input. ---*/
 
-    void vmult_rhs_zeta(Vec& dst, const std::vector<Vec>& src) const; /*--- Auxiliary function to assemble the rhs
-                                                                            for the elevation. ---*/
+    void vmult_rhs_h(Vec& dst, const std::vector<Vec>& src) const; /*--- Auxiliary function to assemble the rhs
+                                                                         for the depth. ---*/
 
     void vmult_rhs_hu(Vec& dst, const std::vector<Vec>& src) const;  /*--- Auxiliary function to assemble the rhs
                                                                            for the discharge. ---*/
@@ -86,33 +86,30 @@ namespace SW {
                                                                            bilinear forms ---*/
 
   private:
-    Vec zeta_curr,
+    Vec h_curr,
         hu_curr;
 
-    /*-- Auxiliary function for the bathymetry ---*/
-    EquationData::Bathymetry<dim, Number> zb;
-
-    /*--- Assembler functions for the rhs related to the elevation equation. Here, and also in the following,
+    /*--- Assembler functions for the rhs related to the depth equation. Here, and also in the following,
           we distinguish between the contribution for cells, faces and boundary. ---*/
-    void assemble_rhs_cell_term_zeta(const MatrixFree<dim, Number>&               data,
-                                     Vec&                                         dst,
-                                     const std::vector<Vec>&                      src,
-                                     const std::pair<unsigned int, unsigned int>& cell_range) const;
-    void assemble_rhs_face_term_zeta(const MatrixFree<dim, Number>&               data,
-                                     Vec&                                         dst,
-                                     const std::vector<Vec>&                      src,
-                                     const std::pair<unsigned int, unsigned int>& face_range) const;
-    void assemble_rhs_boundary_term_zeta(const MatrixFree<dim, Number>&               data,
-                                         Vec&                                         dst,
-                                         const std::vector<Vec>&                      src,
-                                         const std::pair<unsigned int, unsigned int>& face_range) const {}
+    void assemble_rhs_cell_term_h(const MatrixFree<dim, Number>&               data,
+                                  Vec&                                         dst,
+                                  const std::vector<Vec>&                      src,
+                                  const std::pair<unsigned int, unsigned int>& cell_range) const;
+    void assemble_rhs_face_term_h(const MatrixFree<dim, Number>&               data,
+                                  Vec&                                         dst,
+                                  const std::vector<Vec>&                      src,
+                                  const std::pair<unsigned int, unsigned int>& face_range) const;
+    void assemble_rhs_boundary_term_h(const MatrixFree<dim, Number>&               data,
+                                      Vec&                                         dst,
+                                      const std::vector<Vec>&                      src,
+                                      const std::pair<unsigned int, unsigned int>& face_range) const {}
 
-    /*--- Assembler function related to the bilinear form of the elevation equation. Only cell contribution is present,
+    /*--- Assembler function related to the bilinear form of the depth equation. Only cell contribution is present,
           since, basically, we end up with a mass matrix. ---*/
-    void assemble_cell_term_zeta(const MatrixFree<dim, Number>&               data,
-                                 Vec&                                         dst,
-                                 const Vec&                                   src,
-                                 const std::pair<unsigned int, unsigned int>& cell_range) const;
+    void assemble_cell_term_h(const MatrixFree<dim, Number>&               data,
+                              Vec&                                         dst,
+                              const Vec&                                   src,
+                              const std::pair<unsigned int, unsigned int>& cell_range) const;
 
     /*--- Assembler functions for the rhs related to the discharge equation. ---*/
     void assemble_rhs_cell_term_hu(const MatrixFree<dim, Number>&               data,
@@ -154,11 +151,11 @@ namespace SW {
                                const Vec&                                   src,
                                const std::pair<unsigned int, unsigned int>& cell_range) const;
 
-    /*--- Assembler functions for the diagonal part of the matrix for the elevation equation. ---*/
-    void assemble_diagonal_cell_term_zeta(const MatrixFree<dim, Number>&               data,
-                                          Vec&                                         dst,
-                                          const unsigned int&                          src,
-                                          const std::pair<unsigned int, unsigned int>& cell_range) const;
+    /*--- Assembler functions for the diagonal part of the matrix for the depth equation. ---*/
+    void assemble_diagonal_cell_term_h(const MatrixFree<dim, Number>&               data,
+                                       Vec&                                         dst,
+                                       const unsigned int&                          src,
+                                       const std::pair<unsigned int, unsigned int>& cell_range) const;
 
     /*--- Assembler functions for the diagonal part of the matrix for the discharge equation. ---*/
     void assemble_diagonal_cell_term_hu(const MatrixFree<dim, Number>&               data,
@@ -177,11 +174,11 @@ namespace SW {
   // Default constructor
   //
   template<int dim, unsigned int n_stages,
-           int fe_degree_zeta, int fe_degree_hu, int fe_degree_hc,
-           int n_q_points_1d_zeta, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
+           int fe_degree_h, int fe_degree_hu, int fe_degree_hc,
+           int n_q_points_1d_h, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
   SWOperator<dim, n_stages,
-             fe_degree_zeta, fe_degree_hu, fe_degree_hc,
-             n_q_points_1d_zeta, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
+             fe_degree_h, fe_degree_hu, fe_degree_hc,
+             n_q_points_1d_h, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
   SWOperator(): MatrixFreeOperators::Base<dim, Vec>(), dt(),
                 gamma(2.0 - std::sqrt(2.0)), a21(gamma),
                 a31(0.5), a32(0.5), a(n_stages, std::vector<double>(n_stages)),
@@ -189,7 +186,7 @@ namespace SW {
                 a31_tilde(std::sqrt(2)/4.0), a32_tilde(std::sqrt(2)/4.0), a33_tilde(1.0 - std::sqrt(2)/2.0),
                 a_tilde(n_stages, std::vector<double>(n_stages)),
                 b1(0.5 - 0.25*gamma), b2(0.5 - 0.25*gamma), b3(0.5*gamma), b(n_stages), b_tilde(b),
-                IMEX_stage(1), SW_stage(1), zb() {
+                IMEX_stage(1), SW_stage(1) {
     /*--- Butcher tableux of the explicit part ---*/
     std::fill(a.begin(), a.end(), std::vector<double>(n_stages, 0.0));
     a[1][0] = a21;
@@ -214,11 +211,11 @@ namespace SW {
   // Constructor with runtime parameters storage
   //
   template<int dim, unsigned int n_stages,
-           int fe_degree_zeta, int fe_degree_hu, int fe_degree_hc,
-           int n_q_points_1d_zeta, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
+           int fe_degree_h, int fe_degree_hu, int fe_degree_hc,
+           int n_q_points_1d_h, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
   SWOperator<dim, n_stages,
-             fe_degree_zeta, fe_degree_hu, fe_degree_hc,
-             n_q_points_1d_zeta, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
+             fe_degree_h, fe_degree_hu, fe_degree_hc,
+             n_q_points_1d_h, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
   SWOperator(RunTimeParameters::Data_Storage& data): MatrixFreeOperators::Base<dim, Vec>(), dt(data.dt),
                                                      gamma(2.0 - std::sqrt(2.0)), a21(gamma),
                                                      a31(0.5), a32(0.5), a(n_stages, std::vector<double>(n_stages)),
@@ -226,7 +223,7 @@ namespace SW {
                                                      a31_tilde(std::sqrt(2)/4.0), a32_tilde(std::sqrt(2)/4.0),
                                                      a33_tilde(1.0 - std::sqrt(2)/2.0), a_tilde(n_stages, std::vector<double>(n_stages)),
                                                      b1(0.5 - 0.25*gamma), b2(0.5 - 0.25*gamma), b3(0.5*gamma), b(n_stages), b_tilde(b),
-                                                     IMEX_stage(1), SW_stage(1), zb(data.initial_time) {
+                                                     IMEX_stage(1), SW_stage(1) {
     /*--- Butcher tableux of the explicit part ---*/
     std::fill(a.begin(), a.end(), std::vector<double>(n_stages, 0.0));
     a[1][0] = a21;
@@ -252,11 +249,11 @@ namespace SW {
   // Setter of time-step
   //
   template<int dim, unsigned int n_stages,
-           int fe_degree_zeta, int fe_degree_hu, int fe_degree_hc,
-           int n_q_points_1d_zeta, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
+           int fe_degree_h, int fe_degree_hu, int fe_degree_hc,
+           int n_q_points_1d_h, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
   void SWOperator<dim, n_stages,
-                  fe_degree_zeta, fe_degree_hu, fe_degree_hc,
-                  n_q_points_1d_zeta, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
+                  fe_degree_h, fe_degree_hu, fe_degree_hc,
+                  n_q_points_1d_h, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
   set_dt(const double time_step) {
     dt = time_step;
   }
@@ -265,11 +262,11 @@ namespace SW {
   // and so it has to be demanded to the class that really solves the problem)
   //
   template<int dim, unsigned int n_stages,
-           int fe_degree_zeta, int fe_degree_hu, int fe_degree_hc,
-           int n_q_points_1d_zeta, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
+           int fe_degree_h, int fe_degree_hu, int fe_degree_hc,
+           int n_q_points_1d_h, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
   void SWOperator<dim, n_stages,
-                  fe_degree_zeta, fe_degree_hu, fe_degree_hc,
-                  n_q_points_1d_zeta, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
+                  fe_degree_h, fe_degree_hu, fe_degree_hc,
+                  n_q_points_1d_h, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
   set_IMEX_stage(const unsigned int stage) {
     AssertIndexRange(stage, n_stages + 2);
     Assert(stage > 0, ExcInternalError());
@@ -281,11 +278,11 @@ namespace SW {
   // and so it has to be demanded to the class that really solves the problem)
   //
   template<int dim, unsigned int n_stages,
-           int fe_degree_zeta, int fe_degree_hu, int fe_degree_hc,
-           int n_q_points_1d_zeta, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
+           int fe_degree_h, int fe_degree_hu, int fe_degree_hc,
+           int n_q_points_1d_h, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
   void SWOperator<dim, n_stages,
-                  fe_degree_zeta, fe_degree_hu, fe_degree_hc,
-                  n_q_points_1d_zeta, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
+                  fe_degree_h, fe_degree_hu, fe_degree_hc,
+                  n_q_points_1d_h, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
   set_SW_stage(const unsigned int stage) {
     AssertIndexRange(stage, 7);
     Assert(stage > 0, ExcInternalError());
@@ -293,57 +290,57 @@ namespace SW {
     SW_stage = stage;
   }
 
-  // Setter of current elevation
+  // Setter of current depth
   //
   template<int dim, unsigned int n_stages,
-           int fe_degree_zeta, int fe_degree_hu, int fe_degree_hc,
-           int n_q_points_1d_zeta, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
+           int fe_degree_h, int fe_degree_hu, int fe_degree_hc,
+           int n_q_points_1d_h, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
   void SWOperator<dim, n_stages,
-                  fe_degree_zeta, fe_degree_hu, fe_degree_hc,
-                  n_q_points_1d_zeta, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
-  set_zeta_curr(const Vec& src) {
-    zeta_curr = src;
-    zeta_curr.update_ghost_values();
+                  fe_degree_h, fe_degree_hu, fe_degree_hc,
+                  n_q_points_1d_h, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
+  set_h_curr(const Vec& src) {
+    h_curr = src;
+    h_curr.update_ghost_values();
   }
 
   // Setter of current discharge
   //
   template<int dim, unsigned int n_stages,
-           int fe_degree_zeta, int fe_degree_hu, int fe_degree_hc,
-           int n_q_points_1d_zeta, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
+           int fe_degree_h, int fe_degree_hu, int fe_degree_hc,
+           int n_q_points_1d_h, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
   void SWOperator<dim, n_stages,
-                  fe_degree_zeta, fe_degree_hu, fe_degree_hc,
-                  n_q_points_1d_zeta, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
+                  fe_degree_h, fe_degree_hu, fe_degree_hc,
+                  n_q_points_1d_h, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
   set_hu_curr(const Vec& src) {
     hu_curr = src;
     hu_curr.update_ghost_values();
   }
 
 
-  // Assemble rhs cell term for the elevation equation
+  // Assemble rhs cell term for the depth equation
   //
   template<int dim, unsigned int n_stages,
-           int fe_degree_zeta, int fe_degree_hu, int fe_degree_hc,
-           int n_q_points_1d_zeta, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
+           int fe_degree_h, int fe_degree_hu, int fe_degree_hc,
+           int n_q_points_1d_h, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
   void SWOperator<dim, n_stages,
-                  fe_degree_zeta, fe_degree_hu, fe_degree_hc,
-                  n_q_points_1d_zeta, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
-  assemble_rhs_cell_term_zeta(const MatrixFree<dim, Number>&               data,
-                              Vec&                                         dst,
-                              const std::vector<Vec>&                      src,
-                              const std::pair<unsigned int, unsigned int>& cell_range) const {
+                  fe_degree_h, fe_degree_hu, fe_degree_hc,
+                  n_q_points_1d_h, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
+  assemble_rhs_cell_term_h(const MatrixFree<dim, Number>&               data,
+                           Vec&                                         dst,
+                           const std::vector<Vec>&                      src,
+                           const std::pair<unsigned int, unsigned int>& cell_range) const {
     /*--- Define typedef for sake of readibility and convenience ----*/
-    using FEEvaluation_zeta = FEEvaluation<dim, fe_degree_zeta, n_q_points_1d_hu, 1, Number>;
-    using FEEvaluation_hu   = FEEvaluation<dim, fe_degree_hu, n_q_points_1d_hu, dim, Number>;
+    using FEEvaluation_h  = FEEvaluation<dim, fe_degree_h, n_q_points_1d_hu, 1, Number>;
+    using FEEvaluation_hu = FEEvaluation<dim, fe_degree_hu, n_q_points_1d_hu, dim, Number>;
 
     /*--- Intermediate stages ---*/
     if(IMEX_stage <= n_stages) {
       /*--- We first start by declaring the suitable instances to read the density and
       the velocity and previous stages. 'phi' will be used only to 'submit' the result.
       The second argument specifies which dof handler has to be used (in this implementation 0 stands for
-      elevation, 1 for discharge (aka mass flux) and 2 for tracer). ---*/
-      FEEvaluation_zeta            phi(data, 0),
-                                   phi_zeta_old(data, 0);
+      depth, 1 for discharge (aka mass flux) and 2 for tracer). ---*/
+      FEEvaluation_h               phi(data, 0),
+                                   phi_h_old(data, 0);
       std::vector<FEEvaluation_hu> phi_hu(IMEX_stage - 1, FEEvaluation_hu(data, 1));
 
       /*--- Loop over all cells ---*/
@@ -351,8 +348,8 @@ namespace SW {
         /*--- Now we need to assign the current cell to each FEEvaluation object and then to specify which src vector
         it has to read (the proper order is clearly delegated to the user, which has to pay attention in the function
         call to be coherent). All these considerations are valid also for the other assembler functions ---*/
-        phi_zeta_old.reinit(cell);
-        phi_zeta_old.gather_evaluate(src[0], EvaluationFlags::values);
+        phi_h_old.reinit(cell);
+        phi_h_old.gather_evaluate(src[0], EvaluationFlags::values);
         for(unsigned int s = 1; s <= IMEX_stage - 1; ++s) {
           phi_hu[s - 1].reinit(cell);
           phi_hu[s - 1].gather_evaluate(src[2*(s-1) + 1], EvaluationFlags::values);
@@ -362,8 +359,8 @@ namespace SW {
 
         /*--- Loop over quadrature points of each cell ---*/
         for(unsigned int q = 0; q < phi.n_q_points; ++q) {
-          /*--- Compute the elevation at the previous step (always needed). ---*/
-          const auto& zeta_old = phi_zeta_old.get_value(q);
+          /*--- Compute the depth at the previous step (always needed). ---*/
+          const auto& h_old = phi_h_old.get_value(q);
 
           /*--- Compute the quantities at the previous stages for the flux ---*/
           Tensor<1, dim, VectorizedArray<Number>> flux;
@@ -373,7 +370,7 @@ namespace SW {
             flux += a[IMEX_stage - 1][s - 1]*dt*hu_s;
           }
 
-          phi.submit_value(zeta_old, q);
+          phi.submit_value(h_old, q);
           /*--- submit_value is used for quantities to be tested against test functions ---*/
           phi.submit_gradient(flux, q);
           /*--- submit_gradient is used for quantities to be tested against gradient of test functions ---*/
@@ -387,14 +384,14 @@ namespace SW {
     /*--- Final update ---*/
     else {
       /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
-      FEEvaluation_zeta            phi(data, 0),
-                                   phi_zeta_old(data, 0);
+      FEEvaluation_h               phi(data, 0),
+                                   phi_h_old(data, 0);
       std::vector<FEEvaluation_hu> phi_hu(IMEX_stage - 1, FEEvaluation_hu(data, 1));
 
       /*--- Loop over all cells ---*/
       for(unsigned int cell = cell_range.first; cell < cell_range.second; ++cell) {
-        phi_zeta_old.reinit(cell);
-        phi_zeta_old.gather_evaluate(src[0], EvaluationFlags::values);
+        phi_h_old.reinit(cell);
+        phi_h_old.gather_evaluate(src[0], EvaluationFlags::values);
         for(unsigned int s = 1; s <= IMEX_stage - 1; ++s) {
           phi_hu[s - 1].reinit(cell);
           phi_hu[s - 1].gather_evaluate(src[2*(s-1) + 1], EvaluationFlags::values);
@@ -405,7 +402,7 @@ namespace SW {
         /*--- Loop over quadrature points of each cell ---*/
         for(unsigned int q = 0; q < phi.n_q_points; ++q) {
           /*--- Compute the density at the previous step (always needed) ---*/
-          const auto& zeta_old = phi_zeta_old.get_value(q);
+          const auto& h_old = phi_h_old.get_value(q);
 
           /*--- Compute the quantities at the previous stages for the flux ---*/
           Tensor<1, dim, VectorizedArray<Number>> flux;
@@ -415,7 +412,7 @@ namespace SW {
             flux += b[s - 1]*dt*hu_s;
           }
 
-          phi.submit_value(zeta_old, q);
+          phi.submit_value(h_old, q);
           phi.submit_gradient(flux, q);
         }
 
@@ -424,32 +421,32 @@ namespace SW {
     }
   }
 
-  // Assemble rhs face term for the elevation
+  // Assemble rhs face term for the depth
   //
   template<int dim, unsigned int n_stages,
-           int fe_degree_zeta, int fe_degree_hu, int fe_degree_hc,
-           int n_q_points_1d_zeta, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
+           int fe_degree_h, int fe_degree_hu, int fe_degree_hc,
+           int n_q_points_1d_h, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
   void SWOperator<dim, n_stages,
-                  fe_degree_zeta, fe_degree_hu, fe_degree_hc,
-                  n_q_points_1d_zeta, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
-  assemble_rhs_face_term_zeta(const MatrixFree<dim, Number>&               data,
-                              Vec&                                         dst,
-                              const std::vector<Vec>&                      src,
-                              const std::pair<unsigned int, unsigned int>& face_range) const {
+                  fe_degree_h, fe_degree_hu, fe_degree_hc,
+                  n_q_points_1d_h, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
+  assemble_rhs_face_term_h(const MatrixFree<dim, Number>&               data,
+                           Vec&                                         dst,
+                           const std::vector<Vec>&                      src,
+                           const std::pair<unsigned int, unsigned int>& face_range) const {
     /*--- Define typedef for sake of readibility and convenience ----*/
-    using FEFaceEvaluation_zeta = FEFaceEvaluation<dim, fe_degree_zeta, n_q_points_1d_hu, 1, Number>;
-    using FEFaceEvaluation_hu   = FEFaceEvaluation<dim, fe_degree_hu, n_q_points_1d_hu, dim, Number>;
+    using FEFaceEvaluation_h  = FEFaceEvaluation<dim, fe_degree_h, n_q_points_1d_hu, 1, Number>;
+    using FEFaceEvaluation_hu = FEFaceEvaluation<dim, fe_degree_hu, n_q_points_1d_hu, dim, Number>;
 
     /*--- Intermediate stages ---*/
     if(IMEX_stage <= n_stages) {
       /*--- We first start by declaring the suitable instances to read the available quantities.
             'true' means that we are reading the information from 'inside', whereas 'false' from 'outside' ---*/
-      FEFaceEvaluation_zeta phi_m(data, true, 0),
-                            phi_p(data, false, 0),
-                            phi_zeta_m(data, true, 0),
-                            phi_zeta_p(data, false, 0);
-      FEFaceEvaluation_hu   phi_hu_m(data, true, 1),
-                            phi_hu_p(data, false, 1);
+      FEFaceEvaluation_h  phi_m(data, true, 0),
+                          phi_p(data, false, 0),
+                          phi_h_m(data, true, 0),
+                          phi_h_p(data, false, 0);
+      FEFaceEvaluation_hu phi_hu_m(data, true, 1),
+                          phi_hu_p(data, false, 1);
 
       /*--- Loop over all internal faces ---*/
       for(unsigned int face = face_range.first; face < face_range.second; ++face) {
@@ -459,22 +456,11 @@ namespace SW {
         phi_m.reinit(face);
         phi_p.reinit(face);
 
-        phi_zeta_m.reinit(face);
-        phi_zeta_p.reinit(face);
+        phi_h_m.reinit(face);
+        phi_h_p.reinit(face);
 
         /*--- Loop over quadrature points of each internal face ---*/
         for(unsigned int q = 0; q < phi_m.n_q_points; ++q) {
-          /*--- Evaluate the bathymetry ---*/
-          const auto& point_vectorized = phi_m.quadrature_point(q);
-          VectorizedArray<Number> zb_q;
-          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
-            Point<dim> point;
-            for(unsigned int d = 0; d < dim; ++d) {
-              point[d] = point_vectorized[d][v];
-            }
-            zb_q[v] = zb.value(point);
-          }
-
           const auto& n_plus = phi_m.get_normal_vector(q); /*--- Notice that the unit normal vector is the same from
                                                                  'both sides'. ---*/
 
@@ -484,21 +470,21 @@ namespace SW {
             phi_hu_m.gather_evaluate(src[2*(s-1) + 1], EvaluationFlags::values);
             phi_hu_p.gather_evaluate(src[2*(s-1) + 1], EvaluationFlags::values);
 
-            const auto& hu_s_m      = phi_hu_m.get_value(q);
-            const auto& hu_s_p      = phi_hu_p.get_value(q);
+            const auto& hu_s_m     = phi_hu_m.get_value(q);
+            const auto& hu_s_p     = phi_hu_p.get_value(q);
 
-            const auto& avg_flux_s  = 0.5*(hu_s_m + hu_s_p);
-            phi_zeta_p.gather_evaluate(src[2*(s-1)], EvaluationFlags::values);
-            phi_zeta_m.gather_evaluate(src[2*(s-1)], EvaluationFlags::values);
-            const auto& zeta_s_m    = phi_zeta_m.get_value(q);
-            const auto& zeta_s_p    = phi_zeta_p.get_value(q);
-            const auto& lambda_s    = std::max(std::abs(scalar_product(hu_s_m/(zeta_s_m + zb_q), n_plus)) +
-                                               std::sqrt(EquationData::g*(zeta_s_m + zb_q)),
-                                               std::abs(scalar_product(hu_s_p/(zeta_s_p + zb_q), n_plus)) +
-                                               std::sqrt(EquationData::g*(zeta_s_p + zb_q)));
-            const auto& jump_zeta_s = zeta_s_m - zeta_s_p;
+            const auto& avg_flux_s = 0.5*(hu_s_m + hu_s_p);
+            phi_h_p.gather_evaluate(src[2*(s-1)], EvaluationFlags::values);
+            phi_h_m.gather_evaluate(src[2*(s-1)], EvaluationFlags::values);
+            const auto& h_s_m      = phi_h_m.get_value(q);
+            const auto& h_s_p      = phi_h_p.get_value(q);
+            const auto& lambda_s   = std::max(std::abs(scalar_product(hu_s_m/h_s_m, n_plus)) +
+                                              std::sqrt(EquationData::g*h_s_m),
+                                              std::abs(scalar_product(hu_s_p/h_s_p, n_plus)) +
+                                              std::sqrt(EquationData::g*h_s_p));
+            const auto& jump_h_s   = h_s_m - h_s_p;
 
-            flux += a[IMEX_stage - 1][s - 1]*dt*(scalar_product(avg_flux_s, n_plus) + 0.5*lambda_s*jump_zeta_s);
+            flux += a[IMEX_stage - 1][s - 1]*dt*(scalar_product(avg_flux_s, n_plus) + 0.5*lambda_s*jump_h_s);
           }
 
           phi_m.submit_value(-flux, q);
@@ -512,12 +498,12 @@ namespace SW {
     /*--- Final update ---*/
     else {
       /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
-      FEFaceEvaluation_zeta phi_m(data, true, 0),
-                            phi_p(data, false, 0),
-                            phi_zeta_m(data, true, 0),
-                            phi_zeta_p(data, false, 0);
-      FEFaceEvaluation_hu   phi_hu_m(data, true, 1),
-                            phi_hu_p(data, false, 1);
+      FEFaceEvaluation_h  phi_m(data, true, 0),
+                          phi_p(data, false, 0),
+                          phi_h_m(data, true, 0),
+                          phi_h_p(data, false, 0);
+      FEFaceEvaluation_hu phi_hu_m(data, true, 1),
+                          phi_hu_p(data, false, 1);
 
       /*--- Loop over all internal faces ---*/
       for(unsigned int face = face_range.first; face < face_range.second; ++face) {
@@ -527,22 +513,11 @@ namespace SW {
         phi_m.reinit(face);
         phi_p.reinit(face);
 
-        phi_zeta_m.reinit(face);
-        phi_zeta_p.reinit(face);
+        phi_h_m.reinit(face);
+        phi_h_p.reinit(face);
 
         /*--- Loop over quadrature points of each internal face ---*/
         for(unsigned int q = 0; q < phi_m.n_q_points; ++q) {
-          /*--- Evaluate the bathymetry ---*/
-          const auto& point_vectorized = phi_m.quadrature_point(q);
-          VectorizedArray<Number> zb_q;
-          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
-            Point<dim> point;
-            for(unsigned int d = 0; d < dim; ++d) {
-              point[d] = point_vectorized[d][v];
-            }
-            zb_q[v] = zb.value(point);
-          }
-
           const auto& n_plus = phi_m.get_normal_vector(q);
 
           /*--- Compute the quantities at the previous stages ---*/
@@ -551,21 +526,21 @@ namespace SW {
             phi_hu_m.gather_evaluate(src[2*(s-1) + 1], EvaluationFlags::values);
             phi_hu_p.gather_evaluate(src[2*(s-1) + 1], EvaluationFlags::values);
 
-            const auto& hu_s_m      = phi_hu_m.get_value(q);
-            const auto& hu_s_p      = phi_hu_p.get_value(q);
+            const auto& hu_s_m     = phi_hu_m.get_value(q);
+            const auto& hu_s_p     = phi_hu_p.get_value(q);
 
-            const auto& avg_flux_s  = 0.5*(hu_s_m + hu_s_p);
-            phi_zeta_p.gather_evaluate(src[2*(s-1)], EvaluationFlags::values);
-            phi_zeta_m.gather_evaluate(src[2*(s-1)], EvaluationFlags::values);
-            const auto& zeta_s_m    = phi_zeta_m.get_value(q);
-            const auto& zeta_s_p    = phi_zeta_p.get_value(q);
-            const auto& lambda_s    = std::max(std::abs(scalar_product(hu_s_m/(zeta_s_m + zb_q), n_plus)) +
-                                               std::sqrt(EquationData::g*(zeta_s_m + zb_q)),
-                                               std::abs(scalar_product(hu_s_p/(zeta_s_p + zb_q), n_plus)) +
-                                               std::sqrt(EquationData::g*(zeta_s_p + zb_q)));
-            const auto& jump_zeta_s = zeta_s_m - zeta_s_p;
+            const auto& avg_flux_s = 0.5*(hu_s_m + hu_s_p);
+            phi_h_p.gather_evaluate(src[2*(s-1)], EvaluationFlags::values);
+            phi_h_m.gather_evaluate(src[2*(s-1)], EvaluationFlags::values);
+            const auto& h_s_m      = phi_h_m.get_value(q);
+            const auto& h_s_p      = phi_h_p.get_value(q);
+            const auto& lambda_s   = std::max(std::abs(scalar_product(hu_s_m/h_s_m, n_plus)) +
+                                              std::sqrt(EquationData::g*h_s_m),
+                                              std::abs(scalar_product(hu_s_p/h_s_p, n_plus)) +
+                                              std::sqrt(EquationData::g*h_s_p));
+            const auto& jump_h_s  = h_s_m - h_s_p;
 
-            flux += b[s - 1]*dt*(scalar_product(avg_flux_s, n_plus) + 0.5*lambda_s*jump_zeta_s);
+            flux += b[s - 1]*dt*(scalar_product(avg_flux_s, n_plus) + 0.5*lambda_s*jump_h_s);
           }
 
           phi_m.submit_value(-flux, q);
@@ -578,41 +553,41 @@ namespace SW {
     }
   }
 
-  // Put together all the previous steps for elevation
+  // Put together all the previous steps for depth
   //
   template<int dim, unsigned int n_stages,
-           int fe_degree_zeta, int fe_degree_hu, int fe_degree_hc,
-           int n_q_points_1d_zeta, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
+           int fe_degree_h, int fe_degree_hu, int fe_degree_hc,
+           int n_q_points_1d_h, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
   void SWOperator<dim, n_stages,
-                  fe_degree_zeta, fe_degree_hu, fe_degree_hc,
-                  n_q_points_1d_zeta, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
-  vmult_rhs_zeta(Vec& dst, const std::vector<Vec>& src) const {
+                  fe_degree_h, fe_degree_hu, fe_degree_hc,
+                  n_q_points_1d_h, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
+  vmult_rhs_h(Vec& dst, const std::vector<Vec>& src) const {
     for(unsigned int d = 0; d < src.size(); ++d) {
       src[d].update_ghost_values();
     }
 
-    this->data->loop(&SWOperator::assemble_rhs_cell_term_zeta,
-                     &SWOperator::assemble_rhs_face_term_zeta,
-                     &SWOperator::assemble_rhs_boundary_term_zeta,
+    this->data->loop(&SWOperator::assemble_rhs_cell_term_h,
+                     &SWOperator::assemble_rhs_face_term_h,
+                     &SWOperator::assemble_rhs_boundary_term_h,
                      this, dst, src, true,
                      MatrixFree<dim, Number>::DataAccessOnFaces::unspecified,
                      MatrixFree<dim, Number>::DataAccessOnFaces::unspecified);
   }
 
-  // Assemble cell term for the elevation
+  // Assemble cell term for the depth
   //
   template<int dim, unsigned int n_stages,
-           int fe_degree_zeta, int fe_degree_hu, int fe_degree_hc,
-           int n_q_points_1d_zeta, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
+           int fe_degree_h, int fe_degree_hu, int fe_degree_hc,
+           int n_q_points_1d_h, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
   void SWOperator<dim, n_stages,
-                  fe_degree_zeta, fe_degree_hu, fe_degree_hc,
-                  n_q_points_1d_zeta, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
-  assemble_cell_term_zeta(const MatrixFree<dim, Number>&               data,
-                          Vec&                                         dst,
-                          const Vec&                                   src,
-                          const std::pair<unsigned int, unsigned int>& cell_range) const {
+                  fe_degree_h, fe_degree_hu, fe_degree_hc,
+                  n_q_points_1d_h, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
+  assemble_cell_term_h(const MatrixFree<dim, Number>&               data,
+                       Vec&                                         dst,
+                       const Vec&                                   src,
+                       const std::pair<unsigned int, unsigned int>& cell_range) const {
     /*--- We first start by declaring the suitable instances to read also available quantities. ---*/
-    FEEvaluation<dim, fe_degree_zeta, n_q_points_1d_hu, 1, Number> phi(data, 0);
+    FEEvaluation<dim, fe_degree_h, n_q_points_1d_hu, 1, Number> phi(data, 0);
 
     /*--- Loop over all cells ---*/
     for(unsigned int cell = cell_range.first; cell < cell_range.second; ++cell) {
@@ -632,50 +607,43 @@ namespace SW {
   // Assemble rhs cell term for the discharge
   //
   template<int dim, unsigned int n_stages,
-           int fe_degree_zeta, int fe_degree_hu, int fe_degree_hc,
-           int n_q_points_1d_zeta, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
+           int fe_degree_h, int fe_degree_hu, int fe_degree_hc,
+           int n_q_points_1d_h, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
   void SWOperator<dim, n_stages,
-                  fe_degree_zeta, fe_degree_hu, fe_degree_hc,
-                  n_q_points_1d_zeta, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
+                  fe_degree_h, fe_degree_hu, fe_degree_hc,
+                  n_q_points_1d_h, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
   assemble_rhs_cell_term_hu(const MatrixFree<dim, Number>&               data,
                             Vec&                                         dst,
                             const std::vector<Vec>&                      src,
                             const std::pair<unsigned int, unsigned int>& cell_range) const {
     /*--- Define typedef for sake of readibility and convenience ----*/
-    using FEEvaluation_zeta = FEEvaluation<dim, fe_degree_zeta, n_q_points_1d_hu, 1, Number>;
     using FEEvaluation_hu   = FEEvaluation<dim, fe_degree_hu, n_q_points_1d_hu, dim, Number>;
+    using FEEvaluation_h    = FEEvaluation<dim, fe_degree_h, n_q_points_1d_hu, 1, Number>;
+    using FEEvaluation_zeta = FEEvaluation<dim, fe_degree_h, n_q_points_1d_hu, 1, Number>;
 
     /*--- Intermediate stages ---*/
     if(IMEX_stage <= n_stages) {
       /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
       FEEvaluation_hu                phi(data, 1);
       std::vector<FEEvaluation_hu>   phi_hu(IMEX_stage - 1, FEEvaluation_hu(data, 1));
+      std::vector<FEEvaluation_h>    phi_h(IMEX_stage - 1, FEEvaluation_h(data, 0));
       std::vector<FEEvaluation_zeta> phi_zeta(IMEX_stage - 1, FEEvaluation_zeta(data, 0));
 
       /*--- Loop over all cells ---*/
       for(unsigned int cell = cell_range.first; cell < cell_range.second; ++cell) {
         for(unsigned int s = 1; s <= IMEX_stage - 1; ++s) {
-          phi_zeta[s - 1].reinit(cell);
-          phi_zeta[s - 1].gather_evaluate(src[2*(s-1)], EvaluationFlags::values | EvaluationFlags::gradients);
+          phi_h[s - 1].reinit(cell);
+          phi_h[s - 1].gather_evaluate(src[3*(s-1)], EvaluationFlags::values);
           phi_hu[s - 1].reinit(cell);
-          phi_hu[s - 1].gather_evaluate(src[2*(s-1) + 1], EvaluationFlags::values);
+          phi_hu[s - 1].gather_evaluate(src[3*(s-1) + 1], EvaluationFlags::values);
+          phi_zeta[s - 1].reinit(cell);
+          phi_zeta[s - 1].gather_evaluate(src[3*(s-1) + 2], EvaluationFlags::gradients);
         }
 
         phi.reinit(cell);
 
         /*--- Loop over all quadrature points ---*/
         for(unsigned int q = 0; q < phi.n_q_points; ++q) {
-          /*--- Evaluate the bathymetry ---*/
-          const auto& point_vectorized = phi.quadrature_point(q);
-          VectorizedArray<Number> zb_q;
-          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
-            Point<dim> point;
-            for(unsigned int d = 0; d < dim; ++d) {
-              point[d] = point_vectorized[d][v];
-            }
-            zb_q[v] = zb.value(point);
-          }
-
           /*--- Compute the discharge at the previous step (always necessary).
                 Notice that this is ok because of explicit method. ---*/
           const auto& hu_old = phi_hu[0].get_value(q);
@@ -685,7 +653,7 @@ namespace SW {
           Tensor<1, dim, VectorizedArray<Number>> non_cons_flux;
           Tensor<1, dim, VectorizedArray<Number>> friction;
           for(unsigned int s = 1; s <= IMEX_stage - 1; ++s) {
-            const auto& h_s         = phi_zeta[s - 1].get_value(q) + zb_q;
+            const auto& h_s         = phi_h[s - 1].get_value(q);
             const auto& hu_s        = phi_hu[s - 1].get_value(q);
 
             const auto& grad_zeta_s = phi_zeta[s - 1].get_gradient(q);
@@ -709,32 +677,24 @@ namespace SW {
       /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
       FEEvaluation_hu                phi(data, 1);
       std::vector<FEEvaluation_hu>   phi_hu(IMEX_stage - 1, FEEvaluation_hu(data, 1));
+      std::vector<FEEvaluation_h>    phi_h(IMEX_stage - 1, FEEvaluation_h(data, 0));
       std::vector<FEEvaluation_zeta> phi_zeta(IMEX_stage - 1, FEEvaluation_zeta(data, 0));
 
       /*--- Loop over all cells ---*/
       for(unsigned int cell = cell_range.first; cell < cell_range.second; ++cell) {
         for(unsigned int s = 1; s <= IMEX_stage - 1; ++s) {
-          phi_zeta[s - 1].reinit(cell);
-          phi_zeta[s - 1].gather_evaluate(src[2*(s-1)], EvaluationFlags::values | EvaluationFlags::gradients);
+          phi_h[s - 1].reinit(cell);
+          phi_h[s - 1].gather_evaluate(src[3*(s-1)], EvaluationFlags::values);
           phi_hu[s - 1].reinit(cell);
-          phi_hu[s - 1].gather_evaluate(src[2*(s-1) + 1], EvaluationFlags::values);
+          phi_hu[s - 1].gather_evaluate(src[3*(s-1) + 1], EvaluationFlags::values);
+          phi_zeta[s - 1].reinit(cell);
+          phi_zeta[s - 1].gather_evaluate(src[3*(s-1) + 2], EvaluationFlags::gradients);
         }
 
         phi.reinit(cell);
 
         /*--- Loop over all quadrature points ---*/
         for(unsigned int q = 0; q < phi.n_q_points; ++q) {
-          /*--- Evaluate the bathymetry ---*/
-          const auto& point_vectorized = phi.quadrature_point(q);
-          VectorizedArray<Number> zb_q;
-          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
-            Point<dim> point;
-            for(unsigned int d = 0; d < dim; ++d) {
-              point[d] = point_vectorized[d][v];
-            }
-            zb_q[v] = zb.value(point);
-          }
-
           /*--- Compute the discharge at the previous step (always necessary).
                 Notice that this is ok because of explicit method.---*/
           const auto& hu_old = phi_hu[0].get_value(q);
@@ -744,7 +704,7 @@ namespace SW {
           Tensor<1, dim, VectorizedArray<Number>> non_cons_flux;
           Tensor<1, dim, VectorizedArray<Number>> friction;
           for(unsigned int s = 1; s <= IMEX_stage - 1; ++s) {
-            const auto& h_s         = phi_zeta[s - 1].get_value(q) + zb_q;
+            const auto& h_s         = phi_h[s - 1].get_value(q);
             const auto& hu_s        = phi_hu[s - 1].get_value(q);
 
             const auto& grad_zeta_s = phi_zeta[s - 1].get_gradient(q);
@@ -768,18 +728,19 @@ namespace SW {
   // Assemble rhs face term for the discharge
   //
   template<int dim, unsigned int n_stages,
-           int fe_degree_zeta, int fe_degree_hu, int fe_degree_hc,
-           int n_q_points_1d_zeta, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
+           int fe_degree_h, int fe_degree_hu, int fe_degree_hc,
+           int n_q_points_1d_h, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
   void SWOperator<dim, n_stages,
-                  fe_degree_zeta, fe_degree_hu, fe_degree_hc,
-                  n_q_points_1d_zeta, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
+                  fe_degree_h, fe_degree_hu, fe_degree_hc,
+                  n_q_points_1d_h, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
   assemble_rhs_face_term_hu(const MatrixFree<dim, Number>&               data,
                             Vec&                                         dst,
                             const std::vector<Vec>&                      src,
                             const std::pair<unsigned int, unsigned int>& face_range) const {
     /*--- Define typedef for sake of readibility and convenience ----*/
     using FEFaceEvaluation_hu   = FEFaceEvaluation<dim, fe_degree_hu, n_q_points_1d_hu, dim, Number>;
-    using FEFaceEvaluation_zeta = FEFaceEvaluation<dim, fe_degree_zeta, n_q_points_1d_hu, 1, Number>;
+    using FEFaceEvaluation_h    = FEFaceEvaluation<dim, fe_degree_h, n_q_points_1d_hu, 1, Number>;
+    using FEFaceEvaluation_zeta = FEFaceEvaluation<dim, fe_degree_h, n_q_points_1d_hu, 1, Number>;
 
     /*--- Intermediate stages ---*/
     if(IMEX_stage <= n_stages) {
@@ -788,32 +749,26 @@ namespace SW {
                             phi_p(data, false, 1),
                             phi_hu_m(data, true, 1),
                             phi_hu_p(data, false, 1);
+      FEFaceEvaluation_h    phi_h_m(data, true, 0),
+                            phi_h_p(data, false, 0);
       FEFaceEvaluation_zeta phi_zeta_m(data, true, 0),
                             phi_zeta_p(data, false, 0);
 
       /*--- Loop over all internal faces ---*/
       for(unsigned int face = face_range.first; face < face_range.second; ++face) {
-        phi_zeta_m.reinit(face);
-        phi_zeta_p.reinit(face);
+        phi_h_m.reinit(face);
+        phi_h_p.reinit(face);
         phi_hu_m.reinit(face);
         phi_hu_p.reinit(face);
 
         phi_m.reinit(face);
         phi_p.reinit(face);
 
+        phi_zeta_m.reinit(face);
+        phi_zeta_p.reinit(face);
+
         /*--- Loop over all quadrature points ---*/
         for(unsigned int q = 0; q < phi_m.n_q_points; ++q) {
-          /*--- Evaluate the bathymetry ---*/
-          const auto& point_vectorized = phi_m.quadrature_point(q);
-          VectorizedArray<Number> zb_q;
-          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
-            Point<dim> point;
-            for(unsigned int d = 0; d < dim; ++d) {
-              point[d] = point_vectorized[d][v];
-            }
-            zb_q[v] = zb.value(point);
-          }
-
           const auto& n_plus = phi_m.get_normal_vector(q);
 
           /*--- Compute the quantities at the previous stages ---*/
@@ -821,15 +776,13 @@ namespace SW {
           VectorizedArray<Number> non_cons_flux_p = make_vectorized_array<Number>(0.0);
           VectorizedArray<Number> non_cons_flux_m = make_vectorized_array<Number>(0.0);
           for(unsigned int s = 1; s <= IMEX_stage - 1; ++s) {
-            phi_zeta_m.gather_evaluate(src[2*(s-1)], EvaluationFlags::values);
-            phi_zeta_p.gather_evaluate(src[2*(s-1)], EvaluationFlags::values);
-            phi_hu_m.gather_evaluate(src[2*(s-1) + 1], EvaluationFlags::values);
-            phi_hu_p.gather_evaluate(src[2*(s-1) + 1], EvaluationFlags::values);
+            phi_h_m.gather_evaluate(src[3*(s-1)], EvaluationFlags::values);
+            phi_h_p.gather_evaluate(src[3*(s-1)], EvaluationFlags::values);
+            phi_hu_m.gather_evaluate(src[3*(s-1) + 1], EvaluationFlags::values);
+            phi_hu_p.gather_evaluate(src[3*(s-1) + 1], EvaluationFlags::values);
 
-            const auto& zeta_s_m                = phi_zeta_m.get_value(q);
-            const auto& h_s_m                   = zeta_s_m + zb_q;
-            const auto& zeta_s_p                = phi_zeta_p.get_value(q);
-            const auto& h_s_p                   = zeta_s_p + zb_q;
+            const auto& h_s_m                   = phi_h_m.get_value(q);
+            const auto& h_s_p                   = phi_h_p.get_value(q);
             const auto& hu_s_m                  = phi_hu_m.get_value(q);
             const auto& hu_s_p                  = phi_hu_p.get_value(q);
 
@@ -842,6 +795,10 @@ namespace SW {
             const auto& jump_hu_s               = hu_s_m - hu_s_p;
 
             /*--- Add contribution due to non-conservative term ---*/
+            phi_zeta_m.gather_evaluate(src[3*(s-1) + 2], EvaluationFlags::values);
+            phi_zeta_p.gather_evaluate(src[3*(s-1) + 2], EvaluationFlags::values);
+            const auto& zeta_s_m                = phi_zeta_m.get_value(q);
+            const auto& zeta_s_p                = phi_zeta_p.get_value(q);
             /*const auto& avg_flux_part_1_zb      = 0.5*EquationData::g*(h_s_m*zeta_s_m + h_s_p*zeta_s_p);
             const auto& avg_flux_part_2_zb      = 0.5*EquationData::g*(h_s_m + h_s_p);*/ //NOTE: No exact cancellation
             const auto& avg_flux_part_1_zb      = 0.5*EquationData::g*h_s_m*zeta_s_m
@@ -871,32 +828,26 @@ namespace SW {
                             phi_p(data, false, 1),
                             phi_hu_m(data, true, 1),
                             phi_hu_p(data, false, 1);
+      FEFaceEvaluation_h    phi_h_m(data, true, 0),
+                            phi_h_p(data, false, 0);                      
       FEFaceEvaluation_zeta phi_zeta_m(data, true, 0),
                             phi_zeta_p(data, false, 0);
 
       /*--- Loop over all internal faces ---*/
       for(unsigned int face = face_range.first; face < face_range.second; ++face) {
-        phi_zeta_m.reinit(face);
-        phi_zeta_p.reinit(face);
+        phi_h_m.reinit(face);
+        phi_h_p.reinit(face);
         phi_hu_m.reinit(face);
         phi_hu_p.reinit(face);
 
         phi_m.reinit(face);
         phi_p.reinit(face);
 
+        phi_zeta_m.reinit(face);
+        phi_zeta_p.reinit(face);
+
         /*--- Loop over all quadrature points ---*/
         for(unsigned int q = 0; q < phi_m.n_q_points; ++q) {
-          /*--- Evaluate the bathymetry ---*/
-          const auto& point_vectorized = phi_m.quadrature_point(q);
-          VectorizedArray<Number> zb_q;
-          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
-            Point<dim> point;
-            for(unsigned int d = 0; d < dim; ++d) {
-              point[d] = point_vectorized[d][v];
-            }
-            zb_q[v] = zb.value(point);
-          }
-
           const auto& n_plus = phi_m.get_normal_vector(q);
 
           /*--- Compute the quantities at the previous stages ---*/
@@ -904,15 +855,13 @@ namespace SW {
           VectorizedArray<Number> non_cons_flux_p = make_vectorized_array<Number>(0.0);
           VectorizedArray<Number> non_cons_flux_m = make_vectorized_array<Number>(0.0);
           for(unsigned int s = 1; s <= IMEX_stage - 1; ++s) {
-            phi_zeta_m.gather_evaluate(src[2*(s-1)], EvaluationFlags::values);
-            phi_zeta_p.gather_evaluate(src[2*(s-1)], EvaluationFlags::values);
-            phi_hu_m.gather_evaluate(src[2*(s-1) + 1], EvaluationFlags::values);
-            phi_hu_p.gather_evaluate(src[2*(s-1) + 1], EvaluationFlags::values);
+            phi_h_m.gather_evaluate(src[3*(s-1)], EvaluationFlags::values);
+            phi_h_p.gather_evaluate(src[3*(s-1)], EvaluationFlags::values);
+            phi_hu_m.gather_evaluate(src[3*(s-1) + 1], EvaluationFlags::values);
+            phi_hu_p.gather_evaluate(src[3*(s-1) + 1], EvaluationFlags::values);
 
-            const auto& zeta_s_m                = phi_zeta_m.get_value(q);
-            const auto& h_s_m                   = zeta_s_m + zb_q;
-            const auto& zeta_s_p                = phi_zeta_p.get_value(q);
-            const auto& h_s_p                   = zeta_s_p + zb_q;
+            const auto& h_s_m                   = phi_h_m.get_value(q);
+            const auto& h_s_p                   = phi_h_p.get_value(q);
             const auto& hu_s_m                  = phi_hu_m.get_value(q);
             const auto& hu_s_p                  = phi_hu_p.get_value(q);
 
@@ -925,6 +874,10 @@ namespace SW {
             const auto& jump_hu_s               = hu_s_m - hu_s_p;
 
             /*--- Add contribution due to non-conservative term ---*/
+            phi_zeta_m.gather_evaluate(src[3*(s-1) + 2], EvaluationFlags::values);
+            phi_zeta_p.gather_evaluate(src[3*(s-1) + 2], EvaluationFlags::values);
+            const auto& zeta_s_m                = phi_zeta_m.get_value(q);
+            const auto& zeta_s_p                = phi_zeta_p.get_value(q);
             /*const auto& avg_flux_part_1_zb      = 0.5*EquationData::g*(h_s_m*zeta_s_m + h_s_p*zeta_s_p);
             const auto& avg_flux_part_2_zb      = 0.5*EquationData::g*(h_s_m + h_s_p);*/ //NOTE: No exact cancellation
             const auto& avg_flux_part_1_zb      = 0.5*EquationData::g*h_s_m*zeta_s_m
@@ -952,11 +905,11 @@ namespace SW {
   // Put together all the previous steps for the discharge
   //
   template<int dim, unsigned int n_stages,
-           int fe_degree_zeta, int fe_degree_hu, int fe_degree_hc,
-           int n_q_points_1d_zeta, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
+           int fe_degree_h, int fe_degree_hu, int fe_degree_hc,
+           int n_q_points_1d_h, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
   void SWOperator<dim, n_stages,
-                  fe_degree_zeta, fe_degree_hu, fe_degree_hc,
-                  n_q_points_1d_zeta, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
+                  fe_degree_h, fe_degree_hu, fe_degree_hc,
+                  n_q_points_1d_h, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
   vmult_rhs_hu(Vec& dst, const std::vector<Vec>& src) const {
     for(unsigned int d = 0; d < src.size(); ++d) {
       src[d].update_ghost_values();
@@ -970,15 +923,14 @@ namespace SW {
                      MatrixFree<dim, Number>::DataAccessOnFaces::unspecified);
   }
 
-
   // Assemble cell term for the discharge
   //
   template<int dim, unsigned int n_stages,
-           int fe_degree_zeta, int fe_degree_hu, int fe_degree_hc,
-           int n_q_points_1d_zeta, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
+           int fe_degree_h, int fe_degree_hu, int fe_degree_hc,
+           int n_q_points_1d_h, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
   void SWOperator<dim, n_stages,
-                  fe_degree_zeta, fe_degree_hu, fe_degree_hc,
-                  n_q_points_1d_zeta, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
+                  fe_degree_h, fe_degree_hu, fe_degree_hc,
+                  n_q_points_1d_h, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
   assemble_cell_term_hu(const MatrixFree<dim, Number>&               data,
                         Vec&                                         dst,
                         const Vec&                                   src,
@@ -987,15 +939,15 @@ namespace SW {
     FEEvaluation<dim, fe_degree_hu, n_q_points_1d_hu, dim, Number> phi(data, 1);
 
     if(IMEX_stage <= n_stages) {
-      /*--- Since here we have just one 'src' vector, but we also need to deal with the current elevation and discharge,
+      /*--- Since here we have just one 'src' vector, but we also need to deal with the current depth and discharge,
             we employ the auxiliary vectors where we set this information ---*/
-      FEEvaluation<dim, fe_degree_zeta, n_q_points_1d_hu, 1, Number> phi_zeta_curr(data, 0);
+      FEEvaluation<dim, fe_degree_h, n_q_points_1d_hu, 1, Number>    phi_h_curr(data, 0);
       FEEvaluation<dim, fe_degree_hu, n_q_points_1d_hu, dim, Number> phi_hu_curr(data, 1);
 
       /*--- Loop over all cells ---*/
       for(unsigned int cell = cell_range.first; cell < cell_range.second; ++cell) {
-        phi_zeta_curr.reinit(cell);
-        phi_zeta_curr.gather_evaluate(zeta_curr, EvaluationFlags::values);
+        phi_h_curr.reinit(cell);
+        phi_h_curr.gather_evaluate(h_curr, EvaluationFlags::values);
 
         phi_hu_curr.reinit(cell);
         phi_hu_curr.gather_evaluate(hu_curr, EvaluationFlags::values);
@@ -1005,17 +957,7 @@ namespace SW {
 
         /*--- Loop over all quadrature points ---*/
         for(unsigned int q = 0; q < phi.n_q_points; ++q) {
-          const auto& point_vectorized = phi.quadrature_point(q);
-          VectorizedArray<Number> zb_q;
-          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
-            Point<dim> point;
-            for(unsigned int d = 0; d < dim; ++d) {
-              point[d] = point_vectorized[d][v];
-            }
-            zb_q[v] = zb.value(point);
-          }
-
-          const auto& h_s      = phi_zeta_curr.get_value(q) + zb_q;
+          const auto& h_s      = phi_h_curr.get_value(q);
 
           const auto& hu_s     = phi_hu_curr.get_value(q);
           const auto& mod_hu_s = std::sqrt(scalar_product(hu_s, hu_s));
@@ -1048,33 +990,33 @@ namespace SW {
   // Assemble rhs cell term for the tracer equation
   //
   template<int dim, unsigned int n_stages,
-           int fe_degree_zeta, int fe_degree_hu, int fe_degree_hc,
-           int n_q_points_1d_zeta, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
+           int fe_degree_h, int fe_degree_hu, int fe_degree_hc,
+           int n_q_points_1d_h, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
   void SWOperator<dim, n_stages,
-                  fe_degree_zeta, fe_degree_hu, fe_degree_hc,
-                  n_q_points_1d_zeta, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
+                  fe_degree_h, fe_degree_hu, fe_degree_hc,
+                  n_q_points_1d_h, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
   assemble_rhs_cell_term_hc(const MatrixFree<dim, Number>&               data,
                             Vec&                                         dst,
                             const std::vector<Vec>&                      src,
                             const std::pair<unsigned int, unsigned int>& cell_range) const {
     /*--- Define typedef for sake of readibility and convenience ----*/
-    using FEEvaluation_zeta = FEEvaluation<dim, fe_degree_zeta, n_q_points_1d_hu, 1, Number>;
-    using FEEvaluation_hu   = FEEvaluation<dim, fe_degree_hu, n_q_points_1d_hu, dim, Number>;
-    using FEEvaluation_hc   = FEEvaluation<dim, fe_degree_hc, n_q_points_1d_hu, 1, Number>;
+    using FEEvaluation_hc = FEEvaluation<dim, fe_degree_hc, n_q_points_1d_hu, 1, Number>;
+    using FEEvaluation_hu = FEEvaluation<dim, fe_degree_hu, n_q_points_1d_hu, dim, Number>;
+    using FEEvaluation_h  = FEEvaluation<dim, fe_degree_h, n_q_points_1d_hu, 1, Number>;
 
     /*--- Intermediate stages ---*/
     if(IMEX_stage <= n_stages) {
       /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
-      FEEvaluation_hc                phi(data, 2);
-      std::vector<FEEvaluation_hc>   phi_hc(IMEX_stage - 1, FEEvaluation_hc(data, 2));
-      std::vector<FEEvaluation_hu>   phi_hu(IMEX_stage - 1, FEEvaluation_hu(data, 1));
-      std::vector<FEEvaluation_zeta> phi_zeta(IMEX_stage - 1, FEEvaluation_zeta(data, 0));
+      FEEvaluation_hc              phi(data, 2);
+      std::vector<FEEvaluation_hc> phi_hc(IMEX_stage - 1, FEEvaluation_hc(data, 2));
+      std::vector<FEEvaluation_hu> phi_hu(IMEX_stage - 1, FEEvaluation_hu(data, 1));
+      std::vector<FEEvaluation_h>  phi_h(IMEX_stage - 1, FEEvaluation_h(data, 0));
 
       /*--- Loop over all cells ---*/
       for(unsigned int cell = cell_range.first; cell < cell_range.second; ++cell) {
         for(unsigned int s = 1; s <= IMEX_stage - 1; ++s) {
-          phi_zeta[s - 1].reinit(cell);
-          phi_zeta[s - 1].gather_evaluate(src[3*(s-1)], EvaluationFlags::values);
+          phi_h[s - 1].reinit(cell);
+          phi_h[s - 1].gather_evaluate(src[3*(s-1)], EvaluationFlags::values);
           phi_hu[s - 1].reinit(cell);
           phi_hu[s - 1].gather_evaluate(src[3*(s-1) + 1], EvaluationFlags::values);
           phi_hc[s - 1].reinit(cell);
@@ -1085,17 +1027,6 @@ namespace SW {
 
         /*--- Loop over quadrature points of each cell ---*/
         for(unsigned int q = 0; q < phi.n_q_points; ++q) {
-          /*--- Evaluate the bathymetry ---*/
-          const auto& point_vectorized = phi.quadrature_point(q);
-          VectorizedArray<Number> zb_q;
-          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
-            Point<dim> point;
-            for(unsigned int d = 0; d < dim; ++d) {
-              point[d] = point_vectorized[d][v];
-            }
-            zb_q[v] = zb.value(point);
-          }
-
           /*--- Compute the tracer at the previous step (always needed).
                 Notice that this is ok because of explicit method. ---*/
           const auto& hc_old = phi_hc[0].get_value(q);
@@ -1106,7 +1037,7 @@ namespace SW {
             const auto& hc_s = phi_hc[s - 1].get_value(q);
 
             const auto& hu_s = phi_hu[s - 1].get_value(q);
-            const auto& h_s  = phi_zeta[s - 1].get_value(q) + zb_q;
+            const auto& h_s  = phi_h[s - 1].get_value(q);
 
             flux += a[IMEX_stage - 1][s - 1]*dt*hu_s*(hc_s/h_s);
           }
@@ -1121,16 +1052,16 @@ namespace SW {
     /*--- Final update ---*/
     else {
       /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
-      FEEvaluation_hc                phi(data, 2);
-      std::vector<FEEvaluation_hc>   phi_hc(IMEX_stage - 1, FEEvaluation_hc(data, 2));
-      std::vector<FEEvaluation_hu>   phi_hu(IMEX_stage - 1, FEEvaluation_hu(data, 1));
-      std::vector<FEEvaluation_zeta> phi_zeta(IMEX_stage - 1, FEEvaluation_zeta(data, 0));
+      FEEvaluation_hc              phi(data, 2);
+      std::vector<FEEvaluation_hc> phi_hc(IMEX_stage - 1, FEEvaluation_hc(data, 2));
+      std::vector<FEEvaluation_hu> phi_hu(IMEX_stage - 1, FEEvaluation_hu(data, 1));
+      std::vector<FEEvaluation_h>  phi_h(IMEX_stage - 1, FEEvaluation_h(data, 0));
 
       /*--- Loop over all cells ---*/
       for(unsigned int cell = cell_range.first; cell < cell_range.second; ++cell) {
         for(unsigned int s = 1; s <= IMEX_stage - 1; ++s) {
-          phi_zeta[s - 1].reinit(cell);
-          phi_zeta[s - 1].gather_evaluate(src[3*(s-1)], EvaluationFlags::values);
+          phi_h[s - 1].reinit(cell);
+          phi_h[s - 1].gather_evaluate(src[3*(s-1)], EvaluationFlags::values);
           phi_hu[s - 1].reinit(cell);
           phi_hu[s - 1].gather_evaluate(src[3*(s-1) + 1], EvaluationFlags::values);
           phi_hc[s - 1].reinit(cell);
@@ -1141,17 +1072,6 @@ namespace SW {
 
         /*--- Loop over quadrature points of each cell ---*/
         for(unsigned int q = 0; q < phi.n_q_points; ++q) {
-          /*--- Evaluate the bathymetry ---*/
-          const auto& point_vectorized = phi.quadrature_point(q);
-          VectorizedArray<Number> zb_q;
-          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
-            Point<dim> point;
-            for(unsigned int d = 0; d < dim; ++d) {
-              point[d] = point_vectorized[d][v];
-            }
-            zb_q[v] = zb.value(point);
-          }
-
           /*--- Compute the tracer at the previous step (always needed).
                 Notice that this is ok because of explicit method. ---*/
           const auto& hc_old = phi_hc[0].get_value(q);
@@ -1162,7 +1082,7 @@ namespace SW {
             const auto& hc_s = phi_hc[s - 1].get_value(q);
 
             const auto& hu_s = phi_hu[s - 1].get_value(q);
-            const auto& h_s  = phi_zeta[s - 1].get_value(q) + zb_q;
+            const auto& h_s  = phi_h[s - 1].get_value(q);
 
             flux += b[s - 1]*dt*hu_s*(hc_s/h_s);
           }
@@ -1179,31 +1099,31 @@ namespace SW {
   // Assemble rhs face term for the tracer
   //
   template<int dim, unsigned int n_stages,
-           int fe_degree_zeta, int fe_degree_hu, int fe_degree_hc,
-           int n_q_points_1d_zeta, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
+           int fe_degree_h, int fe_degree_hu, int fe_degree_hc,
+           int n_q_points_1d_h, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
   void SWOperator<dim, n_stages,
-                  fe_degree_zeta, fe_degree_hu, fe_degree_hc,
-                  n_q_points_1d_zeta, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
+                  fe_degree_h, fe_degree_hu, fe_degree_hc,
+                  n_q_points_1d_h, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
   assemble_rhs_face_term_hc(const MatrixFree<dim, Number>&               data,
                             Vec&                                         dst,
                             const std::vector<Vec>&                      src,
                             const std::pair<unsigned int, unsigned int>& face_range) const {
     /*--- Define typedef for sake of readibility and convenience ----*/
-    using FEFaceEvaluation_hc   = FEFaceEvaluation<dim, fe_degree_hc, n_q_points_1d_hu, 1, Number>;
-    using FEFaceEvaluation_hu   = FEFaceEvaluation<dim, fe_degree_hu, n_q_points_1d_hu, dim, Number>;
-    using FEFaceEvaluation_zeta = FEFaceEvaluation<dim, fe_degree_zeta, n_q_points_1d_hu, 1, Number>;
+    using FEFaceEvaluation_hc = FEFaceEvaluation<dim, fe_degree_hc, n_q_points_1d_hu, 1, Number>;
+    using FEFaceEvaluation_hu = FEFaceEvaluation<dim, fe_degree_hu, n_q_points_1d_hu, dim, Number>;
+    using FEFaceEvaluation_h  = FEFaceEvaluation<dim, fe_degree_h, n_q_points_1d_hu, 1, Number>;
 
     /*--- Intermediate stages ---*/
     if(IMEX_stage <= n_stages) {
       /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
-      FEFaceEvaluation_hc   phi_m(data, true, 2),
-                            phi_p(data, false, 2),
-                            phi_hc_m(data, true, 2),
-                            phi_hc_p(data, false, 2);
-      FEFaceEvaluation_hu   phi_hu_m(data, true, 1),
-                            phi_hu_p(data, false, 1);
-      FEFaceEvaluation_zeta phi_zeta_m(data, true, 0),
-                            phi_zeta_p(data, false, 0);
+      FEFaceEvaluation_hc phi_m(data, true, 2),
+                          phi_p(data, false, 2),
+                          phi_hc_m(data, true, 2),
+                          phi_hc_p(data, false, 2);
+      FEFaceEvaluation_hu phi_hu_m(data, true, 1),
+                          phi_hu_p(data, false, 1);
+      FEFaceEvaluation_h  phi_h_m(data, true, 0),
+                          phi_h_p(data, false, 0);
 
       /*--- Loop over all internal faces ---*/
       for(unsigned int face = face_range.first; face < face_range.second; ++face) {
@@ -1211,32 +1131,21 @@ namespace SW {
         phi_hc_p.reinit(face);
         phi_hu_m.reinit(face);
         phi_hu_p.reinit(face);
-        phi_zeta_m.reinit(face);
-        phi_zeta_p.reinit(face);
+        phi_h_m.reinit(face);
+        phi_h_p.reinit(face);
 
         phi_m.reinit(face);
         phi_p.reinit(face);
 
         /*--- Loop over quadrature points of each internal face ---*/
         for(unsigned int q = 0; q < phi_m.n_q_points; ++q) {
-          /*--- Evaluate the bathymetry ---*/
-          const auto& point_vectorized = phi_m.quadrature_point(q);
-          VectorizedArray<Number> zb_q;
-          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
-            Point<dim> point;
-            for(unsigned int d = 0; d < dim; ++d) {
-              point[d] = point_vectorized[d][v];
-            }
-            zb_q[v] = zb.value(point);
-          }
-
           const auto& n_plus = phi_m.get_normal_vector(q);
 
           /*--- Compute the quantities at the previous stages ---*/
           VectorizedArray<Number> flux = make_vectorized_array<Number>(0.0);
           for(unsigned int s = 1; s <= IMEX_stage - 1; ++s) {
-            phi_zeta_m.gather_evaluate(src[3*(s-1)], EvaluationFlags::values);
-            phi_zeta_p.gather_evaluate(src[3*(s-1)], EvaluationFlags::values);
+            phi_h_m.gather_evaluate(src[3*(s-1)], EvaluationFlags::values);
+            phi_h_p.gather_evaluate(src[3*(s-1)], EvaluationFlags::values);
             phi_hu_m.gather_evaluate(src[3*(s-1) + 1], EvaluationFlags::values);
             phi_hu_p.gather_evaluate(src[3*(s-1) + 1], EvaluationFlags::values);
             phi_hc_m.gather_evaluate(src[3*(s-1) + 2], EvaluationFlags::values);
@@ -1246,8 +1155,8 @@ namespace SW {
             const auto& hc_s_p     = phi_hc_p.get_value(q);
             const auto& hu_s_m     = phi_hu_m.get_value(q);
             const auto& hu_s_p     = phi_hu_p.get_value(q);
-            const auto& h_s_m      = phi_zeta_m.get_value(q) + zb_q;
-            const auto& h_s_p      = phi_zeta_p.get_value(q) + zb_q;
+            const auto& h_s_m      = phi_h_m.get_value(q);
+            const auto& h_s_p      = phi_h_p.get_value(q);
 
             const auto& avg_flux_s = 0.5*(hu_s_m*(hc_s_m/h_s_m) + hu_s_p*(hc_s_p/h_s_p));
             const auto& lambda_s   = std::max(std::abs(scalar_product(hu_s_m/h_s_m, n_plus)) +
@@ -1270,14 +1179,14 @@ namespace SW {
     /*--- Final update ---*/
     else {
       /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
-      FEFaceEvaluation_hc   phi_m(data, true, 2),
-                            phi_p(data, false, 2),
-                            phi_hc_m(data, true, 2),
-                            phi_hc_p(data, false, 2);
-      FEFaceEvaluation_hu   phi_hu_m(data, true, 1),
-                            phi_hu_p(data, false, 1);
-      FEFaceEvaluation_zeta phi_zeta_m(data, true, 0),
-                            phi_zeta_p(data, false, 0);
+      FEFaceEvaluation_hc phi_m(data, true, 2),
+                          phi_p(data, false, 2),
+                          phi_hc_m(data, true, 2),
+                          phi_hc_p(data, false, 2);
+      FEFaceEvaluation_hu phi_hu_m(data, true, 1),
+                          phi_hu_p(data, false, 1);
+      FEFaceEvaluation_h  phi_h_m(data, true, 0),
+                          phi_h_p(data, false, 0);
 
       /*--- Loop over all internal faces ---*/
       for(unsigned int face = face_range.first; face < face_range.second; ++face) {
@@ -1285,32 +1194,21 @@ namespace SW {
         phi_hc_p.reinit(face);
         phi_hu_m.reinit(face);
         phi_hu_p.reinit(face);
-        phi_zeta_m.reinit(face);
-        phi_zeta_p.reinit(face);
+        phi_h_m.reinit(face);
+        phi_h_p.reinit(face);
 
         phi_m.reinit(face);
         phi_p.reinit(face);
 
         /*--- Loop over quadrature points of each internal face ---*/
         for(unsigned int q = 0; q < phi_m.n_q_points; ++q) {
-          /*--- Evaluate the bathymetry ---*/
-          const auto& point_vectorized = phi_m.quadrature_point(q);
-          VectorizedArray<Number> zb_q;
-          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
-            Point<dim> point;
-            for(unsigned int d = 0; d < dim; ++d) {
-              point[d] = point_vectorized[d][v];
-            }
-            zb_q[v] = zb.value(point);
-          }
-
           const auto& n_plus = phi_m.get_normal_vector(q);
 
           /*--- Compute the quantities at the previous stages ---*/
           VectorizedArray<Number> flux = make_vectorized_array<Number>(0.0);
           for(unsigned int s = 1; s <= IMEX_stage - 1; ++s) {
-            phi_zeta_m.gather_evaluate(src[3*(s-1)], EvaluationFlags::values);
-            phi_zeta_p.gather_evaluate(src[3*(s-1)], EvaluationFlags::values);
+            phi_h_m.gather_evaluate(src[3*(s-1)], EvaluationFlags::values);
+            phi_h_p.gather_evaluate(src[3*(s-1)], EvaluationFlags::values);
             phi_hu_m.gather_evaluate(src[3*(s-1) + 1], EvaluationFlags::values);
             phi_hu_p.gather_evaluate(src[3*(s-1) + 1], EvaluationFlags::values);
             phi_hc_m.gather_evaluate(src[3*(s-1) + 2], EvaluationFlags::values);
@@ -1320,8 +1218,8 @@ namespace SW {
             const auto& hc_s_p     = phi_hc_p.get_value(q);
             const auto& hu_s_m     = phi_hu_m.get_value(q);
             const auto& hu_s_p     = phi_hu_p.get_value(q);
-            const auto& h_s_m      = phi_zeta_m.get_value(q) + zb_q;
-            const auto& h_s_p      = phi_zeta_p.get_value(q) + zb_q;
+            const auto& h_s_m      = phi_h_m.get_value(q);
+            const auto& h_s_p      = phi_h_p.get_value(q);
 
             const auto& avg_flux_s = 0.5*(hu_s_m*(hc_s_m/h_s_m) + hu_s_p*(hc_s_p/h_s_p));
             const auto& lambda_s   = std::max(std::abs(scalar_product(hu_s_m/h_s_m, n_plus)) +
@@ -1346,11 +1244,11 @@ namespace SW {
   // Put together all the previous steps for the tracer
   //
   template<int dim, unsigned int n_stages,
-           int fe_degree_zeta, int fe_degree_hu, int fe_degree_hc,
-           int n_q_points_1d_zeta, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
+           int fe_degree_h, int fe_degree_hu, int fe_degree_hc,
+           int n_q_points_1d_h, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
   void SWOperator<dim, n_stages,
-                  fe_degree_zeta, fe_degree_hu, fe_degree_hc,
-                  n_q_points_1d_zeta, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
+                  fe_degree_h, fe_degree_hu, fe_degree_hc,
+                  n_q_points_1d_h, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
   vmult_rhs_hc(Vec& dst, const std::vector<Vec>& src) const {
     for(unsigned int d = 0; d < src.size(); ++d) {
       src[d].update_ghost_values();
@@ -1367,11 +1265,11 @@ namespace SW {
   // Assemble cell term for the tracer
   //
   template<int dim, unsigned int n_stages,
-           int fe_degree_zeta, int fe_degree_hu, int fe_degree_hc,
-           int n_q_points_1d_zeta, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
+           int fe_degree_h, int fe_degree_hu, int fe_degree_hc,
+           int n_q_points_1d_h, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
   void SWOperator<dim, n_stages,
-                  fe_degree_zeta, fe_degree_hu, fe_degree_hc,
-                  n_q_points_1d_zeta, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
+                  fe_degree_h, fe_degree_hu, fe_degree_hc,
+                  n_q_points_1d_h, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
   assemble_cell_term_hc(const MatrixFree<dim, Number>&               data,
                         Vec&                                         dst,
                         const Vec&                                   src,
@@ -1397,17 +1295,17 @@ namespace SW {
   // Put together all previous steps
   //
   template<int dim, unsigned int n_stages,
-           int fe_degree_zeta, int fe_degree_hu, int fe_degree_hc,
-           int n_q_points_1d_zeta, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
+           int fe_degree_h, int fe_degree_hu, int fe_degree_hc,
+           int n_q_points_1d_h, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
   void SWOperator<dim, n_stages,
-                  fe_degree_zeta, fe_degree_hu, fe_degree_hc,
-                  n_q_points_1d_zeta, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
+                  fe_degree_h, fe_degree_hu, fe_degree_hc,
+                  n_q_points_1d_h, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
   apply_add(Vec& dst, const Vec& src) const {
     AssertIndexRange(SW_stage, 7);
     Assert(SW_stage > 0, ExcInternalError());
 
     if(SW_stage == 1 || SW_stage == 4) {
-      this->data->cell_loop(&SWOperator::assemble_cell_term_zeta,
+      this->data->cell_loop(&SWOperator::assemble_cell_term_h,
                             this, dst, src, false);
     }
     else if(SW_stage == 2 || SW_stage == 5) {
@@ -1424,20 +1322,20 @@ namespace SW {
   }
 
 
-  // Assemble diagonal cell term for the elevation
+  // Assemble diagonal cell term for the depth
   //
   template<int dim, unsigned int n_stages,
-           int fe_degree_zeta, int fe_degree_hu, int fe_degree_hc,
-           int n_q_points_1d_zeta, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
+           int fe_degree_h, int fe_degree_hu, int fe_degree_hc,
+           int n_q_points_1d_h, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
   void SWOperator<dim, n_stages,
-                  fe_degree_zeta, fe_degree_hu, fe_degree_hc,
-                  n_q_points_1d_zeta, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
-  assemble_diagonal_cell_term_zeta(const MatrixFree<dim, Number>&               data,
-                                   Vec&                                         dst,
-                                   const unsigned int&                          ,
-                                   const std::pair<unsigned int, unsigned int>& cell_range) const {
+                  fe_degree_h, fe_degree_hu, fe_degree_hc,
+                  n_q_points_1d_h, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
+  assemble_diagonal_cell_term_h(const MatrixFree<dim, Number>&               data,
+                                Vec&                                         dst,
+                                const unsigned int&                          ,
+                                const std::pair<unsigned int, unsigned int>& cell_range) const {
     /*--- We first start by declaring the suitable instances to read also available quantities. ---*/
-    FEEvaluation<dim, fe_degree_zeta, n_q_points_1d_hu, 1, Number> phi(data, 0);
+    FEEvaluation<dim, fe_degree_h, n_q_points_1d_hu, 1, Number> phi(data, 0);
 
     AlignedVector<VectorizedArray<Number>> diagonal(phi.dofs_per_component);
 
@@ -1475,11 +1373,11 @@ namespace SW {
   // Assemble diagonal cell term for the discharge
   //
   template<int dim, unsigned int n_stages,
-           int fe_degree_zeta, int fe_degree_hu, int fe_degree_hc,
-           int n_q_points_1d_zeta, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
+           int fe_degree_h, int fe_degree_hu, int fe_degree_hc,
+           int n_q_points_1d_h, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
   void SWOperator<dim, n_stages,
-                      fe_degree_zeta, fe_degree_hu, fe_degree_hc,
-                      n_q_points_1d_zeta, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
+                      fe_degree_h, fe_degree_hu, fe_degree_hc,
+                      n_q_points_1d_h, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
   assemble_diagonal_cell_term_hu(const MatrixFree<dim, Number>&               data,
                                  Vec&                                         dst,
                                  const unsigned int&                          ,
@@ -1494,15 +1392,15 @@ namespace SW {
     }
 
     if(IMEX_stage <= n_stages) {
-      /*--- Since here we have just one 'src' vector, but we also need to deal with the current elevation and discharge,
+      /*--- Since here we have just one 'src' vector, but we also need to deal with the current depth and discharge,
             we employ the auxiliary vectors where we set this information ---*/
-      FEEvaluation<dim, fe_degree_zeta, n_q_points_1d_hu, 1, Number> phi_zeta_curr(data, 0);
+      FEEvaluation<dim, fe_degree_h, n_q_points_1d_hu, 1, Number>    phi_h_curr(data, 0);
       FEEvaluation<dim, fe_degree_hu, n_q_points_1d_hu, dim, Number> phi_hu_curr(data, 1);
 
       /*--- Loop over all cells ---*/
       for(unsigned int cell = cell_range.first; cell < cell_range.second; ++cell) {
-        phi_zeta_curr.reinit(cell);
-        phi_zeta_curr.gather_evaluate(zeta_curr, EvaluationFlags::values);
+        phi_h_curr.reinit(cell);
+        phi_h_curr.gather_evaluate(h_curr, EvaluationFlags::values);
 
         phi_hu_curr.reinit(cell);
         phi_hu_curr.gather_evaluate(hu_curr, EvaluationFlags::values);
@@ -1519,17 +1417,7 @@ namespace SW {
 
           /*--- Loop over all quadrature points ---*/
           for(unsigned int q = 0; q < phi.n_q_points; ++q) {
-            const auto& point_vectorized = phi.quadrature_point(q);
-            VectorizedArray<Number> zb_q;
-            for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
-              Point<dim> point;
-              for(unsigned int d = 0; d < dim; ++d) {
-                point[d] = point_vectorized[d][v];
-              }
-              zb_q[v] = zb.value(point);
-            }
-
-            const auto& h_s      = phi_zeta_curr.get_value(q) + zb_q;
+            const auto& h_s      = phi_h_curr.get_value(q);
 
             const auto& hu_s     = phi_hu_curr.get_value(q);
             const auto& mod_hu_s = std::sqrt(scalar_product(hu_s, hu_s));
@@ -1583,11 +1471,11 @@ namespace SW {
   // Assemble diagonal cell term for the tracer
   //
   template<int dim, unsigned int n_stages,
-           int fe_degree_zeta, int fe_degree_hu, int fe_degree_hc,
-           int n_q_points_1d_zeta, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
+           int fe_degree_h, int fe_degree_hu, int fe_degree_hc,
+           int n_q_points_1d_h, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
   void SWOperator<dim, n_stages,
-                  fe_degree_zeta, fe_degree_hu, fe_degree_hc,
-                  n_q_points_1d_zeta, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
+                  fe_degree_h, fe_degree_hu, fe_degree_hc,
+                  n_q_points_1d_h, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
   assemble_diagonal_cell_term_hc(const MatrixFree<dim, Number>&               data,
                                  Vec&                                         dst,
                                  const unsigned int&                          ,
@@ -1631,11 +1519,11 @@ namespace SW {
   // Compute diagonal of various steps
   //
   template<int dim, unsigned int n_stages,
-           int fe_degree_zeta, int fe_degree_hu, int fe_degree_hc,
-           int n_q_points_1d_zeta, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
+           int fe_degree_h, int fe_degree_hu, int fe_degree_hc,
+           int n_q_points_1d_h, int n_q_points_1d_hu, int n_q_points_1d_hc, typename Vec>
   void SWOperator<dim, n_stages,
-                      fe_degree_zeta, fe_degree_hu, fe_degree_hc,
-                      n_q_points_1d_zeta, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
+                      fe_degree_h, fe_degree_hu, fe_degree_hc,
+                      n_q_points_1d_h, n_q_points_1d_hu, n_q_points_1d_hc, Vec>::
   compute_diagonal() {
     AssertIndexRange(SW_stage, 7);
     Assert(SW_stage > 0, ExcInternalError());
@@ -1648,7 +1536,7 @@ namespace SW {
     if(SW_stage == 1 || SW_stage == 4) {
       this->data->initialize_dof_vector(inverse_diagonal, 0);
 
-      this->data->cell_loop(&SWOperator::assemble_diagonal_cell_term_zeta,
+      this->data->cell_loop(&SWOperator::assemble_diagonal_cell_term_h,
                             this, inverse_diagonal, dummy, false);
     }
     else if(SW_stage == 2 || SW_stage == 5) {

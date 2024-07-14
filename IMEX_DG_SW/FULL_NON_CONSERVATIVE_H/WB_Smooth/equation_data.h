@@ -24,9 +24,9 @@ namespace EquationData {
   using namespace dealii;
 
   /*--- Polynomial degrees. We typically consider the same polynomial degree for all the variables ---*/
-  static const unsigned int degree_zeta = 1;
-  static const unsigned int degree_u    = 1;
-  static const unsigned int degree_c    = 1;
+  static const unsigned int degree_h  = 1;
+  static const unsigned int degree_hu = 1;
+  static const unsigned int degree_hc = 1;
 
   static const double g = 9.81; /*--- Acceleration of gravity ---*/
 
@@ -39,12 +39,12 @@ namespace EquationData {
   static const unsigned int n_stages = 3;
 
 
-  // We declare now the class that describes the initial condition for the total height.
+  // We declare now the class that describes the initial condition for the water depth.
   //
   template<int dim>
-  class TotalHeight: public Function<dim> {
+  class Depth: public Function<dim> {
   public:
-    TotalHeight(const double initial_time = 0.0); /*--- Class constructor ---*/
+    Depth(const double initial_time = 0.0); /*--- Class constructor ---*/
 
     virtual double value(const Point<dim>&  p,
                          const unsigned int component = 0) const override; /*--- Function evaluation ---*/
@@ -53,26 +53,30 @@ namespace EquationData {
   // Constructor which again relies on the 'Function' constructor.
   //
   template<int dim>
-  TotalHeight<dim>::TotalHeight(const double initial_time): Function<dim>(1, initial_time) {}
+  Depth<dim>::Depth(const double initial_time): Function<dim>(1, initial_time) {}
 
   // Evaluation depending on the spatial coordinates. The input argument 'component'
   // will be unused but it has to be kept to override
   //
   template<int dim>
-  double TotalHeight<dim>::value(const Point<dim>& p, const unsigned int component) const {
+  double Depth<dim>::value(const Point<dim>& p, const unsigned int component) const {
     (void)component;
     AssertIndexRange(component, 1);
 
-    return 10.0;
+    const double zb   = -5.0*std::exp(-0.4*(p[0] - 5.0)*(p[0] - 5.0));
+
+    const double zeta = 10.0;
+
+    return zeta + zb;
   }
 
 
-  // We declare now the class that describes the initial condition for the velocity.
+  // We declare now the class that describes the initial condition for the discharge.
   //
   template<int dim>
-  class Velocity: public Function<dim> {
+  class Discharge: public Function<dim> {
   public:
-    Velocity(const double initial_time = 0.0); /*--- Class constructor ---*/
+    Discharge(const double initial_time = 0.0); /*--- Class constructor ---*/
 
     virtual double value(const Point<dim>&  p,
                          const unsigned int component = 0) const override; /*--- Evaluation of the discharge for each component ---*/
@@ -84,21 +88,21 @@ namespace EquationData {
   // Constructor which relies on the 'Function' constructor.
   //
   template<int dim>
-  Velocity<dim>::Velocity(const double initial_time): Function<dim>(dim, initial_time) {}
+  Discharge<dim>::Discharge(const double initial_time): Function<dim>(dim, initial_time) {}
 
   // Specify the value for each spatial component. This function is overriden.
   //
   template<int dim>
-  double Velocity<dim>::value(const Point<dim>& p, const unsigned int component) const {
+  double Discharge<dim>::value(const Point<dim>& p, const unsigned int component) const {
     AssertIndexRange(component, dim);
 
     return 0.0;
   }
 
-  // Put together for a vector evalutation of the velocity.
+  // Put together for a vector evalutation of the discharge.
   //
   template<int dim>
-  void Velocity<dim>::vector_value(const Point<dim>& p, Vector<double>& values) const {
+  void Discharge<dim>::vector_value(const Point<dim>& p, Vector<double>& values) const {
     Assert(values.size() == dim, ExcDimensionMismatch(values.size(), dim));
 
     for(unsigned int i = 0; i < dim; ++i) {

@@ -39,12 +39,12 @@ namespace EquationData {
   static const unsigned int n_stages = 3;
 
 
-  // We declare now the class that describes the initial condition for the total height.
+  // We declare now the class that describes the initial condition for the elevation.
   //
   template<int dim>
-  class TotalHeight: public Function<dim> {
+  class Elevation: public Function<dim> {
   public:
-    TotalHeight(const double initial_time = 0.0); /*--- Class constructor ---*/
+    Elevation(const double initial_time = 0.0); /*--- Class constructor ---*/
 
     virtual double value(const Point<dim>&  p,
                          const unsigned int component = 0) const override; /*--- Function evaluation ---*/
@@ -53,13 +53,13 @@ namespace EquationData {
   // Constructor which again relies on the 'Function' constructor.
   //
   template<int dim>
-  TotalHeight<dim>::TotalHeight(const double initial_time): Function<dim>(1, initial_time) {}
+  Elevation<dim>::Elevation(const double initial_time): Function<dim>(1, initial_time) {}
 
   // Evaluation depending on the spatial coordinates. The input argument 'component'
   // will be unused but it has to be kept to override
   //
   template<int dim>
-  double TotalHeight<dim>::value(const Point<dim>& p, const unsigned int component) const {
+  double Elevation<dim>::value(const Point<dim>& p, const unsigned int component) const {
     (void)component;
     AssertIndexRange(component, 1);
 
