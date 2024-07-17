@@ -475,8 +475,8 @@ namespace SW {
             zb_q[v] = zb.value(point);
           }
 
-          const auto& n_plus = phi_m.get_normal_vector(q); /*--- Notice that the unit normal vector is the same from
-                                                                 'both sides'. ---*/
+          const auto& n_minus = phi_m.normal_vector(q); /*--- Notice that the unit normal vector is the same from
+                                                              'both sides'. ---*/
 
           /*--- Compute the quantities at the previous stages ---*/
           VectorizedArray<Number> flux = make_vectorized_array<Number>(0.0);
@@ -492,13 +492,13 @@ namespace SW {
             phi_zeta_m.gather_evaluate(src[2*(s-1)], EvaluationFlags::values);
             const auto& zeta_s_m    = phi_zeta_m.get_value(q);
             const auto& zeta_s_p    = phi_zeta_p.get_value(q);
-            const auto& lambda_s    = std::max(std::abs(scalar_product(hu_s_m/(zeta_s_m + zb_q), n_plus)) +
+            const auto& lambda_s    = std::max(std::abs(scalar_product(hu_s_m/(zeta_s_m + zb_q), n_minus)) +
                                                std::sqrt(EquationData::g*(zeta_s_m + zb_q)),
-                                               std::abs(scalar_product(hu_s_p/(zeta_s_p + zb_q), n_plus)) +
+                                               std::abs(scalar_product(hu_s_p/(zeta_s_p + zb_q), n_minus)) +
                                                std::sqrt(EquationData::g*(zeta_s_p + zb_q)));
             const auto& jump_zeta_s = zeta_s_m - zeta_s_p;
 
-            flux += a[IMEX_stage - 1][s - 1]*dt*(scalar_product(avg_flux_s, n_plus) + 0.5*lambda_s*jump_zeta_s);
+            flux += a[IMEX_stage - 1][s - 1]*dt*(scalar_product(avg_flux_s, n_minus) + 0.5*lambda_s*jump_zeta_s);
           }
 
           phi_m.submit_value(-flux, q);
@@ -543,7 +543,7 @@ namespace SW {
             zb_q[v] = zb.value(point);
           }
 
-          const auto& n_plus = phi_m.get_normal_vector(q);
+          const auto& n_minus = phi_m.normal_vector(q);
 
           /*--- Compute the quantities at the previous stages ---*/
           VectorizedArray<Number> flux = make_vectorized_array<Number>(0.0);
@@ -559,13 +559,13 @@ namespace SW {
             phi_zeta_m.gather_evaluate(src[2*(s-1)], EvaluationFlags::values);
             const auto& zeta_s_m    = phi_zeta_m.get_value(q);
             const auto& zeta_s_p    = phi_zeta_p.get_value(q);
-            const auto& lambda_s    = std::max(std::abs(scalar_product(hu_s_m/(zeta_s_m + zb_q), n_plus)) +
+            const auto& lambda_s    = std::max(std::abs(scalar_product(hu_s_m/(zeta_s_m + zb_q), n_minus)) +
                                                std::sqrt(EquationData::g*(zeta_s_m + zb_q)),
-                                               std::abs(scalar_product(hu_s_p/(zeta_s_p + zb_q), n_plus)) +
+                                               std::abs(scalar_product(hu_s_p/(zeta_s_p + zb_q), n_minus)) +
                                                std::sqrt(EquationData::g*(zeta_s_p + zb_q)));
             const auto& jump_zeta_s = zeta_s_m - zeta_s_p;
 
-            flux += b[s - 1]*dt*(scalar_product(avg_flux_s, n_plus) + 0.5*lambda_s*jump_zeta_s);
+            flux += b[s - 1]*dt*(scalar_product(avg_flux_s, n_minus) + 0.5*lambda_s*jump_zeta_s);
           }
 
           phi_m.submit_value(-flux, q);
@@ -814,7 +814,7 @@ namespace SW {
             zb_q[v] = zb.value(point);
           }
 
-          const auto& n_plus = phi_m.get_normal_vector(q);
+          const auto& n_minus = phi_m.normal_vector(q);
 
           /*--- Compute the quantities at the previous stages ---*/
           Tensor<1, dim, VectorizedArray<Number>> flux;
@@ -835,9 +835,9 @@ namespace SW {
 
             const auto& avg_tensor_product_flux = 0.5*(outer_product(hu_s_m, hu_s_m/h_s_m) +
                                                        outer_product(hu_s_p, hu_s_p/h_s_p));
-            const auto& lambda_s                = std::max(std::abs(scalar_product(hu_s_m/h_s_m, n_plus)) +
+            const auto& lambda_s                = std::max(std::abs(scalar_product(hu_s_m/h_s_m, n_minus)) +
                                                            std::sqrt(EquationData::g*h_s_m),
-                                                           std::abs(scalar_product(hu_s_p/h_s_p, n_plus)) +
+                                                           std::abs(scalar_product(hu_s_p/h_s_p, n_minus)) +
                                                            std::sqrt(EquationData::g*h_s_p));
             const auto& jump_hu_s               = hu_s_m - hu_s_p;
 
@@ -849,15 +849,15 @@ namespace SW {
             const auto& avg_flux_part_2_zb      = 0.5*EquationData::g*h_s_m
                                                 + 0.5*EquationData::g*h_s_p;
 
-            flux += a[IMEX_stage - 1][s - 1]*dt*(avg_tensor_product_flux*n_plus +
+            flux += a[IMEX_stage - 1][s - 1]*dt*(avg_tensor_product_flux*n_minus +
                                                  0.5*lambda_s*jump_hu_s);
 
             non_cons_flux_m += a[IMEX_stage - 1][s - 1]*dt*(avg_flux_part_1_zb - avg_flux_part_2_zb*zeta_s_m);
             non_cons_flux_p += a[IMEX_stage - 1][s - 1]*dt*(avg_flux_part_1_zb - avg_flux_part_2_zb*zeta_s_p);
           }
 
-          phi_m.submit_value(-flux - non_cons_flux_m*n_plus, q);
-          phi_p.submit_value(flux + non_cons_flux_p*n_plus, q);
+          phi_m.submit_value(-flux - non_cons_flux_m*n_minus, q);
+          phi_p.submit_value(flux + non_cons_flux_p*n_minus, q);
         }
 
         phi_m.integrate_scatter(EvaluationFlags::values, dst);
@@ -897,7 +897,7 @@ namespace SW {
             zb_q[v] = zb.value(point);
           }
 
-          const auto& n_plus = phi_m.get_normal_vector(q);
+          const auto& n_minus = phi_m.normal_vector(q);
 
           /*--- Compute the quantities at the previous stages ---*/
           Tensor<1, dim, VectorizedArray<Number>> flux;
@@ -918,9 +918,9 @@ namespace SW {
 
             const auto& avg_tensor_product_flux = 0.5*(outer_product(hu_s_m, hu_s_m/h_s_m) +
                                                        outer_product(hu_s_p, hu_s_p/h_s_p));
-            const auto& lambda_s                = std::max(std::abs(scalar_product(hu_s_m/h_s_m, n_plus)) +
+            const auto& lambda_s                = std::max(std::abs(scalar_product(hu_s_m/h_s_m, n_minus)) +
                                                            std::sqrt(EquationData::g*h_s_m),
-                                                           std::abs(scalar_product(hu_s_p/h_s_p, n_plus)) +
+                                                           std::abs(scalar_product(hu_s_p/h_s_p, n_minus)) +
                                                            std::sqrt(EquationData::g*h_s_p));
             const auto& jump_hu_s               = hu_s_m - hu_s_p;
 
@@ -932,15 +932,15 @@ namespace SW {
             const auto& avg_flux_part_2_zb      = 0.5*EquationData::g*h_s_m
                                                 + 0.5*EquationData::g*h_s_p;
 
-            flux += b[s - 1]*dt*(avg_tensor_product_flux*n_plus +
+            flux += b[s - 1]*dt*(avg_tensor_product_flux*n_minus +
                                  0.5*lambda_s*jump_hu_s);
 
             non_cons_flux_m += b[s - 1]*dt*(avg_flux_part_1_zb - avg_flux_part_2_zb*zeta_s_m);
             non_cons_flux_p += b[s - 1]*dt*(avg_flux_part_1_zb - avg_flux_part_2_zb*zeta_s_p);
           }
 
-          phi_m.submit_value(-flux - non_cons_flux_m*n_plus, q);
-          phi_p.submit_value(flux + non_cons_flux_p*n_plus, q);
+          phi_m.submit_value(-flux - non_cons_flux_m*n_minus, q);
+          phi_p.submit_value(flux + non_cons_flux_p*n_minus, q);
         }
 
         phi_m.integrate_scatter(EvaluationFlags::values, dst);
@@ -1230,7 +1230,7 @@ namespace SW {
             zb_q[v] = zb.value(point);
           }
 
-          const auto& n_plus = phi_m.get_normal_vector(q);
+          const auto& n_minus = phi_m.normal_vector(q);
 
           /*--- Compute the quantities at the previous stages ---*/
           VectorizedArray<Number> flux = make_vectorized_array<Number>(0.0);
@@ -1250,13 +1250,13 @@ namespace SW {
             const auto& h_s_p      = phi_zeta_p.get_value(q) + zb_q;
 
             const auto& avg_flux_s = 0.5*(hu_s_m*(hc_s_m/h_s_m) + hu_s_p*(hc_s_p/h_s_p));
-            const auto& lambda_s   = std::max(std::abs(scalar_product(hu_s_m/h_s_m, n_plus)) +
+            const auto& lambda_s   = std::max(std::abs(scalar_product(hu_s_m/h_s_m, n_minus)) +
                                               std::sqrt(EquationData::g*h_s_m),
-                                              std::abs(scalar_product(hu_s_p/h_s_p, n_plus)) +
+                                              std::abs(scalar_product(hu_s_p/h_s_p, n_minus)) +
                                               std::sqrt(EquationData::g*h_s_p));
             const auto& jump_hc_s  = hc_s_m - hc_s_p;
 
-            flux += a[IMEX_stage - 1][s - 1]*dt*(scalar_product(avg_flux_s, n_plus) + 0.5*lambda_s*jump_hc_s);
+            flux += a[IMEX_stage - 1][s - 1]*dt*(scalar_product(avg_flux_s, n_minus) + 0.5*lambda_s*jump_hc_s);
           }
 
           phi_m.submit_value(-flux, q);
@@ -1304,7 +1304,7 @@ namespace SW {
             zb_q[v] = zb.value(point);
           }
 
-          const auto& n_plus = phi_m.get_normal_vector(q);
+          const auto& n_minus = phi_m.normal_vector(q);
 
           /*--- Compute the quantities at the previous stages ---*/
           VectorizedArray<Number> flux = make_vectorized_array<Number>(0.0);
@@ -1324,13 +1324,13 @@ namespace SW {
             const auto& h_s_p      = phi_zeta_p.get_value(q) + zb_q;
 
             const auto& avg_flux_s = 0.5*(hu_s_m*(hc_s_m/h_s_m) + hu_s_p*(hc_s_p/h_s_p));
-            const auto& lambda_s   = std::max(std::abs(scalar_product(hu_s_m/h_s_m, n_plus)) +
+            const auto& lambda_s   = std::max(std::abs(scalar_product(hu_s_m/h_s_m, n_minus)) +
                                               std::sqrt(EquationData::g*h_s_m),
-                                              std::abs(scalar_product(hu_s_p/h_s_p, n_plus)) +
+                                              std::abs(scalar_product(hu_s_p/h_s_p, n_minus)) +
                                               std::sqrt(EquationData::g*h_s_p));
             const auto& jump_hc_s  = hc_s_m - hc_s_p;
 
-            flux += b[s - 1]*dt*(scalar_product(avg_flux_s, n_plus) + 0.5*lambda_s*jump_hc_s);
+            flux += b[s - 1]*dt*(scalar_product(avg_flux_s, n_minus) + 0.5*lambda_s*jump_hc_s);
           }
 
           phi_m.submit_value(-flux, q);

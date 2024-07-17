@@ -1,0 +1,34 @@
+
+
++-------------------------------------------------+------------+------------+
+| Total CPU time elapsed since start              |        14s |            |
+|                                                 |            |            |
+| Section                             | no. calls |  CPU time  | % of total |
++-------------------------------------+-----------+------------+------------+
+| Analysis results: computing errrors |       251 |       1.1s |       7.9% |
+| Create triangulation                |         1 |      0.22s |       1.6% |
+| Initialize state                    |         1 |   0.00349s |         0% |
+| Output results                      |         2 |    0.0644s |      0.46% |
+| Setup dofs                          |         1 |    0.0767s |      0.55% |
+| Update discharge                    |       750 |      3.59s |        26% |
+| Update elevation                    |       750 |      3.52s |        25% |
+| Update tracer                       |       750 |      3.44s |        25% |
++-------------------------------------+-----------+------------+------------+
+
+
+
++-------------------------------------------------+------------+------------+
+| Total wallclock time elapsed since start        |      15.2s |            |
+|                                                 |            |            |
+| Section                             | no. calls |  wall time | % of total |
++-------------------------------------+-----------+------------+------------+
+| Analysis results: computing errrors |       251 |      1.25s |       8.3% |
+| Create triangulation                |         1 |     0.298s |         2% |
+| Initialize state                    |         1 |    0.0318s |      0.21% |
+| Output results                      |         2 |     0.194s |       1.3% |
+| Setup dofs                          |         1 |     0.161s |       1.1% |
+| Update discharge                    |       750 |      3.65s |        24% |
+| Update elevation                    |       750 |      3.63s |        24% |
+| Update tracer                       |       750 |      3.51s |        23% |
++-------------------------------------+-----------+------------+------------+
+
