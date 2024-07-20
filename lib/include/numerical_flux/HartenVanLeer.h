@@ -125,8 +125,8 @@ namespace NumericalFlux
     const auto velocity_m = model.velocity<dim>(z_m, q_m, data_m);
     const auto velocity_p = model.velocity<dim>(z_p, q_p, data_p);
 
-    const auto csquare_m = model.square_wavespeed<dim>(z_m, data_m);
-    const auto csquare_p = model.square_wavespeed<dim>(z_p, data_m);
+    const auto csquare_m = model.square_wavespeed(z_m, data_m);
+    const auto csquare_p = model.square_wavespeed(z_p, data_m);
 
     const auto flux_m = model.massflux<dim>(q_m);
     const auto flux_p = model.massflux<dim>(q_p);
@@ -161,8 +161,8 @@ namespace NumericalFlux
     const auto velocity_m = model.velocity<dim>(z_m, q_m, data_m);
     const auto velocity_p = model.velocity<dim>(z_p, q_p, data_p);
 
-    const auto csquare_m = model.square_wavespeed<dim>(z_m, data_m);
-    const auto csquare_p = model.square_wavespeed<dim>(z_p, data_m);
+    const auto csquare_m = model.square_wavespeed(z_m, data_m);
+    const auto csquare_p = model.square_wavespeed(z_p, data_m);
 
     const auto flux_m = model.advectiveflux<dim>(z_m, q_m, data_m);
     const auto flux_p = model.advectiveflux<dim>(z_p, q_p, data_p);

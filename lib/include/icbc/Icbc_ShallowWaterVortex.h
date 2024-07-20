@@ -47,12 +47,10 @@ namespace ICBC
 
   using namespace dealii;
   
-  // We define global parameters that help in the definition of the initial
-  // and boundary conditions. In  this case $g$ is defined also in the main
-  // program and we could have recoverd it from there. We redefine $g$ here for now.
-  constexpr double g       = 1.0;
-  // The parameters of the vortex such as the undisturbed water depth and the free-strem velocity.
-  // follows. We choose a channel $[0,1]\times[0,2]$ with a depth of 10. The vortex have an
+  // We define constant parameters that help in the definition of the initial
+  // and boundary conditions. These are the parameters of the vortex
+  // such as the undisturbed water depth and the free-strem velocity.
+  // We choose a channel $[0,1]\times[0,2]$ with a depth of 10. The vortex have an
   // amplitude of 1 and a radius less than half of the channel width.
   constexpr double h0      = 10.0;
   constexpr double uoo     = 6.0;
@@ -64,21 +62,29 @@ namespace ICBC
 
 
   // @sect3{Equation data}
-
+  //
   // The class `ExactSolution` defines analytical functions that can be useful
   // to define initial and boundary conditions. Apart for the template for the
   // dimension which is in common with the base `Function` class, we have added
-  // the number of variables. 
+  // the number of variables.
   template <int dim, int n_vars>  
   class ExactSolution : public Function<dim>
   {
   public:
-    ExactSolution(const double time)
+    ExactSolution(const double time,
+                  IO::ParameterHandler &prm)
       : Function<dim>(n_vars, time)
-    {}
+    {
+      prm.enter_subsection("Physical constants");
+      g = prm.get_double("g");
+      prm.leave_subsection();
+    }
 
     virtual double value(const Point<dim> & p,
                          const unsigned int component = 0) const override;
+
+  private: 
+    double g;
   };  
 
   // We return either the water depth or the momentum
@@ -172,46 +178,59 @@ namespace ICBC
 
 
 
-  // The `Ic` class define the initial condition for the test-case.
-  // In this case it is recovered from the exact solution at time zero.
-  // This is realized here thanks to a derived class of `ExactSolution` that 
-  // overload the the constructor of the base class providing automatically 
-  // a zero time
-  template <int dim, int n_vars>  
-  class Ic : public ExactSolution<dim, n_vars>
-  {
-  public:
-    Ic()
-      : ExactSolution<dim, n_vars>(0.)
-    {}
-  };
-
-
-
-  // The `Bc` class define the boundary conditions for the test-case.
-  template <int dim, int n_vars>  
-  class BcShallowWaterVortex : public BcBase<dim, n_vars>
-  {
-  public:
-  
-    BcShallowWaterVortex(){};
-    ~BcShallowWaterVortex(){};
-         
-    void set_boundary_conditions() override;
-
-  }; 
-
+  // The `Ic` and `Bc` classes define the initial/boundary condition for the
+  // test-case. They are very similar in the templates and the constructor.
+  // They both take as argument the parameter class and they stored it
+  // internally. This means that we can read the Parameter file from
+  // anywhere when we are implementing ic/bc and we can access constants or
+  // filenames from which the initial/boundary data depends.
+  // In this case the intial condition is recovered from the exact solution 
+  // at time zero. This is realized here thanks to a derived class of
+  // `ExactSolution` that overload the the constructor of the base class 
+  // providing automatically a zero time.
   // Dirichlet boundary conditions (inflow) are specified on the left boundary of the domain.
   // The right boundary is for outflow. Top and bottom boundaries are wall. Please note that,
   // for the vortex parameters given above, the flow is supercritical and the choice of 
   // boundary conditions seems appropriate.
+  template <int dim, int n_vars>  
+  class Ic : public ExactSolution<dim, n_vars>
+  {
+  public:
+    Ic(IO::ParameterHandler &prm)
+      : ExactSolution<dim, n_vars>(0.,prm)
+  //    , prm(prm)
+    {}
+    ~Ic(){};
+
+  //private:
+  //  ParameterHandler &prm;
+  };
+
+
+
+  template <int dim, int n_vars>  
+  class BcShallowWaterVortex : public BcBase<dim, n_vars>
+  {
+  public:
+ 
+    BcShallowWaterVortex(IO::ParameterHandler &prm)
+      : prm(prm)
+    {}
+    ~BcShallowWaterVortex(){};
+         
+    void set_boundary_conditions() override;
+
+  private:
+    ParameterHandler &prm;
+  }; 
+
   template <int dim, int n_vars>
   void BcShallowWaterVortex<dim, n_vars>::set_boundary_conditions()
   {
     this->set_inflow_boundary(
-      1, std::make_unique<ExactSolution<dim, n_vars>>(0));
+      1, std::make_unique<ExactSolution<dim, n_vars>>(0, prm));
     this->set_supercritical_outflow_boundary(
-      2, std::make_unique<ExactSolution<dim, n_vars>>(0));
+      2, std::make_unique<ExactSolution<dim, n_vars>>(0, prm));
 
     this->set_wall_boundary(0);
   }         

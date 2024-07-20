@@ -56,9 +56,9 @@
 #undef  ICBC_IMPULSIVEWAVE
 #undef  ICBC_SHALLOWWATERVORTEX
 #undef  ICBC_STOMMELGYRE
-#undef  ICBC_LAKEATREST
+#define ICBC_LAKEATREST
 #undef  ICBC_TRACERADVECTION
-#define ICBC_CHANNELFLOW
+#undef  ICBC_CHANNELFLOW
 // We have two models: a non-hydrostatic Euler model for perfect gas which was the
 // original model coded in the deal.II example and the shallow water model. The Euler model
 // is only used for debugging, to check consistency with the original deal.II example and
@@ -73,8 +73,8 @@
 // a non-linear Manning bottom friction. In both cases, in the icbc class must appear the
 // definition of the drag coefficient, either the linear drag coefficient or the Manning
 // number.
-#define PHYSICS_BOTTOMFRICTIONLINEAR
-#undef  PHYSICS_BOTTOMFRICTIONMANNING
+#undef  PHYSICS_BOTTOMFRICTIONLINEAR
+#define PHYSICS_BOTTOMFRICTIONMANNING
 // The followig key is for the wind stress. Either you can specify directly wind stress components
 // or you can compute the wind stress with a quadratic formula
 // For the wind stress either
@@ -538,12 +538,12 @@ namespace Problem
   {
     const std::array<double,2> errors_hydro =
       oceano_operator.compute_errors_hydro(
-        ICBC::ExactSolution<dimension, n_variables>(time),
+        ICBC::ExactSolution<dimension, n_variables>(time,prm),
         solution_height, solution_discharge);
 #ifdef OCEANO_WITH_TRACERS
     const std::array<double,n_tra> errors_tracers =
       oceano_operator.compute_errors_tracers(
-        ICBC::ExactSolution<dimension, n_variables>(time), solution_tracer);
+        ICBC::ExactSolution<dimension, n_variables>(time,prm), solution_tracer);
 #endif
 
     const std::string quantity_name =
@@ -590,20 +590,20 @@ namespace Problem
         std::vector<LinearAlgebra::distributed::Vector<Number>>
           postprocess_scalar_variables(postprocessor.n_postproc_vars-dim, solution_height);
 
-#ifdef OCEANO_WITH_TRACERS
+//#ifdef OCEANO_WITH_TRACERS
         oceano_operator.evaluate_vector_field(solution_height,
                                               solution_discharge,
                                               solution_tracer,
                                               x_evaluation_points,
                                               postprocess_vector_variables,
                                               postprocess_scalar_variables);
-#else
+/*#else
         oceano_operator.evaluate_vector_field(solution_height,
                                               solution_discharge,
                                               x_evaluation_points,
                                               postprocess_vector_variables,
                                               postprocess_scalar_variables);
-#endif
+#endif*/
         std::vector<std::string> names_postproc
           = postprocessor.get_names();
         std::vector<std::string> names_vector;
@@ -637,7 +637,7 @@ namespace Problem
           reference_height.reinit(solution_height);
           reference_discharge.reinit(solution_discharge);
           oceano_operator.project_hydro(
-            ICBC::ExactSolution<dimension, n_variables>(time),
+            ICBC::ExactSolution<dimension, n_variables>(time,prm),
             reference_height, reference_discharge);
           reference_height.sadd(-1., 1, solution_height);
           reference_discharge.sadd(-1., 1, solution_discharge);
@@ -712,10 +712,10 @@ namespace Problem
     make_grid_and_dofs();
 
     oceano_operator.project_hydro(
-      ICBC::Ic<dimension, n_variables>(), solution_height, solution_discharge);
+      ICBC::Ic<dimension, n_variables>(prm), solution_height, solution_discharge);
 #ifdef OCEANO_WITH_TRACERS
     oceano_operator.project_tracers(
-      ICBC::Ic<dimension, n_variables>(), solution_tracer);
+      ICBC::Ic<dimension, n_variables>(prm), solution_tracer);
 #endif
 
     // Next off is the Courant number
@@ -924,21 +924,21 @@ int main(int argc, char **argv)
       // use it for the initial condition and we have mantained the same directive 
       // to easily switch both initial and boundary conditions depending on the test-case.
 #if defined ICBC_ISENTROPICVORTEX
-      bc = new ICBC::BcIsentropicVortex<dimension, n_variables>;
+      bc = new ICBC::BcIsentropicVortex<dimension, n_variables>(prm);
 #elif defined ICBC_FLOWAROUNDCYLINDER
-      bc = new ICBC::BcFlowAroundCylinder<dimension, n_variables>;
+      bc = new ICBC::BcFlowAroundCylinder<dimension, n_variables>(prm);
 #elif defined ICBC_IMPULSIVEWAVE
-      bc = new ICBC::BcImpulsiveWave<dimension, n_variables>;
+      bc = new ICBC::BcImpulsiveWave<dimension, n_variables>(prm);
 #elif defined ICBC_SHALLOWWATERVORTEX
-      bc = new ICBC::BcShallowWaterVortex<dimension, n_variables>;
+      bc = new ICBC::BcShallowWaterVortex<dimension, n_variables>(prm);
 #elif defined ICBC_STOMMELGYRE
-      bc = new ICBC::BcStommelGyre<dimension, n_variables>; 
+      bc = new ICBC::BcStommelGyre<dimension, n_variables>(prm);
 #elif defined ICBC_LAKEATREST
-      bc = new ICBC::BcLakeAtRest<dimension, n_variables>;
+      bc = new ICBC::BcLakeAtRest<dimension, n_variables>(prm);
 #elif defined ICBC_TRACERADVECTION
-      bc = new ICBC::BcTracerAdvection<dimension, n_variables>;
+      bc = new ICBC::BcTracerAdvection<dimension, n_variables>(prm);
 #elif defined ICBC_CHANNELFLOW
-      bc = new ICBC::BcChannelFlow<dimension, n_variables>;
+      bc = new ICBC::BcChannelFlow<dimension, n_variables>(prm);
 #else
       Assert(false, ExcNotImplemented());
       return 0.;

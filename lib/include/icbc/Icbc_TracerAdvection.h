@@ -58,12 +58,14 @@ namespace ICBC
   // The class `ExactSolution` defines analytical functions that can be useful
   // to define initial and boundary conditions. Apart for the template for the
   // dimension which is in common with the base `Function` class, we have added
-  // the number of variables. 
+  // the number of variables. We return either the water depth, the momentum or
+  // the concentration, depending on which component is requested.
   template <int dim, int n_vars>  
   class ExactSolution : public Function<dim>
   {
   public:
-    ExactSolution(const double time)
+    ExactSolution(const double time,
+                  IO::ParameterHandler &/*prm*/)
       : Function<dim>(n_vars, time)
     {}
 
@@ -71,8 +73,6 @@ namespace ICBC
                          const unsigned int component = 0) const override;
   };  
 
-  // We return either the water depth, the momentum or
-  // the concentration, depending on which component is requested.
   template <int dim, int n_vars>
   double ExactSolution<dim, n_vars>::value(const Point<dim> & x,
                                            const unsigned int component) const
@@ -113,24 +113,28 @@ namespace ICBC
   class Ic : public ExactSolution<dim, n_vars>
   {
   public:
-    Ic()
-      : ExactSolution<dim, n_vars>(0.)
+    Ic(IO::ParameterHandler &prm)
+      : ExactSolution<dim, n_vars>(0., prm)
     {}
+    ~Ic(){};
   };
 
 
 
-  // The `Bc` class define the boundary conditions for the test-case.
   template <int dim, int n_vars>
   class BcTracerAdvection : public BcBase<dim, n_vars>
   {
   public:
 
-    BcTracerAdvection(){};
+    BcTracerAdvection(IO::ParameterHandler &prm)
+      : prm(prm)
+    {}
     ~BcTracerAdvection(){};
 
     void set_boundary_conditions() override;
 
+  private:
+    ParameterHandler &prm;
   };
 
   // Dirichlet boundary conditions (inflow) are specified on the left boundary of the domain.
@@ -141,9 +145,9 @@ namespace ICBC
   void BcTracerAdvection<dim, n_vars>::set_boundary_conditions()
   {
     this->set_inflow_boundary(
-      1, std::make_unique<ExactSolution<dim, n_vars>>(0));
+      1, std::make_unique<ExactSolution<dim, n_vars>>(0, prm));
     this->set_supercritical_outflow_boundary(
-      2, std::make_unique<ExactSolution<dim, n_vars>>(0));
+      2, std::make_unique<ExactSolution<dim, n_vars>>(0, prm));
 
     this->set_wall_boundary(0);
   }

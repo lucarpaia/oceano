@@ -42,6 +42,10 @@ namespace ICBC
   constexpr double A         = 0.5;
   constexpr double tau       = 2.0;
 
+
+
+  // @sect3{Equation data}
+  //
   // lrp: to be removed
   // The class `ExactSolution` defines analytical functions that can be useful
   // to define initial and boundary conditions.
@@ -49,7 +53,8 @@ namespace ICBC
   class ExactSolution : public Function<dim>
   {
   public:
-    ExactSolution(const double time)
+    ExactSolution(const double time,
+                  IO::ParameterHandler &/*prm*/)
       : Function<dim>(n_vars, time)
     {}
 
@@ -75,32 +80,40 @@ namespace ICBC
       return 0.;
   }
 
-  // @sect3{Equation data}
-  //
-  // The `Ic` class defines the initial condition for the test-case.
-  // This is realized here thanks to a derived class of the deal.II `Function` class
-  // that define many type of time and space functions. The initial condition class
-  // overload the the constructor of the base class providing automatically
-  // a zero time. Note that, apart for the template for the dimension which is in common with
-  // the base `Function` class, we have added the number of variables to construct the base
-  // class with the correct number of dimension and do some sanity checks.
+
+
+  // The `Ic` and `Bc` classes define the initial/boundary condition for the
+  // test-case. They are very similar in the templates and the constructor.
+  // They both take as argument the parameter class and they stored it
+  // internally. This means that we can read the Parameter file from
+  // anywhere when we are implementing ic/bc and we can access constants or
+  // filenames from which the initial/boundary data depends. In this case
+  // we do not need any acces to the configuration file and it has been commented.
+  // The initial condition is realized thanks to a derived class of the
+  // deal.II `Function` class that define many type of time and space functions.
+  // The initial condition class overloads the constructor of the base class
+  // providing automatically a zero time. Note that, apart for the template for
+  // the dimension which is in common with the base `Function` class, we have
+  // added the number of variables to construct the base class with the correct
+  // number of dimension and do some sanity checks. We return either the water
+  // depth or the momentum depending on which component is requested. Two sanity
+  // checks have been added. One is to control that the space dimension is two
+  // (you cannot run this test in one dimension) and another one on the number
+  // of variables, that for two-dimensional shallow water equation is three.
+  // A closed bassin means a wall-boundary condition at the four boundaries.
   template <int dim, int n_vars>
   class Ic : public Function<dim>
   {
   public:
-    Ic()
+    Ic(IO::ParameterHandler &/*prm*/)
       : Function<dim>(n_vars, 0.)
     {}
+    ~Ic(){};
 
     virtual double value(const Point<dim> & p,
                          const unsigned int component = 0) const override;
   };
 
-  // We return either the water depth or the momentum
-  // depending on which component is requested. Two sanity checks have been added. One is to
-  // control that the space dimension is two (you cannot run this test in one dimension) and
-  // another one on the number of variables, that for two-dimensional shallow water equation 
-  // is three.
   template <int dim, int n_vars>
   double Ic<dim, n_vars>::value(const Point<dim>  &x,
                                 const unsigned int component) const
@@ -123,21 +136,18 @@ namespace ICBC
 
 
 
-  // The `Bc` class define the boundary conditions for the test-case.
   template <int dim, int n_vars>  
   class BcImpulsiveWave : public BcBase<dim, n_vars>
   {
   public:
 
-    BcImpulsiveWave(){};
+    BcImpulsiveWave(IO::ParameterHandler &/*prm*/){};
     ~BcImpulsiveWave(){};
          
     void set_boundary_conditions() override;
 
   };
 
-  // A closed bassin means a wall-boundary condition at the
-  // four boundaries.
   template <int dim, int n_vars>
   void BcImpulsiveWave<dim, n_vars>::set_boundary_conditions()
   {

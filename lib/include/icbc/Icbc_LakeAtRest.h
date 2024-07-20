@@ -65,7 +65,8 @@ namespace ICBC
   class ExactSolution : public Function<dim>
   {
   public:
-    ExactSolution(const double time)
+    ExactSolution(const double time,
+                  IO::ParameterHandler &/*prm*/)
       : Function<dim>(n_vars, time)
     {}
 
@@ -93,28 +94,43 @@ namespace ICBC
 
 
 
-  // The `Ic` class define the initial condition for the test-case.
-  // In this case it is recovered from the exact solution at time zero.
-  // This is realized here thanks to a derived class of `ExactSolution` that
-  // overload the the constructor of the base class providing automatically
-  // a zero time. 
+  // @sect3{Equation data}
+  //
+  // The `Ic` and `Bc` classes define the initial/boundary condition for the
+  // test-case. They are very similar in the templates and the constructor.
+  // They both take as argument the parameter class and they stored it
+  // internally. This means that we can read the Parameter file from
+  // anywhere when we are implementing ic/bc and we can access constants or
+  // filenames from which the initial/boundary data depends.
+  // The initial condition is realized thanks to a derived class of the
+  // deal.II `Function` class that define many type of time and space functions.
+  // The initial condition class overloads the constructor of the base class
+  // providing automatically a zero time. Note that, apart for the template for
+  // the dimension which is in common with the base `Function` class, we have
+  // added the number of variables to construct the base class with the correct
+  // number of dimension and do some sanity checks. 
+  // We return either the water depth or the momentum depending on which component
+  // is requested. Two sanity checks have been added. One is to control that the
+  // space dimension is two (you cannot run this test in one dimension) and
+  // another one on the number of variables, that for two-dimensional shallow
+  // water equation is three.
+  //
+  // A subcritical outflow boundary condition is specified on the left and
+  // right boundary of the domain. In this way we let the wave smoothly go out from the
+  // the domain. Top and bottom boundaries are walls.
   template <int dim, int n_vars>
   class Ic : public Function<dim>
   {
   public:
-    Ic()
+    Ic(IO::ParameterHandler &/*prm*/)
       : Function<dim>(n_vars, 0.)
     {}
+    ~Ic(){};
 
     virtual double value(const Point<dim> & p,
                          const unsigned int component = 0) const override;
   };
 
-  // We return either the water depth or the momentum
-  // depending on which component is requested. Two sanity checks have been added. One is to
-  // control that the space dimension is two (you cannot run this test in one dimension) and
-  // another one on the number of variables, that for two-dimensional shallow water equation
-  // is three.
   template <int dim, int n_vars>
   double Ic<dim, n_vars>::value(const Point<dim>  &x,
                                 const unsigned int component) const
@@ -133,27 +149,27 @@ namespace ICBC
 
 
 
-  // The `Bc` class define the boundary conditions for the test-case.
   template <int dim, int n_vars>  
   class BcLakeAtRest : public BcBase<dim, n_vars>
   {
   public:
   
-    BcLakeAtRest(){};
+    BcLakeAtRest(IO::ParameterHandler &prm)
+      : prm(prm)
+    {}
     ~BcLakeAtRest(){};
          
     void set_boundary_conditions() override;
 
+  private:
+    ParameterHandler &prm;
   };
-  
-  // A subcritical outflow boundary condition is specified on the left and
-  // right boundary of the domain. In this way we let the wave smoothly go out from the
-  // the domain. Top and bottom boundaries are walls.
+
   template <int dim, int n_vars>
   void BcLakeAtRest<dim, n_vars>::set_boundary_conditions()
   {
     this->set_subcritical_outflow_boundary(
-      1, std::make_unique<ExactSolution<dim, n_vars>>(0));
+      1, std::make_unique<ExactSolution<dim, n_vars>>(0, prm));
     this->set_wall_boundary(0);
   }         
 

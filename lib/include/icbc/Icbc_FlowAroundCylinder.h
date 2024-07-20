@@ -104,7 +104,7 @@ namespace ICBC
   {
   public:
         
-    BcFlowAroundCylinder(){};
+    BcFlowAroundCylinder(IO::ParameterHandler &/*prm*/){};
     ~BcFlowAroundCylinder(){};
          
     void set_boundary_conditions() override;

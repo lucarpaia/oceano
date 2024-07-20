@@ -43,11 +43,9 @@ namespace ICBC
   using namespace dealii;
   
   // We define global parameters that help in the definition of the initial
-  // and boundary conditions. In  this case $g$ is defined also in the main 
-  // program and we could have recoverd it from there. The Coriolis parameter 
+  // and boundary conditions. The Coriolis parameter 
   // $f=f_0+\beta y$ is defined using mid-latitude values for the northern 
   // emisphere. For the parameters name we try to follow the original reference:
-  constexpr double g      = 9.81;
   constexpr double f0     = 1e-4;
   constexpr double beta   = 2e-11;
   // The parameters of the forcing are the amplitude of the sinusoidal wind $F$
@@ -66,21 +64,28 @@ namespace ICBC
   // to define initial and boundary conditions. For the gyre test it only defines
   // the analytical solution seen above. Apart for the template for the
   // dimension which is in common with the base `Function` class, we have added
-  // the number of variables. 
+  // the number of variables. We return either the water depth or the momentum
+  // depending on which component is requested.
   template <int dim, int n_vars>  
   class ExactSolution : public Function<dim>
   {
   public:
-    ExactSolution(const double time)
+    ExactSolution(const double time,
+                  IO::ParameterHandler &prm)
       : Function<dim>(n_vars, time)
-    {}
+    {
+      prm.enter_subsection("Physical constants");
+      g = prm.get_double("g");
+      prm.leave_subsection();
+    }
 
     virtual double value(const Point<dim> & p,
                          const unsigned int component = 0) const override;
+
+  private: 
+    double g;
   };  
 
-  // We return either the water depth or the momentum
-  // depending on which component is requested.
   template <int dim, int n_vars>
   double ExactSolution<dim, n_vars>::value(const Point<dim> & x,
                                            const unsigned int component) const
@@ -128,32 +133,38 @@ namespace ICBC
 
 
 
-  // @sect3{Equation data}
-  //
-  // The `Ic` class defines the initial condition for the test-case.
+  // The `Ic` and `Bc` classes define the initial/boundary condition for the
+  // test-case. They are very similar in the templates and the constructor.
+  // They both take as argument the parameter class and they stored it
+  // internally. This means that we can read the Parameter file from
+  // anywhere when we are implementing ic/bc and we can access constants or
+  // filenames from which the initial/boundary data depends.
   // This is realized here thanks to a derived class of the deal.II `Function` class
   // that define many type of time and space functions. The initial condition class
   // overload the the constructor of the base class providing automatically
   // a zero time. Note that, apart for the template for the dimension which is in common with
   // the base `Function` class, we have added the number of variables to construct the base
   // class with the correct number of dimension and do some sanity checks.
-  template <int dim, int n_vars>
-  class Ic : public Function<dim>
-  {
-  public:
-    Ic()
-      : Function<dim>(n_vars, 0.)
-    {}
-
-    virtual double value(const Point<dim> & p,
-                         const unsigned int component = 0) const override;
-  };
-
+  //
   // We return either the water depth or the momentum
   // depending on which component is requested. Two sanity checks have been added. One is to
   // control that the space dimension is two (you cannot run this test in one dimension) and
   // another one on the number of variables, that for two-dimensional shallow water equation 
   // is three. The initial solution for the gyre test is an ocean at rest.
+  // Wall boundary conditions are assumed on the four sides of the rectangular ocean.
+  template <int dim, int n_vars>
+  class Ic : public Function<dim>
+  {
+  public:
+    Ic(IO::ParameterHandler &/*prm*/)
+      : Function<dim>(n_vars, 0.)
+    {}
+    ~Ic(){};
+
+    virtual double value(const Point<dim> & p,
+                         const unsigned int component = 0) const override;
+  };
+
   template <int dim, int n_vars>
   double Ic<dim, n_vars>::value(const Point<dim>  &/*x*/,
                                 const unsigned int component) const
@@ -171,20 +182,18 @@ namespace ICBC
 
 
 
-  // The `Bc` class define the boundary conditions for the test-case.
   template <int dim, int n_vars>  
   class BcStommelGyre : public BcBase<dim, n_vars>
   {
   public:
   
-    BcStommelGyre(){};
+    BcStommelGyre(IO::ParameterHandler &/*prm*/){};
     ~BcStommelGyre(){};
          
     void set_boundary_conditions() override;
 
   }; 
 
-  // Wall boundary conditions are assumed on the four sides of the rectangular ocean.
   template <int dim, int n_vars>
   void BcStommelGyre<dim, n_vars>::set_boundary_conditions()
   {

@@ -226,6 +226,7 @@ namespace SpaceDiscretization
     void evaluate_vector_field(
       const LinearAlgebra::distributed::Vector<Number>        &solution_height,
       const LinearAlgebra::distributed::Vector<Number>        &solution_discharge,
+      const LinearAlgebra::distributed::Vector<Number>        &solution_tracer,
       const std::vector<Point<dim>>                           &evaluation_points,
       LinearAlgebra::distributed::Vector<Number>              &computed_vector_quantities,
       std::vector<LinearAlgebra::distributed::Vector<Number>> &computed_scalar_quantities) const;
@@ -2070,7 +2071,7 @@ namespace SpaceDiscretization
                 std::max(convective_limit, std::abs(convective_speed[d]));
 
             const auto speed_of_sound =
-              std::sqrt(model.square_wavespeed<dim>(zq, data_q));
+              std::sqrt(model.square_wavespeed(zq, data_q));
 
             Tensor<1, dim, VectorizedArray<Number>> eigenvector;
             for (unsigned int d = 0; d < dim; ++d)
@@ -2130,6 +2131,7 @@ namespace SpaceDiscretization
   void OceanoOperator<dim, n_tra, degree, n_points_1d>::evaluate_vector_field(
     const LinearAlgebra::distributed::Vector<Number>        &solution_height,
     const LinearAlgebra::distributed::Vector<Number>        &solution_discharge,
+    const LinearAlgebra::distributed::Vector<Number>        &/*solution_tracer*/,
     const std::vector<Point<dim>>                           &evaluation_points,
     LinearAlgebra::distributed::Vector<Number>              &computed_vector_quantities,
     std::vector<LinearAlgebra::distributed::Vector<Number>> &computed_scalar_quantities) const
@@ -2168,12 +2170,12 @@ namespace SpaceDiscretization
           {
             if (postproc_names[v+dim] == "pressure")
               computed_scalar_quantities[v][p] =
-                model.pressure<dim>(height, data[0]);
+                model.pressure(height, data[0]);
             else if (postproc_names[v+dim] == "depth")
               computed_scalar_quantities[v][p] = height + data[0];
             else if (postproc_names[v+dim] == "speed_of_sound")
               computed_scalar_quantities[v][p] =
-                std::sqrt(model.square_wavespeed<dim>(height, data[0]));
+                std::sqrt(model.square_wavespeed(height, data[0]));
             else
               {
                 std::cout << "Postprocessing variable " << postproc_names[dim+v]

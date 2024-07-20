@@ -149,7 +149,9 @@ namespace SpaceDiscretization
       std::vector<LinearAlgebra::distributed::Vector<Number>> &computed_scalar_quantities) const;
 
     using OceanoOperator<dim, n_tra, degree, n_points_1d>::bc;
-    
+
+    using OceanoOperator<dim, n_tra, degree, n_points_1d>::model;
+
   private:
 
     using OceanoOperator<dim, n_tra, degree, n_points_1d>::data;
@@ -157,8 +159,6 @@ namespace SpaceDiscretization
     using OceanoOperator<dim, n_tra, degree, n_points_1d>::num_flux;
 
     using OceanoOperator<dim, n_tra, degree, n_points_1d>::timer;
-
-    using OceanoOperator<dim, n_tra, degree, n_points_1d>::model;
 
     void local_apply_inverse_mass_matrix_tracer(
       const MatrixFree<dim, Number> &                   data,
@@ -600,7 +600,6 @@ namespace SpaceDiscretization
                 q_p = q_m;
                 t_p = t_m;
               }
-#if defined MODEL_SHALLOWWATER
             else if (bc->subcritical_outflow_boundaries.find(boundary_id) !=
                      bc->subcritical_outflow_boundaries.end())
               {
@@ -623,7 +622,6 @@ namespace SpaceDiscretization
                 q_p =  u_b * h_b * norm * normal;
                 t_p = t_m;
               }
-#endif
             else
               AssertThrow(false,
                           ExcMessage("Unknown boundary id, did "
@@ -1105,7 +1103,7 @@ namespace SpaceDiscretization
         const auto data = evaluate_function<dim, Number>(
             *bc->problem_data, x_evaluation_points, 0);
 
-        const Tensor<1, dim> velocity = model.velocity<dim>(height, discharge, data[0]);
+        const Tensor<1, dim> velocity = model.velocity(height, discharge, data[0]);
 
         for (unsigned int d = 0; d < dim; ++d)
           computed_vector_quantities[dim*p+d] = velocity[d];
@@ -1114,16 +1112,16 @@ namespace SpaceDiscretization
           {
             if (postproc_names[v+dim] == "pressure")
               computed_scalar_quantities[v][p] =
-                model.pressure<dim>(height, data[0]);
+                model.pressure(height, data[0]);
             else if (postproc_names[v+dim] == "depth")
               computed_scalar_quantities[v][p] = height + data[0];
             else if (postproc_names[v+dim] == "speed_of_sound")
               computed_scalar_quantities[v][p] =
-                std::sqrt(model.square_wavespeed<dim>(height, data[0]));
+                std::sqrt(model.square_wavespeed(height, data[0]));
             else if (postproc_names[v+dim] == "tracer")
               for (unsigned int t = 0; t < n_tra; ++t)
                 computed_scalar_quantities[v][p] =
-                  model.tracer<n_tra>(height, tracer, data[0])[t];
+                  model.tracer(height, tracer, data[0])[t];
             else
               {
                 std::cout << "Postprocessing variable " << postproc_names[dim+v]

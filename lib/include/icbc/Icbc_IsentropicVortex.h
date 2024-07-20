@@ -136,7 +136,7 @@ namespace ICBC
   {
   public:
   
-    BcIsentropicVortex(){};
+    BcIsentropicVortex(IO::ParameterHandler &/*prm*/){};
     ~BcIsentropicVortex(){};
          
     void set_boundary_conditions() override;

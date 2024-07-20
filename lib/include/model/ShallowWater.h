@@ -129,7 +129,7 @@ namespace Model
     // specify the first template argument `dim` here because the compiler is
     // not able to deduce it from the arguments of the tensor, whereas the
     // third argument (number type) can be automatically deduced.
-    template <int dim, typename Number>
+    template <typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Number
       pressure(const Number height,
@@ -198,7 +198,7 @@ namespace Model
         const Tensor<1, dim, Number> &discharge,
         const Number                  bathymetry) const;
 
-    template <int dim, typename Number>
+    template <typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Number
       square_wavespeed(
@@ -264,7 +264,7 @@ namespace Model
     return discharge * inverse_depth;
   }
 
-  template <int dim, typename Number>
+  template <typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Number
     ShallowWater::pressure(const Number height,
@@ -380,7 +380,7 @@ namespace Model
     return v.norm_square() + g * (height + bathymetry);
   }
 
-  template <int dim, typename Number>
+  template <typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Number
     ShallowWater::square_wavespeed(
@@ -401,7 +401,7 @@ namespace Model
   {
     const auto v = velocity<dim>(height, discharge, bathymetry);
     const auto c = std::sqrt(
-      square_wavespeed<dim>(height, bathymetry));
+      square_wavespeed(height, bathymetry));
     Number u = v * normal;
 
     return u + 2. * c;
@@ -418,7 +418,7 @@ namespace Model
   {
     const auto v = velocity<dim>(height, discharge, bathymetry);
     const auto c = std::sqrt(
-      square_wavespeed<dim>(height, bathymetry));
+      square_wavespeed(height, bathymetry));
     Number u = v * normal;
 
     return u - 2. * c;

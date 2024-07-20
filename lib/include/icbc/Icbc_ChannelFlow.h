@@ -48,12 +48,10 @@ namespace ICBC
   using namespace dealii;
   
   // We define global parameters that help in the definition of the initial
-  // and boundary conditions. For this test we do not need a lot of parameters because
-  // we read the external data from an external file. In fact we just need the gravity:
-  constexpr double g       = 9.81;
-  // and the discharge:
-  constexpr double q0       = 2.5;
-
+  // and boundary conditions. For this test we just need the discharge:
+  constexpr double q0      = 2.5;
+  // and the Manning coefficient:
+  constexpr double n0      = 0.04;
 
   // @sect3{Equation data}
 
@@ -66,13 +64,20 @@ namespace ICBC
   // the data class itself. Thanks to them we can read and compute the exact
   // solution with a bilinear interpolation. We do not talk more about these two
   // classes because they are discussed in detail when for the bathymetry.
+  //
+  // In the Oceano variables the exact solution must be given in the free-surface
+  // and discharge variables. We check that the test runs in two-dimensions
+  // which is consistent with the dimension of the file (otherwise it would raise
+  // an error difficult to detect). The free-surface is computed by a bilinear
+  // interpolation of the data read from file.
   template <int dim, int n_vars>  
   class ExactSolution : public Function<dim>
   {
   public:
-    ExactSolution(const double time)
+    ExactSolution(const double          time,
+                  IO::ParameterHandler &prm)
       : Function<dim>(n_vars, time)
-      , data_reader("exact_free_surface.txt.gz") //filename(prm)) //for now prm is not available
+      , data_reader(filename(prm))
       , data(
           data_reader.endpoints,
           data_reader.n_intervals,
@@ -90,12 +95,6 @@ namespace ICBC
     const Functions::InterpolatedUniformGridData<dim> data;
   };  
 
-  // We code the exact solution. In the Oceano variables the exact solution
-  // must be given in the free-surface and discharge variables. We
-  // check that the test runs in two-dimensions which is consistent with the
-  // dimension of the file (otherwise it would raise an error difficult to
-  // detect). The free-surface is computed by a bilinear interpolation of the
-  // data read from file.
   template <int dim, int n_vars>
   std::string ExactSolution<dim, n_vars>::filename(IO::ParameterHandler &prm) const
   {
@@ -121,65 +120,92 @@ namespace ICBC
 
 
 
-  // The `Ic` class define the initial condition for the test-case.
-  // The initial conditions are a $\zeta(0,x) = 0\,m$ and 
-  // $hu(0,x) = q_0\, m^2 /s$. 
+  // The `Ic` and `Bc` classes define the initial/boundary condition for the
+  // test-case. They are very similar in the templates and the constructor.
+  // They both take as argument the parameter class and they stored it
+  // internally. This means that we can read the Parameter file from
+  // anywhere when we are implementing ic/bc and we can access constants or
+  // filenames from which the initial/boundary data depends.
+  // The initial conditions are a $\zeta(0,x) = 0\,m$ and $hu(0,x) = q_0\, m^2 /s$.
+  // We return either the water depth or the momentum depending on which component is
+  // requested. Two sanity checks have been added. One is to
+  // control that the space dimension is two (you cannot run this test in one dimension) and
+  // another one on the number of variables, that for two-dimensional shallow water equation
+  // is three or more (if you have tracers).
+  //
+  // We start with a wet channel in equilibrium with a sloping topography without any bump or
+  // hill, that is with $\partial_x h=0$ in the above equation. The slope is thus controlled
+  // by the friction. In case the bathyemtry coincide with such a sloping channel then we
+  // should have an exact preservation of the flow.
+  // If tracers are presents they are simply set to zero.
+  // A supercritical inflow/outflow boundary condition is specified on the left and
+  // right boundary of the domain. Top and bottom boundaries are walls.
   template <int dim, int n_vars>
   class Ic : public Function<dim>
   {
   public:
-    Ic()
+    Ic(IO::ParameterHandler &prm)
       : Function<dim>(n_vars, 0.)
-    {}
+    {
+      prm.enter_subsection("Physical constants");
+      g = prm.get_double("g");
+      prm.leave_subsection();
+    }
+    ~Ic(){};
 
     virtual double value(const Point<dim> & p,
                          const unsigned int component = 0) const override;
+  private:
+    double g;
   };
 
-  // We return either the water depth or the momentum
-  // depending on which component is requested. Two sanity checks have been added. One is to
-  // control that the space dimension is two (you cannot run this test in one dimension) and
-  // another one on the number of variables, that for two-dimensional shallow water equation
-  // is three or more (if you have tracers). If tracers are presents they are simply set to zero.
   template <int dim, int n_vars>
-  double Ic<dim, n_vars>::value(const Point<dim>  &/*x*/,
+  double Ic<dim, n_vars>::value(const Point<dim>  &x,
                                 const unsigned int component) const
   {
     Assert(dim == 2, ExcNotImplemented());
     Assert(n_vars < 4, ExcNotImplemented());
 
     if (component == 0)
-      return 0.;
+      {
+        const double h0 = std::pow(4./g, 1./3.);
+        const double inv_depth = std::exp( std::log(h0) * 10./3. );
+        return - n0*n0 * q0*q0/inv_depth * x[0];
+      }
     else if (component == 1)
-      return q0;
+        return q0;
     else
-      return 0.;
+        return 0.;
   }
 
 
 
-  // The `Bc` class define the boundary conditions for the test-case.
   template <int dim, int n_vars>  
   class BcChannelFlow : public BcBase<dim, n_vars>
   {
   public:
   
-    BcChannelFlow(){};
+    BcChannelFlow(IO::ParameterHandler &prm);
     ~BcChannelFlow(){};
-         
+
     void set_boundary_conditions() override;
 
+  private:
+    ParameterHandler &prm;
   };
   
-  // A supercritical inflow/outflow boundary condition is specified on the left and
-  // right boundary of the domain. Top and bottom boundaries are walls.
+  template <int dim, int n_vars>
+  BcChannelFlow<dim, n_vars>::BcChannelFlow(IO::ParameterHandler &prm)
+    : prm(prm)
+  {}
+
   template <int dim, int n_vars>
   void BcChannelFlow<dim, n_vars>::set_boundary_conditions()
   {
     this->set_inflow_boundary(
-      1, std::make_unique<ExactSolution<dim, n_vars>>(0));
-    this->set_subcritical_outflow_boundary(
-      2, std::make_unique<ExactSolution<dim, n_vars>>(0));
+      1, std::make_unique<ExactSolution<dim, n_vars>>(0, prm));
+    this->set_supercritical_outflow_boundary(
+      2, std::make_unique<ExactSolution<dim, n_vars>>(0, prm));
     this->set_wall_boundary(0);
   }         
 
@@ -266,6 +292,8 @@ namespace ICBC
   {
     if (component == 0)
       return bathymetry_data.value(x);
+    else if (component == 1)
+      return n0;
     else
       return 0.0;
   }
