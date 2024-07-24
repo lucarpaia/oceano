@@ -45,6 +45,7 @@ namespace ICBC
   // the unperturbed regions. To use the discontinuous bathymetry use the following
   // cpp key:
 #undef  ICBC_LAKEATREST_BATHYMETRYDISCONTINUOUS
+#undef  ICBC_LAKEATREST_WATERATREST
 
   using namespace dealii;
   
@@ -140,7 +141,11 @@ namespace ICBC
 
     if (component == 0)
       if ((0.05 <= x[0]) && (x[0] <= 0.15))
+#ifndef ICBC_LAKEATREST_WATERATREST
         return a0;
+#else
+        return 0.;
+#endif
       else
         return 0.;
     else

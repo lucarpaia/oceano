@@ -662,9 +662,11 @@ namespace Problem
                                    interpretation);
         }
 
-      Vector<double> mpi_owner(triangulation.n_active_cells());
-      mpi_owner = Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
-      data_out.add_data_vector(mpi_owner, "owner");
+//      //lrp: reconnect this when postproc will work with mpi
+//      // commented because it is conflicting with fedegree=0
+//      Vector<double> mpi_owner(triangulation.n_active_cells());
+//      mpi_owner = Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
+//      data_out.add_data_vector(mpi_owner, "owner");
 
       data_out.build_patches(mapping,
                              fe_height.degree,
