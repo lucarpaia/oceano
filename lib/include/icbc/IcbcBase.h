@@ -71,11 +71,15 @@ namespace ICBC
     // to its managed object. For this reason we will see that these particular
     // pointers cannot be copied but they can only be moved with `std::move()`
     std::map<types::boundary_id, std::unique_ptr<Function<dim>>>
-      inflow_boundaries;
+                                   supercritical_inflow_boundaries;
     std::map<types::boundary_id, std::unique_ptr<Function<dim>>>
                                    supercritical_outflow_boundaries;
     std::map<types::boundary_id, std::unique_ptr<Function<dim>>>
-                                   subcritical_outflow_boundaries;
+                                   height_inflow_boundaries;
+    std::map<types::boundary_id, std::unique_ptr<Function<dim>>>
+                                   discharge_inflow_boundaries;
+    std::map<types::boundary_id, std::unique_ptr<Function<dim>>>
+                                   absorbing_outflow_boundaries;
     std::set<types::boundary_id>   wall_boundaries;
 
     std::unique_ptr<Function<dim>> problem_data;
@@ -98,14 +102,23 @@ namespace ICBC
     // conditions determine the content of the AffineConstraints object that is
     // sent into MatrixFree for initialization, thus requiring to be set before
     // the initialization of the matrix-free data structures.
-    void set_inflow_boundary(const types::boundary_id       boundary_id,
-                             std::unique_ptr<Function<dim>> inflow_function);
+    void set_supercritical_inflow_boundary(
+      const types::boundary_id       boundary_id,
+      std::unique_ptr<Function<dim>> inflow_function);
 
     void set_supercritical_outflow_boundary(
       const types::boundary_id       boundary_id,
       std::unique_ptr<Function<dim>> outflow_energy);
- 
-     void set_subcritical_outflow_boundary(
+
+    void set_height_inflow_boundary(
+      const types::boundary_id       boundary_id,
+      std::unique_ptr<Function<dim>> inflow_energy);
+
+    void set_discharge_inflow_boundary(
+      const types::boundary_id       boundary_id,
+      std::unique_ptr<Function<dim>> inflow_energy);
+
+    void set_absorbing_outflow_boundary(
       const types::boundary_id       boundary_id,
       std::unique_ptr<Function<dim>> outflow_energy);
 
@@ -134,23 +147,27 @@ namespace ICBC
   // parts of the boundary, i.e., that a user does not accidentally designate a
   // boundary as both an inflow and say a supercritical outflow boundary.
   template <int dim, int n_vars>
-  void BcBase<dim, n_vars>::set_inflow_boundary(
+  void BcBase<dim, n_vars>::set_supercritical_inflow_boundary(
     const types::boundary_id       boundary_id,
     std::unique_ptr<Function<dim>> inflow_function)
   {
     AssertThrow(supercritical_outflow_boundaries.find(boundary_id) ==
                     supercritical_outflow_boundaries.end() &&
-                subcritical_outflow_boundaries.find(boundary_id) ==
-                    subcritical_outflow_boundaries.end() &&
+                absorbing_outflow_boundaries.find(boundary_id) ==
+                    absorbing_outflow_boundaries.end() &&
+                height_inflow_boundaries.find(boundary_id) ==
+                    height_inflow_boundaries.end() &&
+                discharge_inflow_boundaries.find(boundary_id) ==
+                    discharge_inflow_boundaries.end() &&
                 wall_boundaries.find(boundary_id) == wall_boundaries.end(),
                 ExcMessage("You already set the boundary with id " +
                            std::to_string(static_cast<int>(boundary_id)) +
                            " to another type of boundary before now setting " +
-                           "it as inflow"));
+                           "it as supercritical inflow"));
     AssertThrow(inflow_function->n_components == n_vars,
                 ExcMessage("Expected function with n_vars components"));
 
-    inflow_boundaries[boundary_id] = std::move(inflow_function);
+    supercritical_inflow_boundaries[boundary_id] = std::move(inflow_function);
   }
 
 
@@ -159,10 +176,14 @@ namespace ICBC
     const types::boundary_id       boundary_id,
     std::unique_ptr<Function<dim>> outflow_function)
   {
-    AssertThrow(inflow_boundaries.find(boundary_id) ==
-                    inflow_boundaries.end() &&
-                subcritical_outflow_boundaries.find(boundary_id) ==
-                    subcritical_outflow_boundaries.end() &&
+    AssertThrow(supercritical_inflow_boundaries.find(boundary_id) ==
+                    supercritical_inflow_boundaries.end() &&
+                absorbing_outflow_boundaries.find(boundary_id) ==
+                    absorbing_outflow_boundaries.end() &&
+                height_inflow_boundaries.find(boundary_id) ==
+                    height_inflow_boundaries.end() &&
+                discharge_inflow_boundaries.find(boundary_id) ==
+                    discharge_inflow_boundaries.end() &&
                 wall_boundaries.find(boundary_id) == wall_boundaries.end(),
                 ExcMessage("You already set the boundary with id " +
                            std::to_string(static_cast<int>(boundary_id)) +
@@ -176,14 +197,66 @@ namespace ICBC
 
 
   template <int dim, int n_vars>
-  void BcBase<dim, n_vars>::set_subcritical_outflow_boundary(
+  void BcBase<dim, n_vars>::set_height_inflow_boundary(
+    const types::boundary_id       boundary_id,
+    std::unique_ptr<Function<dim>> inflow_function)
+  {
+    AssertThrow(supercritical_inflow_boundaries.find(boundary_id) ==
+                    supercritical_inflow_boundaries.end() &&
+                supercritical_outflow_boundaries.find(boundary_id) ==
+                    supercritical_outflow_boundaries.end() &&
+                absorbing_outflow_boundaries.find(boundary_id) ==
+                    absorbing_outflow_boundaries.end() &&
+                discharge_inflow_boundaries.find(boundary_id) ==
+                    discharge_inflow_boundaries.end() &&
+                wall_boundaries.find(boundary_id) == wall_boundaries.end(),
+                ExcMessage("You already set the boundary with id " +
+                           std::to_string(static_cast<int>(boundary_id)) +
+                           " to another type of boundary before now setting " +
+                           "it as height inflow"));
+    AssertThrow(inflow_function->n_components == n_vars,
+                ExcMessage("Expected function with n_vars components"));
+
+    height_inflow_boundaries[boundary_id] = std::move(inflow_function);
+  }
+
+
+  template <int dim, int n_vars>
+  void BcBase<dim, n_vars>::set_discharge_inflow_boundary(
+    const types::boundary_id       boundary_id,
+    std::unique_ptr<Function<dim>> inflow_function)
+  {
+    AssertThrow(supercritical_inflow_boundaries.find(boundary_id) ==
+                    supercritical_inflow_boundaries.end() &&
+                supercritical_outflow_boundaries.find(boundary_id) ==
+                    supercritical_outflow_boundaries.end() &&
+                absorbing_outflow_boundaries.find(boundary_id) ==
+                    absorbing_outflow_boundaries.end() &&
+                height_inflow_boundaries.find(boundary_id) ==
+                    height_inflow_boundaries.end() &&
+                wall_boundaries.find(boundary_id) == wall_boundaries.end(),
+                ExcMessage("You already set the boundary with id " +
+                           std::to_string(static_cast<int>(boundary_id)) +
+                           " to another type of boundary before now setting " +
+                           "it as height inflow"));
+    AssertThrow(inflow_function->n_components == n_vars,
+                ExcMessage("Expected function with n_vars components"));
+
+    height_inflow_boundaries[boundary_id] = std::move(inflow_function);
+  }
+
+
+  template <int dim, int n_vars>
+  void BcBase<dim, n_vars>::set_absorbing_outflow_boundary(
     const types::boundary_id       boundary_id,
     std::unique_ptr<Function<dim>> outflow_function)
   {
-    AssertThrow(inflow_boundaries.find(boundary_id) ==
-                    inflow_boundaries.end() &&
+    AssertThrow(supercritical_inflow_boundaries.find(boundary_id) ==
+                    supercritical_inflow_boundaries.end() &&
                 supercritical_outflow_boundaries.find(boundary_id) ==
                     supercritical_outflow_boundaries.end() &&
+                height_inflow_boundaries.find(boundary_id) ==
+                    height_inflow_boundaries.end() &&
                 wall_boundaries.find(boundary_id) == wall_boundaries.end(),
                 ExcMessage("You already set the boundary with id " +
                            std::to_string(static_cast<int>(boundary_id)) +
@@ -192,7 +265,7 @@ namespace ICBC
     AssertThrow(outflow_function->n_components == n_vars,
                 ExcMessage("Expected function with n_vars components"));
 
-    subcritical_outflow_boundaries[boundary_id] = std::move(outflow_function);
+    absorbing_outflow_boundaries[boundary_id] = std::move(outflow_function);
   }
 
 
@@ -200,10 +273,14 @@ namespace ICBC
   void BcBase<dim, n_vars>::set_wall_boundary(
     const types::boundary_id boundary_id)
   {
-    AssertThrow(inflow_boundaries.find(boundary_id) ==
-                    inflow_boundaries.end() &&
-                  supercritical_outflow_boundaries.find(boundary_id) ==
-                    supercritical_outflow_boundaries.end(),
+    AssertThrow(supercritical_inflow_boundaries.find(boundary_id) ==
+                    supercritical_inflow_boundaries.end() &&
+                supercritical_outflow_boundaries.find(boundary_id) ==
+                    supercritical_outflow_boundaries.end() &&
+                height_inflow_boundaries.find(boundary_id) ==
+                    height_inflow_boundaries.end() &&
+                absorbing_outflow_boundaries.find(boundary_id) ==
+                    absorbing_outflow_boundaries.end(),
                 ExcMessage("You already set the boundary with id " +
                            std::to_string(static_cast<int>(boundary_id)) +
                            " to another type of boundary before now setting " +

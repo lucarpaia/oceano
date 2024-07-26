@@ -227,7 +227,7 @@ namespace ICBC
   template <int dim, int n_vars>
   void BcShallowWaterVortex<dim, n_vars>::set_boundary_conditions()
   {
-    this->set_inflow_boundary(
+    this->set_supercritical_inflow_boundary(
       1, std::make_unique<ExactSolution<dim, n_vars>>(0, prm));
     this->set_supercritical_outflow_boundary(
       2, std::make_unique<ExactSolution<dim, n_vars>>(0, prm));

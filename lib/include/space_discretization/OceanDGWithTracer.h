@@ -579,19 +579,19 @@ namespace SpaceDiscretization
                 q_p = q_m - 2. * rho_u_dot_n * normal;
                 t_p = t_m;
               }
-            else if (bc->inflow_boundaries.find(boundary_id) !=
-                     bc->inflow_boundaries.end())
+            else if (bc->supercritical_inflow_boundaries.find(boundary_id) !=
+                     bc->supercritical_inflow_boundaries.end())
               {
                 w_p =
                   evaluate_function<dim, Number, n_vars>(
-                		  *bc->inflow_boundaries.find(boundary_id)->second,
-                                  phi_tracer.quadrature_point(q));
+                    *bc->supercritical_inflow_boundaries.find(boundary_id)->second,
+                    phi_tracer.quadrature_point(q));
                 z_p = w_p[0];
                 for (unsigned int d = 0; d < dim; ++d) q_p[d] = w_p[d+1];
                 t_p = evaluate_function_tracer<dim, Number, n_tra>(
-                		  *bc->inflow_boundaries.find(boundary_id)->second,
-                                  phi_tracer.quadrature_point(q),
-                                  phi_tracer.get_value(q));
+                        *bc->supercritical_inflow_boundaries.find(boundary_id)->second,
+                        phi_tracer.quadrature_point(q),
+                        phi_tracer.get_value(q));
               }
             else if (bc->supercritical_outflow_boundaries.find(boundary_id) !=
                      bc->supercritical_outflow_boundaries.end())
@@ -600,12 +600,46 @@ namespace SpaceDiscretization
                 q_p = q_m;
                 t_p = t_m;
               }
-            else if (bc->subcritical_outflow_boundaries.find(boundary_id) !=
-                     bc->subcritical_outflow_boundaries.end())
+            else if (bc->height_inflow_boundaries.find(boundary_id) !=
+                     bc->height_inflow_boundaries.end())
+              {
+                z_p =
+                  evaluate_function<dim, Number>(
+                    *bc->height_inflow_boundaries.find(boundary_id)->second,
+                    phi_height.quadrature_point(q), 0);
+                q_p = q_m;
+                if (rho_u_dot_n < -1e-12)
+                  {
+                    t_p = evaluate_function_tracer<dim, Number, n_tra>(
+                          *bc->supercritical_inflow_boundaries.find(boundary_id)->second,
+                          phi_tracer.quadrature_point(q),
+                          phi_tracer.get_value(q));
+                  }
+                else t_p = t_m;
+              }
+            else if (bc->discharge_inflow_boundaries.find(boundary_id) !=
+                     bc->discharge_inflow_boundaries.end())
+              {
+                z_p = z_m;
+                q_p =
+                  evaluate_function<dim, Number>(
+                    *bc->discharge_inflow_boundaries.find(boundary_id)->second,
+                    phi_height.quadrature_point(q), 1) * normal;
+                if (rho_u_dot_n < -1e-12)
+                  {
+                    t_p = evaluate_function_tracer<dim, Number, n_tra>(
+                          *bc->supercritical_inflow_boundaries.find(boundary_id)->second,
+                          phi_tracer.quadrature_point(q),
+                          phi_tracer.get_value(q));
+                  }
+                else t_p = t_m;
+              }
+            else if (bc->absorbing_outflow_boundaries.find(boundary_id) !=
+                     bc->absorbing_outflow_boundaries.end())
               {
                 w_p =
                   evaluate_function<dim, Number, n_vars>(
-                    *bc->subcritical_outflow_boundaries.find(boundary_id)->second,
+                    *bc->absorbing_outflow_boundaries.find(boundary_id)->second,
                       phi_tracer.quadrature_point(q));
                 z_p = w_p[0];
                 for (unsigned int d = 0; d < dim; ++d) q_p[d] = w_p[d+1];

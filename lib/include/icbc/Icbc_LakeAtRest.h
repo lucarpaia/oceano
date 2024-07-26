@@ -45,7 +45,7 @@ namespace ICBC
   // the unperturbed regions. To use the discontinuous bathymetry use the following
   // cpp key:
 #undef  ICBC_LAKEATREST_BATHYMETRYDISCONTINUOUS
-#undef  ICBC_LAKEATREST_WATERATREST
+#define ICBC_LAKEATREST_WATERATREST
 
   using namespace dealii;
   
@@ -116,7 +116,7 @@ namespace ICBC
   // another one on the number of variables, that for two-dimensional shallow
   // water equation is three.
   //
-  // A subcritical outflow boundary condition is specified on the left and
+  // An absorbing outflow boundary condition is specified on the left and
   // right boundary of the domain. In this way we let the wave smoothly go out from the
   // the domain. Top and bottom boundaries are walls.
   template <int dim, int n_vars>
@@ -173,7 +173,7 @@ namespace ICBC
   template <int dim, int n_vars>
   void BcLakeAtRest<dim, n_vars>::set_boundary_conditions()
   {
-    this->set_subcritical_outflow_boundary(
+    this->set_absorbing_outflow_boundary(
       1, std::make_unique<ExactSolution<dim, n_vars>>(0, prm));
     this->set_wall_boundary(0);
   }         

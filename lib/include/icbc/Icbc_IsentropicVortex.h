@@ -147,7 +147,7 @@ namespace ICBC
   template <int dim, int n_vars>
   void BcIsentropicVortex<dim, n_vars>::set_boundary_conditions()
   {
-     this->set_inflow_boundary(
+     this->set_supercritical_inflow_boundary(
        0, std::make_unique<ExactSolution<dim, n_vars>>(0));
   }         
 

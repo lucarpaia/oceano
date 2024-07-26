@@ -952,13 +952,13 @@ namespace SpaceDiscretization
                 z_p = z_m;
                 q_p = q_m - 2. * rho_u_dot_n * normal;
               }
-            else if (bc->inflow_boundaries.find(boundary_id) !=
-                     bc->inflow_boundaries.end())
+            else if (bc->supercritical_inflow_boundaries.find(boundary_id) !=
+                     bc->supercritical_inflow_boundaries.end())
               {
                 w_p =
                   evaluate_function<dim, Number, n_vars>(
-                		  *bc->inflow_boundaries.find(boundary_id)->second,
-                                  phi_height.quadrature_point(q));
+                    *bc->supercritical_inflow_boundaries.find(boundary_id)->second,
+                    phi_height.quadrature_point(q));
                 z_p = w_p[0];
                 for (unsigned int d = 0; d < dim; ++d) q_p[d] = w_p[d+1];
               }
@@ -968,13 +968,31 @@ namespace SpaceDiscretization
                 z_p = z_m;
                 q_p = q_m;
               }
+            else if (bc->height_inflow_boundaries.find(boundary_id) !=
+                     bc->height_inflow_boundaries.end())
+              {
+                z_p =
+                  evaluate_function<dim, Number>(
+                    *bc->height_inflow_boundaries.find(boundary_id)->second,
+                    phi_height.quadrature_point(q), 0);
+                q_p = q_m;
+              }
+            else if (bc->discharge_inflow_boundaries.find(boundary_id) !=
+                     bc->discharge_inflow_boundaries.end())
+              {
+                z_p = z_m;
+                q_p =
+                  evaluate_function<dim, Number>(
+                    *bc->discharge_inflow_boundaries.find(boundary_id)->second,
+                    phi_height.quadrature_point(q), 1) * normal;
+              }
 #if defined MODEL_SHALLOWWATER
-            else if (bc->subcritical_outflow_boundaries.find(boundary_id) !=
-                     bc->subcritical_outflow_boundaries.end())
+            else if (bc->absorbing_outflow_boundaries.find(boundary_id) !=
+                     bc->absorbing_outflow_boundaries.end())
               {
                 w_p =
                   evaluate_function<dim, Number, n_vars>(
-                    *bc->subcritical_outflow_boundaries.find(boundary_id)->second,
+                    *bc->absorbing_outflow_boundaries.find(boundary_id)->second,
                       phi_height.quadrature_point(q));
                 z_p = w_p[0];
                 for (unsigned int d = 0; d < dim; ++d) q_p[d] = w_p[d+1];
@@ -1049,13 +1067,13 @@ namespace SpaceDiscretization
                 z_p = z_m;
                 q_p = q_m - 2. * rho_u_dot_n * normal;
               }
-            else if (bc->inflow_boundaries.find(boundary_id) !=
-                     bc->inflow_boundaries.end())
+            else if (bc->supercritical_inflow_boundaries.find(boundary_id) !=
+                     bc->supercritical_inflow_boundaries.end())
               {
                 w_p =
                   evaluate_function<dim, Number, n_vars>(
-                		  *bc->inflow_boundaries.find(boundary_id)->second,
-                                  phi_height.quadrature_point(q));
+                    *bc->supercritical_inflow_boundaries.find(boundary_id)->second,
+                    phi_height.quadrature_point(q));
                 z_p = w_p[0];
                 for (unsigned int d = 0; d < dim; ++d) q_p[d] = w_p[d+1];
               }
@@ -1066,13 +1084,31 @@ namespace SpaceDiscretization
                 q_p = q_m;
                 at_outflow = true;
               }
+            else if (bc->height_inflow_boundaries.find(boundary_id) !=
+                     bc->height_inflow_boundaries.end())
+              {
+                z_p =
+                  evaluate_function<dim, Number>(
+                    *bc->height_inflow_boundaries.find(boundary_id)->second,
+                    phi_height.quadrature_point(q), 0);
+                q_p = q_m;
+              }
+            else if (bc->discharge_inflow_boundaries.find(boundary_id) !=
+                     bc->discharge_inflow_boundaries.end())
+              {
+                z_p = z_m;
+                q_p =
+                  evaluate_function<dim, Number>(
+                    *bc->discharge_inflow_boundaries.find(boundary_id)->second,
+                    phi_height.quadrature_point(q), 1) * normal;
+              }
 #if defined MODEL_SHALLOWWATER
-            else if (bc->subcritical_outflow_boundaries.find(boundary_id) !=
-                     bc->subcritical_outflow_boundaries.end())
+            else if (bc->absorbing_outflow_boundaries.find(boundary_id) !=
+                     bc->absorbing_outflow_boundaries.end())
               {
                 w_p =
                   evaluate_function<dim, Number, n_vars>(
-                    *bc->subcritical_outflow_boundaries.find(boundary_id)->second,
+                    *bc->absorbing_outflow_boundaries.find(boundary_id)->second,
                       phi_height.quadrature_point(q));
                 z_p = w_p[0];
                 for (unsigned int d = 0; d < dim; ++d) q_p[d] = w_p[d+1];
@@ -1286,7 +1322,7 @@ namespace SpaceDiscretization
     {
       TimerOutput::Scope t(timer, "apply - integrals");
 
-      for (auto &i : bc->inflow_boundaries)
+      for (auto &i : bc->supercritical_inflow_boundaries)
         i.second->set_time(current_time);
       for (auto &i : bc->supercritical_outflow_boundaries)
         i.second->set_time(current_time);
@@ -1369,7 +1405,7 @@ namespace SpaceDiscretization
     {
       TimerOutput::Scope t(timer, "rk_stage hydro - integrals L_h");
 
-      for (auto &i : bc->inflow_boundaries)
+      for (auto &i : bc->supercritical_inflow_boundaries)
         i.second->set_time(current_time);
       for (auto &i : bc->supercritical_outflow_boundaries)
         i.second->set_time(current_time);
@@ -1495,7 +1531,7 @@ namespace SpaceDiscretization
     {
       TimerOutput::Scope t(timer, "rk_stage hydro - integrals L_h");
 
-      for (auto &i : bc->inflow_boundaries)
+      for (auto &i : bc->supercritical_inflow_boundaries)
         i.second->set_time(current_time);
       for (auto &i : bc->supercritical_outflow_boundaries)
         i.second->set_time(current_time);
@@ -1653,7 +1689,7 @@ namespace SpaceDiscretization
     {
       TimerOutput::Scope t(timer, "rk_stage hydro - integrals L_h");
 
-      for (auto &i : bc->inflow_boundaries)
+      for (auto &i : bc->supercritical_inflow_boundaries)
         i.second->set_time(current_time);
       for (auto &i : bc->supercritical_outflow_boundaries)
         i.second->set_time(current_time);

@@ -40,18 +40,29 @@ namespace ICBC
   // \]
   // If $F \neq 0$ (we have friction at the bottom), the following solutions can prove
   // if the friction terms are coded in order to satisfy the steady states.
-  // We consider a 1000 m long channel, with a constant discharge $q_0 = 2.5 m^2 /s$.
-  // The flow is supercritical both at inflow and at outflow, which simplifies the
-  // boundary conditions. For a general topography $z(x)$ we need to solve the ODE
-  // numerically on a very fine grid, much finer than the resolution of the deal.ii model.
-  
+  // We consider a 1000 m long channel, with a constant discharge.
+  // We test two flow conditions in order to check also different boundary
+  // conditions: a supercritical and a subcritical regime.
+  // If the flow is supercritical both at inflow and at outflow, this simplifies the
+  // boundary conditions, since we impose evreything or nothing. For a subcritical flow
+  // we can impose only one characteristic variable or a phyisical one. Based on physical
+  // arguments we impose the discharge at the inflow and the water height at the outflow.
+  // The default case is supercritical. If you want to test the subcritical regime you
+  // should uncomment the following cpp key:
+#undef ICBC_CHANNELFLOW_SUPERCRITICAL
+
   using namespace dealii;
-  
+
   // We define global parameters that help in the definition of the initial
-  // and boundary conditions. For this test we just need the discharge:
-  constexpr double q0      = 2.5;
+  // and boundary conditions. For this test we just need the discharge and
   // and the Manning coefficient:
+#if defined ICBC_CHANNELFLOW_SUPERCRITICAL
+  constexpr double q0      = 2.5;
   constexpr double n0      = 0.04;
+#else
+  constexpr double q0      = 0.5;
+  constexpr double n0      = 0.033;
+#endif
 
   // @sect3{Equation data}
 
@@ -202,10 +213,17 @@ namespace ICBC
   template <int dim, int n_vars>
   void BcChannelFlow<dim, n_vars>::set_boundary_conditions()
   {
-    this->set_inflow_boundary(
+#if defined ICBC_CHANNELFLOW_SUPERCRITICAL
+    this->set_supercritical_inflow_boundary(
       1, std::make_unique<ExactSolution<dim, n_vars>>(0, prm));
     this->set_supercritical_outflow_boundary(
       2, std::make_unique<ExactSolution<dim, n_vars>>(0, prm));
+#else
+    this->set_discharge_inflow_boundary(
+      1, std::make_unique<ExactSolution<dim, n_vars>>(0, prm));
+          this->set_height_inflow_boundary(
+      2, std::make_unique<ExactSolution<dim, n_vars>>(0, prm));
+#endif
     this->set_wall_boundary(0);
   }         
 
