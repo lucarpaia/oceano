@@ -35,12 +35,6 @@ namespace ICBC
 
 
   
-  // With the following line we use the parallel output class of Deal.II.
-  // The `ConditionalOStream` class has already been defined in the main and 
-  // we could have passed it from the interface instead of redefining it here. 
-  ConditionalOStream pcout(std::cout, 
-    Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0); 
-  
   // @sect3{Equation data}
 
   // We now define a base class for the boundary conditions. Given that
@@ -133,7 +127,7 @@ namespace ICBC
     // among the members defined above must be provided.
     virtual void set_boundary_conditions()
     {
-      pcout << "ERROR in set_boundary_conditions()"
+      std::cout << "ERROR in set_boundary_conditions()"
             << "The function is not written in the icbc derived class"
             << std::endl;
     }
