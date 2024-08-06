@@ -589,13 +589,13 @@ namespace Problem
 
       LinearAlgebra::distributed::Vector<Number> transfer_height;
       transfer_height.reinit(solution_height);
-      transfer_height.zero_out_ghosts();
+      transfer_height.zero_out_ghost_values();
       solution_transfer_height.interpolate(transfer_height);
       transfer_height.update_ghost_values();
 
       LinearAlgebra::distributed::Vector<Number> transfer_discharge;
       transfer_discharge.reinit(solution_discharge);
-      transfer_discharge.zero_out_ghosts();
+      transfer_discharge.zero_out_ghost_values();
       solution_transfer_discharge.interpolate(transfer_discharge);
       transfer_discharge.update_ghost_values();
 
@@ -605,7 +605,7 @@ namespace Problem
 #ifdef OCEANO_WITH_TRACERS
       LinearAlgebra::distributed::Vector<Number> transfer_tracer;
       transfer_tracer.reinit(solution_tracer);
-      transfer_tracer.zero_out_ghosts();
+      transfer_tracer.zero_out_ghost_values();
       solution_transfer_tracer.interpolate(transfer_tracer);
       transfer_tracer.update_ghost_values();
 
