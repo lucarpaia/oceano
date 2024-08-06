@@ -227,7 +227,7 @@ namespace SpaceDiscretization
       const LinearAlgebra::distributed::Vector<Number>        &solution_height,
       const LinearAlgebra::distributed::Vector<Number>        &solution_discharge,
       const LinearAlgebra::distributed::Vector<Number>        &solution_tracer,
-      const std::vector<Point<dim>>                           &evaluation_points,
+      const std::map<unsigned int, Point<dim>>                &evaluation_points,
       LinearAlgebra::distributed::Vector<Number>              &computed_vector_quantities,
       std::vector<LinearAlgebra::distributed::Vector<Number>> &computed_scalar_quantities) const;
 
@@ -2168,31 +2168,34 @@ namespace SpaceDiscretization
     const LinearAlgebra::distributed::Vector<Number>        &solution_height,
     const LinearAlgebra::distributed::Vector<Number>        &solution_discharge,
     const LinearAlgebra::distributed::Vector<Number>        &/*solution_tracer*/,
-    const std::vector<Point<dim>>                           &evaluation_points,
+    const std::map<unsigned int, Point<dim>>                &evaluation_points,
     LinearAlgebra::distributed::Vector<Number>              &computed_vector_quantities,
     std::vector<LinearAlgebra::distributed::Vector<Number>> &computed_scalar_quantities) const
   {
-    const unsigned int n_evaluation_points = solution_height.size();
+    const unsigned int n_evaluation_points = solution_height.locally_owned_size(); //solution_height.size();
     const std::vector<std::string> postproc_names = model.postproc_vars_name;
 
     //if (do_schlieren_plot == true)
     //  Assert(inputs.solution_gradients.size() == n_evaluation_points,
     //         ExcInternalError());
-    Assert(computed_vector_quantities.size() == n_evaluation_points*dim,
+    Assert(computed_vector_quantities.locally_owned_size() == n_evaluation_points*dim,
            ExcInternalError());
     Assert(computed_scalar_quantities.size() == postproc_names.size()-dim,
            ExcInternalError());
 
+    //std::cout << n_evaluation_points << " - " << evaluation_points.size() << std::endl; !lrp: still to debug in //
+    auto it = evaluation_points.begin();
     for (unsigned int p = 0; p < n_evaluation_points; ++p)
       {
-        const auto height = solution_height[p];
+        const auto height = solution_height.local_element(p);
         Tensor<1, dim> discharge;
         for (unsigned int d = 0; d < dim; ++d)
-          discharge[d] = solution_discharge[dim*p+d];
+          discharge[d] = solution_discharge.local_element(dim*p+d);
 
         Point<dim, VectorizedArray<Number>> x_evaluation_points;
         for (unsigned int d = 0; d < dim; ++d)
-          x_evaluation_points[d] = evaluation_points[p][d];
+          x_evaluation_points[d] = it->second[d];
+	it++;
 
         const auto data = evaluate_function<dim, Number>(
             *bc->problem_data, x_evaluation_points, 0);
@@ -2200,24 +2203,24 @@ namespace SpaceDiscretization
         const Tensor<1, dim> velocity = model.velocity<dim>(height, discharge, data[0]);
 
         for (unsigned int d = 0; d < dim; ++d)
-          computed_vector_quantities[dim*p+d] = velocity[d];
+          computed_vector_quantities.local_element(dim*p+d) = velocity[d];
 
         for (unsigned int v = 0; v < postproc_names.size()-dim; ++v)
           {
             if (postproc_names[v+dim] == "pressure")
-              computed_scalar_quantities[v][p] =
+              computed_scalar_quantities[v].local_element(p) =
                 model.pressure(height, data[0]);
             else if (postproc_names[v+dim] == "depth")
-              computed_scalar_quantities[v][p] = height + data[0];
+              computed_scalar_quantities[v].local_element(p) = height + data[0];
             else if (postproc_names[v+dim] == "speed_of_sound")
-              computed_scalar_quantities[v][p] =
+              computed_scalar_quantities[v].local_element(p) =
                 std::sqrt(model.square_wavespeed(height, data[0]));
             else
               {
                 std::cout << "Postprocessing variable " << postproc_names[dim+v]
                           << " does not exist. Consider to code it in your model"
                           << std::endl;
-                 Assert(false, ExcNotImplemented());
+                Assert(false, ExcNotImplemented());
               }
           }
 

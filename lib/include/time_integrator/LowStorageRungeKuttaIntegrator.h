@@ -86,6 +86,17 @@ namespace TimeIntegrator
       return bi.size();
     }
 
+    template <typename VectorType>
+    void reinit(VectorType &    solution_height,
+                VectorType &    solution_discharge,
+                VectorType &    solution_tracer,
+                VectorType &    vec_ri_height,
+                VectorType &    vec_ri_discharge,
+                VectorType &    vec_ri_tracer,
+                VectorType &    vec_ki_height,
+                VectorType &    vec_ki_discharge,
+                VectorType &    vec_ki_tracer) const;
+
     template <typename VectorType, typename Operator>                                   
     void perform_time_step(const Operator &pde_operator,
                            const double    current_time,
@@ -168,7 +179,29 @@ namespace TimeIntegrator
     TimeStepping::LowStorageRungeKutta<LinearAlgebra::distributed::Vector<Number>> rk_integrator(lsrk);
     rk_integrator.get_coefficients(ai, bi, ci);
   }
-  
+
+  // This is a reinit function for the auxiliary vectors that are necessary
+  // for the time integrator:
+  template <typename VectorType>
+  void LowStorageRungeKuttaIntegrator::reinit(
+    VectorType &    solution_height,
+    VectorType &    solution_discharge,
+    VectorType &    solution_tracer,
+    VectorType &    vec_ri_height,
+    VectorType &    vec_ri_discharge,
+    VectorType &    vec_ri_tracer,
+    VectorType &    vec_ki_height,
+    VectorType &    vec_ki_discharge,
+    VectorType &    vec_ki_tracer) const
+  {
+     vec_ri_height.reinit(solution_height);
+     vec_ri_discharge.reinit(solution_discharge);
+     vec_ri_tracer.reinit(solution_tracer);
+     vec_ki_height.reinit(solution_height);
+     vec_ki_discharge.reinit(solution_discharge);
+     vec_ki_tracer.reinit(solution_tracer);
+  }
+
   // The main function of the time integrator is to go through the stages,
   // evaluate the operator, prepare the $\mathbf{r}_i$ vector for the next
   // evaluation, and update the solution vector $\mathbf{w}$. We hand off

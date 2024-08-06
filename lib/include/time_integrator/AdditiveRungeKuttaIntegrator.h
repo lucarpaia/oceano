@@ -88,6 +88,17 @@ namespace TimeIntegrator
       return bi.size();
     }
 
+    template <typename VectorType>
+    void reinit(const VectorType              &solution_height,
+                const VectorType              &solution_discharge,
+                const VectorType              &solution_tracer,
+                VectorType                    &vec_ri_height,
+                VectorType                    &vec_ri_discharge,
+                VectorType                    &vec_ri_tracer,
+                std::vector<VectorType>       &vec_ki_height,
+                std::vector<VectorType>       &vec_ki_discharge,
+                std::vector<VectorType>       &vec_ki_tracer) const;
+
     template <typename VectorType, typename Operator>                                  
     void perform_time_step(Operator                &pde_operator,
                            const double             current_time,
@@ -141,7 +152,34 @@ namespace TimeIntegrator
     TimeSteppingOceano::ImplicitRungeKutta irk_integrator(irk);
     irk_integrator.get_coefficients(atildei, btildei, ctildei, dtildei);
   }
-  
+
+  // This is a reinit function for the auxiliary vectors that are necessary
+  // for the time integrator:
+  template <typename VectorType>
+  void AdditiveRungeKuttaIntegrator::reinit(
+    const VectorType              &solution_height,
+    const VectorType              &solution_discharge,
+    const VectorType              &solution_tracer,
+    VectorType                    &vec_ri_height,
+    VectorType                    &vec_ri_discharge,
+    VectorType                    &vec_ri_tracer,
+    std::vector<VectorType>       &vec_ki_height,
+    std::vector<VectorType>       &vec_ki_discharge,
+    std::vector<VectorType>       &vec_ki_tracer) const
+  {
+    vec_ri_height.reinit(solution_height);
+    vec_ri_discharge.reinit(solution_discharge);
+    vec_ri_tracer.reinit(solution_tracer);
+
+    for (unsigned int stage = 0; stage < n_stages()+1; ++stage)
+      {
+        vec_ki_height[stage].reinit(solution_height);
+        vec_ki_tracer[stage].reinit(solution_tracer);
+      }
+    for (unsigned int stage = 0; stage < 2*n_stages(); ++stage)
+      vec_ki_discharge[stage].reinit(solution_discharge);
+  }
+
   // The main function of the time integrator is to go through the stages,
   // evaluate the operator, prepare the $\mathbf{r}_i$ vector for the next
   // evaluation, and update the solution vector $\mathbf{w}$. We hand off

@@ -77,27 +77,73 @@ namespace IO
       // in the range $[0,\infty)$, where the omitted second argument to the 
       // `Patterns::Integer` object denotes the half-open interval.    
       prm.declare_entry("Number_of_refinements",
-                        "6",
-                        Patterns::Integer(0),
+                        "6", Patterns::Integer(0),
                         "Number of global mesh refinement steps "
                         "applied to initial coarse grid");
+
+      // The remeshing frequency depends on the test. Remeshing
+      // should be done every timestep if the mesh adapts to fast phenomenon. Note that
+      // the default value is set to a very high number or no mesh adaptation. If this
+      // key is not specified the mesh adaptation is not active and the simulation will
+      // continue with the initial mesh given above.
+      prm.declare_entry("Remesh_tick",
+                        "10000000000.", Patterns::Double(0),
+                        "Time interval we remesh");
+
+      // This are the two tresholds for the normalized cellwise error after/below which
+      // the cell is marked for refinement/coarsening. The remesh thick is the frequency
+      // for performing remeshing.
+      prm.declare_entry("Threshold_for_refinement",
+                        "0.50", Patterns::Double(0,1),
+                        "Normalized error threshold after which a cell "
+                        "is marked for refinement");
+
+      prm.declare_entry("Threshold_for_coarsening",
+                        "0.25", Patterns::Double(0,1),
+                        "Normalized error threshold below which a cell "
+                        "is marked for coarsening");
+
+      // The max level of refinement is the
+      // maximum grid level. The default value (zero) is important
+      // because it fix the correct behaviour of the code without mesh adaptation.
+      // At this stage we have also fixed the maximum grid level to be less then
+      // 100 which means that the most refined cell can be "only" one hundred times
+      // smaller then the initial one, e.g. if you start with a resolution of 100 km
+      // you can can have cells as smaller as 1 km.
+      prm.declare_entry("Max_level_of_refinement",
+                        "0", Patterns::Integer(0,100),
+                        "Maximum level of grid refinement. "
+                        "A value of one means that the grid, at maximum, "
+                        "will be halved, etc ... "
+                        "It controls the maximum resolution");
+
+      // The default beavhior is to not output any error map field identified by an
+      // empty string. In reality, especially for the first trials, it is of outmost
+      // importance to look the estimated error space distribution to tune the threshold
+      // or to choose a better estimator.
+      prm.declare_entry("Error_filename",
+                        "",
+                        Patterns::Anything(),
+                        "Name of the estimated error map file (without extension)");
      }
     prm.leave_subsection();
 
-    // Paramteres for time includes the final time of the simulation
+    // Paramteres for time includes the final time of the simulation and the Courant
+    // number. For stability reason with DG the courant number should much less then one.
+    // Here we fix the courant $\in [0,1]$ as the range accepted by the parameter reader.
     prm.enter_subsection("Time parameters");
     {
       prm.declare_entry("Final_time", "0.0", Patterns::Double(0),
                         "Final time of the simulation");
 
-      prm.declare_entry("CFL", "1.0", Patterns::Double(0),
-                        "courant number");
+      prm.declare_entry("CFL", "1.0", Patterns::Double(0,1),
+                        "Courant number");
      }
     prm.leave_subsection();
 
     // The next subsection is devoted to the physical parameters appearing 
-    // in the equation. These are the gravitational acceleration $g$, the air and
-    // water density, $\rho_{air}$ and $\rho_0$.
+    // in the equation. These are the gravitational acceleration $g$, the air
+    // and water density, $\rho_{air}$ and $\rho_0$.
     // They need to lie in the half-open interval $[0,\infty)$
     // represented by calling the `Patterns::Double` class with only the 
     // left end-point as argument

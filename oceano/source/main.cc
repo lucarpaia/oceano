@@ -80,6 +80,8 @@
 // For the wind stress either
 #define PHYSICS_WINDSTRESSGENERAL
 #undef  PHYSICS_WINDSTRESSQUADRATIC
+// We end with a tuner class for the AMR:
+#define AMR_HEIGHTGRADIENT
 //
 //
 //
@@ -130,10 +132,19 @@
 // file for this tutorial program:
 #include <deal.II/matrix_free/operators.h>
 
+// In order to refine our grids locally, we need a function from the library
+// that decides which cells to flag for refinement or coarsening based on the
+// error indicators we have computed. We need a class that help in transfering
+// a discrete finite element function by interpolation while refining and/or
+// coarsening a distributed grid and handles the necessary communication:
+#include <deal.II/grid/grid_refinement.h>
+#include <deal.II/distributed/solution_transfer.h>
+
 // The following files include the oceano libraries:
 #include <space_discretization/OceanDG.h>
 #include <space_discretization/OceanDGWithTracer.h>
 #include <io/CommandLineParser.h>
+#include <amr/AmrTuner.h>
 // The following files are included depending on
 // the Preprocessor keys. This is necessary because 
 // we have done a limited use of virtual classes; on the contrary 
@@ -242,7 +253,11 @@ namespace Problem
     void run();
 
   private:
-    void make_grid_and_dofs();
+    void make_grid();
+    void make_dofs();
+    void refine_grid(
+      const Amr::AmrTuner &amr_tuner,
+      const unsigned int   result_number);
 
     LinearAlgebra::distributed::Vector<Number> solution_height;
     LinearAlgebra::distributed::Vector<Number> solution_discharge;
@@ -416,7 +431,7 @@ namespace Problem
   // class. Here we set a pointer to Functions that defines such external data, both for
   // the boundary conditions and for data associated to it.
   template <int dim, int n_tra>
-  void OceanoProblem<dim, n_tra>::make_grid_and_dofs()
+  void OceanoProblem<dim, n_tra>::make_grid()
   {
     oceano_operator.bc->set_problem_data(std::make_unique<ICBC::ProblemData<dim>>(prm));
 
@@ -446,10 +461,22 @@ namespace Problem
     pcout << "Reading mesh file: " << file_msh << std::endl;
     gridin.read_msh(f);
  
-    oceano_operator.bc->set_boundary_conditions();
-
+    std::locale s = pcout.get_stream().getloc();
+    pcout.get_stream().imbue(std::locale(""));
+    pcout << "Initial number of cells: " << std::setw(8) << triangulation.n_global_active_cells()
+          << std::endl;
+    pcout.get_stream().imbue(s);
     triangulation.refine_global(n_global_refinements);
 
+    oceano_operator.bc->set_boundary_conditions();
+  }
+
+
+
+  // the boundary conditions and for data associated to it.
+  template <int dim, int n_tra>
+  void OceanoProblem<dim, n_tra>::make_dofs()
+  {
     dof_handler_height.distribute_dofs(fe_height);
     dof_handler_discharge.distribute_dofs(fe_discharge);
 #ifdef OCEANO_WITH_TRACERS
@@ -463,22 +490,133 @@ namespace Problem
 #ifdef OCEANO_WITH_TRACERS
     oceano_operator.initialize_vector(solution_tracer, 2);
 #endif
+  }
 
-    // In the following, we output some statistics about the problem. Because we
-    // often end up with quite large numbers of cells or degrees of freedom, we
-    // would like to print them with a comma to separate each set of three
-    // digits. This can be done via "locales", although the way this works is
-    // not particularly intuitive. step-32 explains this in slightly more
-    // detail.
-    std::locale s = pcout.get_stream().getloc();
-    pcout.get_stream().imbue(std::locale(""));
-    pcout << "Number of degrees of freedom: " << dof_handler_height.n_dofs()
-             + dof_handler_discharge.n_dofs() + dof_handler_tracer.n_dofs()
-          << " ( = " << ( 1 + dim + n_tra ) << " [vars] x "
-          << triangulation.n_global_active_cells() << " [cells] x "
-          << Utilities::pow(fe_degree + 1, dim) << " [dofs/cell/var] )"
-          << std::endl;
-    pcout.get_stream().imbue(s);
+
+
+  // This function takes care of the adaptive mesh refinement. The tasks this
+  // function performs are the classical one of AMR: estimate the error, mark the
+  // cells for refinement/coarsening, execute the remeshing and transfer the solution
+  // onto the new grid. We have a look to each task:
+  // \begin{itemize}
+  // \item
+  // \item next we find out which cells to refine/coarsen: we use two functions from
+  // a class that implements several different algorithms to refine a triangulation
+  // based on cell-wise error indicators. This function are very simple: mark for
+  // refinement if the error is above a given threshold, mark for coarsening if the
+  // error is below another minimal threshold. A successive intermediate step is
+  // necessary to make sure that no two cells are adjacent with a refinement level
+  // differing with more than one.
+  // \item As part of mesh refinement we need to transfer the solution vectors from
+  // the old mesh to the new one. To this end we use the SolutionTransfer class and
+  // the solution vectors that should be transferred to the new grid. Consequently, we
+  // we have to prepare initialize a SolutionTransfer object by attaching it to the old
+  // DoF handler. We then prepare the data vector containing the old solution for
+  // refinement.
+  // \item we actually do the refinement and recreate the DoF structure on the new grid.
+  // \item we transfer the solution vectors between the two different grids. We initialize
+  // a temporary vector to store the interpolated solution. Please note that in parallel
+  // computations the interpolation operates only on locally owned dofs. We thus zero out
+  // the ghost dofs of the source vector and after the interpolation we need to syncronize
+  // the ghost dofs owned on other processor with an update.
+  // \end{itemize}
+  // The preprocessor point out that we have implemented the AMR only with P4est, a tool that
+  // handle mesh refinement on distributed architecture. Without a Deal.ii version compiled
+  // with P4est mesh refinement is not active and a warning system is raised.
+  template <int dim, int n_tra>
+  void OceanoProblem<dim, n_tra>::refine_grid(
+    const Amr::AmrTuner &amr_tuner,
+    const unsigned int   result_number)
+  {
+    {
+      TimerOutput::Scope t(timer, "amr - remesh + remap");
+
+#ifdef DEAL_II_WITH_P4EST
+      Vector<float> estimated_error_per_cell(triangulation.n_active_cells());
+
+      amr_tuner.estimate_error(mapping,
+                               dof_handler_height,
+                               solution_height,
+                               estimated_error_per_cell);
+
+      float max = estimated_error_per_cell.linfty_norm();
+      if (max > FLT_EPSILON)
+        estimated_error_per_cell /= max;
+
+      if (!amr_tuner.output_filename.empty())
+        {
+          DataOut<dim>  data_out;
+          DataOutBase::VtkFlags flags;
+          data_out.set_flags(flags);
+          data_out.attach_triangulation(triangulation);
+          data_out.add_data_vector(estimated_error_per_cell, "estimated_error");
+          data_out.build_patches();
+          const std::string filename =
+            amr_tuner.output_filename + "_"
+            + Utilities::int_to_string(result_number, 3) + ".vtu";
+          data_out.write_vtu_in_parallel(filename, MPI_COMM_WORLD);
+        }
+
+      GridRefinement::refine(
+        triangulation, estimated_error_per_cell, amr_tuner.threshold_refinement);
+      GridRefinement::coarsen(
+        triangulation, estimated_error_per_cell, amr_tuner.threshold_coarsening);
+      const unsigned int max_grid_level = amr_tuner.max_level_refinement;
+      if (triangulation.n_levels() > max_grid_level)
+        for (const auto &cell :
+             triangulation.active_cell_iterators_on_level(max_grid_level))
+          cell->clear_refine_flag();
+      triangulation.prepare_coarsening_and_refinement();
+
+
+      parallel::distributed::SolutionTransfer<dim, LinearAlgebra::distributed::Vector<Number>>
+        solution_transfer_height(dof_handler_height);
+      solution_transfer_height.prepare_for_coarsening_and_refinement(solution_height);
+
+      parallel::distributed::SolutionTransfer<dim, LinearAlgebra::distributed::Vector<Number>>
+        solution_transfer_discharge(dof_handler_discharge);
+      solution_transfer_discharge.prepare_for_coarsening_and_refinement(solution_discharge);
+
+#ifdef OCEANO_WITH_TRACERS
+      parallel::distributed::SolutionTransfer<dim, LinearAlgebra::distributed::Vector<Number>>
+        solution_transfer_tracer(dof_handler_tracer);
+      solution_transfer_tracer.prepare_for_coarsening_and_refinement(solution_tracer);
+#endif
+
+
+      triangulation.execute_coarsening_and_refinement();
+      make_dofs();
+
+      LinearAlgebra::distributed::Vector<Number> transfer_height;
+      transfer_height.reinit(solution_height);
+      transfer_height.zero_out_ghosts();
+      solution_transfer_height.interpolate(transfer_height);
+      transfer_height.update_ghost_values();
+
+      LinearAlgebra::distributed::Vector<Number> transfer_discharge;
+      transfer_discharge.reinit(solution_discharge);
+      transfer_discharge.zero_out_ghosts();
+      solution_transfer_discharge.interpolate(transfer_discharge);
+      transfer_discharge.update_ghost_values();
+
+      solution_height = transfer_height;
+      solution_discharge = transfer_discharge;
+
+#ifdef OCEANO_WITH_TRACERS
+      LinearAlgebra::distributed::Vector<Number> transfer_tracer;
+      transfer_tracer.reinit(solution_tracer);
+      transfer_tracer.zero_out_ghosts();
+      solution_transfer_tracer.interpolate(transfer_tracer);
+      transfer_tracer.update_ghost_values();
+
+      solution_tracer = transfer_tracer;
+#endif
+#else
+    Assert(amr_tuner.max_level_refinement > 0
+            || amr_tuner.remesh_tick < 10000000000.,
+           ExcInternalError());
+#endif
+    }
   }
 
 
@@ -551,8 +689,9 @@ namespace Problem
 
     std::vector<std::string> vars_names = oceano_operator.model.vars_name;
 
-    pcout << "Time:" << std::setw(8) << std::setprecision(3) << time
-          << ", dt: " << std::setw(8) << std::setprecision(2) << time_step
+    pcout << "Time:"     << std::setw(8) << std::setprecision(3) << time
+          << ", cells: " << std::setw(8) << triangulation.n_global_active_cells()
+          << ", dt: "    << std::setw(8) << std::setprecision(2) << time_step
           << ", " << quantity_name  << " " + vars_names[0] + ": "
           << std::setprecision(4) << std::setw(10) << errors_hydro[0]
           << ", " + vars_names[1] + ": " << std::setprecision(4)
@@ -581,34 +720,27 @@ namespace Problem
                                  vars_names[0],
                                  {DataComponentInterpretation::component_is_scalar});
 
-        std::vector<Point<dim>> x_evaluation_points(solution_height.size());
-        DoFTools::map_dofs_to_support_points(mapping,
-                                             dof_handler_height,
-                                             x_evaluation_points);
+        std::map<unsigned int, Point<dim>> x_evaluation_points =
+          DoFTools::map_dofs_to_support_points(mapping,
+                                               dof_handler_height);
         LinearAlgebra::distributed::Vector<Number> postprocess_vector_variables;
         postprocess_vector_variables.reinit(solution_discharge);
         std::vector<LinearAlgebra::distributed::Vector<Number>>
           postprocess_scalar_variables(postprocessor.n_postproc_vars-dim, solution_height);
 
-//#ifdef OCEANO_WITH_TRACERS
         oceano_operator.evaluate_vector_field(solution_height,
                                               solution_discharge,
                                               solution_tracer,
                                               x_evaluation_points,
                                               postprocess_vector_variables,
                                               postprocess_scalar_variables);
-/*#else
-        oceano_operator.evaluate_vector_field(solution_height,
-                                              solution_discharge,
-                                              x_evaluation_points,
-                                              postprocess_vector_variables,
-                                              postprocess_scalar_variables);
-#endif*/
+
         std::vector<std::string> names_postproc
           = postprocessor.get_names();
         std::vector<std::string> names_vector;
         for (unsigned int d = 0; d < dim; ++d)
           names_vector.emplace_back(names_postproc[d]);
+
         std::vector<DataComponentInterpretation::DataComponentInterpretation>
           interpretation_postproc
           = postprocessor.get_data_component_interpretation();
@@ -711,7 +843,8 @@ namespace Problem
             << std::endl;
     }
 
-    make_grid_and_dofs();
+    make_grid();
+    make_dofs();
 
     oceano_operator.project_hydro(
       ICBC::Ic<dimension, n_variables>(prm), solution_height, solution_discharge);
@@ -719,6 +852,43 @@ namespace Problem
     oceano_operator.project_tracers(
       ICBC::Ic<dimension, n_variables>(prm), solution_tracer);
 #endif
+
+    // It is the turn of the constructor of the AmrTuner. We have collected
+    // all the  tuning parameters for the AMR in a separate class in order
+    // to keep things in order. This class is controlled via a preprocessor
+    // for the choice of the error estimate. For initial value problem we may
+    // proceed with mesh refinement to the initial solution. The mesh is pushed
+    // to the maximum refinement level since the start.
+    Amr::AmrTuner amr_tuner(prm);
+    for (unsigned int lev = 0; lev < amr_tuner.max_level_refinement; ++lev)
+      {
+        refine_grid(
+          amr_tuner,
+          static_cast<unsigned int>(std::round(0. / amr_tuner.remesh_tick)));
+
+        oceano_operator.project_hydro(
+          ICBC::Ic<dimension, n_variables>(prm), solution_height, solution_discharge);
+#ifdef OCEANO_WITH_TRACERS
+        oceano_operator.project_tracers(
+          ICBC::Ic<dimension, n_variables>(prm), solution_tracer);
+#endif
+     }
+
+    // In the following, we output some statistics about the problem. Because we
+    // often end up with quite large numbers of cells or degrees of freedom, we
+    // would like to print them with a comma to separate each set of three
+    // digits. This can be done via "locales", although the way this works is
+    // not particularly intuitive. step-32 explains this in slightly more
+    // detail.
+    std::locale s = pcout.get_stream().getloc();
+    pcout.get_stream().imbue(std::locale(""));
+    pcout << "Initial number of degrees of freedom: " << dof_handler_height.n_dofs()
+             + dof_handler_discharge.n_dofs() + dof_handler_tracer.n_dofs()
+          << " ( = " << ( 1 + dim + n_tra ) << " [vars] x "
+          << triangulation.n_global_active_cells() << " [cells] x "
+          << Utilities::pow(fe_degree + 1, dim) << " [dofs/cell/var] )"
+          << std::endl;
+    pcout.get_stream().imbue(s);
 
     // Next off is the Courant number
     // that scales the time step size in terms of the formula $\Delta t =
@@ -756,46 +926,55 @@ namespace Problem
     LinearAlgebra::distributed::Vector<Number> rk_register_tracer_1;
     LinearAlgebra::distributed::Vector<Number> rk_register_tracer_2;
 
-    rk_register_height_1.reinit(solution_height);
-    rk_register_height_2.reinit(solution_height);
-    rk_register_discharge_1.reinit(solution_discharge);
-    rk_register_discharge_2.reinit(solution_discharge);
-    rk_register_tracer_1.reinit(solution_tracer);
-    rk_register_tracer_2.reinit(solution_tracer);
+    integrator.reinit(solution_height, solution_discharge, solution_tracer,
+                      rk_register_height_1,
+                      rk_register_discharge_1,
+                      rk_register_tracer_1,
+                      rk_register_height_2,
+                      rk_register_discharge_2,
+                      rk_register_tracer_2);
 
 #elif defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
     const TimeIntegrator::ExplicitRungeKuttaIntegrator integrator(rk_scheme);
 
-    std::vector<LinearAlgebra::distributed::Vector<Number>>
-      rk_register_height_2(integrator.n_stages()+1, solution_height);
-    std::vector<LinearAlgebra::distributed::Vector<Number>>
-      rk_register_discharge_2(integrator.n_stages()+1, solution_discharge);
-    std::vector<LinearAlgebra::distributed::Vector<Number>>
-      rk_register_tracer_2(integrator.n_stages()+1, solution_tracer);
-
     LinearAlgebra::distributed::Vector<Number> rk_register_height_1;
     LinearAlgebra::distributed::Vector<Number> rk_register_discharge_1;
     LinearAlgebra::distributed::Vector<Number> rk_register_tracer_1;
-    rk_register_height_1.reinit(solution_height);
-    rk_register_discharge_1.reinit(solution_discharge);
-    rk_register_tracer_1.reinit(solution_tracer);
+    std::vector<LinearAlgebra::distributed::Vector<Number>> rk_register_height_2(
+                                                              integrator.n_stages()+1);
+    std::vector<LinearAlgebra::distributed::Vector<Number>> rk_register_discharge_2(
+                                                              integrator.n_stages()+1);
+    std::vector<LinearAlgebra::distributed::Vector<Number>> rk_register_tracer_2(
+                                                              integrator.n_stages()+1);
+
+    integrator.reinit(solution_height, solution_discharge, solution_tracer,
+                      rk_register_height_1,
+                      rk_register_discharge_1,
+                      rk_register_tracer_1,
+                      rk_register_height_2,
+                      rk_register_discharge_2,
+                      rk_register_tracer_2);
 
 #elif defined TIMEINTEGRATOR_ADDITIVERUNGEKUTTA
     const TimeIntegrator::AdditiveRungeKuttaIntegrator integrator(rk_scheme);
 
-    std::vector<LinearAlgebra::distributed::Vector<Number>>
-      rk_register_height_2(integrator.n_stages()+1, solution_height);
-    std::vector<LinearAlgebra::distributed::Vector<Number>>
-      rk_register_discharge_2(2*integrator.n_stages(), solution_discharge);
-    std::vector<LinearAlgebra::distributed::Vector<Number>>
-      rk_register_tracer_2(integrator.n_stages()+1, solution_tracer);
-
     LinearAlgebra::distributed::Vector<Number> rk_register_height_1;
     LinearAlgebra::distributed::Vector<Number> rk_register_discharge_1;
     LinearAlgebra::distributed::Vector<Number> rk_register_tracer_1;
-    rk_register_height_1.reinit(solution_height);
-    rk_register_discharge_1.reinit(solution_discharge);
-    rk_register_tracer_1.reinit(solution_tracer);
+    std::vector<LinearAlgebra::distributed::Vector<Number>> rk_register_height_2(
+                                                              integrator.n_stages()+1);
+    std::vector<LinearAlgebra::distributed::Vector<Number>> rk_register_discharge_2(
+                                                              2*integrator.n_stages());
+    std::vector<LinearAlgebra::distributed::Vector<Number>> rk_register_tracer_2(
+                                                              integrator.n_stages()+1);
+
+    integrator.reinit(solution_height, solution_discharge, solution_tracer,
+                      rk_register_height_1,
+                      rk_register_discharge_1,
+                      rk_register_tracer_1,
+                      rk_register_height_2,
+                      rk_register_discharge_2,
+                      rk_register_tracer_2);
 #endif
 
     double min_vertex_distance = std::numeric_limits<double>::max();
@@ -810,7 +989,7 @@ namespace Problem
       oceano_operator.compute_cell_transport_speed(solution_height,
                                                    solution_discharge);
     pcout << "Time step size: " << time_step
-          << ", minimal h: " << min_vertex_distance
+          << ", initial minimal h: " << min_vertex_distance
           << ", initial transport scaling: "
           << 1. / oceano_operator.compute_cell_transport_speed(solution_height,
                                                                solution_discharge)
@@ -846,6 +1025,7 @@ namespace Problem
     while (time < final_time - 1e-12)
       {
         ++timestep_number;
+
         if (timestep_number % 5 == 0)
           time_step =
             courant_number /
@@ -870,6 +1050,22 @@ namespace Problem
         }
 
         time += time_step;
+
+        if (static_cast<int>(time / amr_tuner.remesh_tick) !=
+              static_cast<int>((time - time_step) / amr_tuner.remesh_tick))
+          {
+            refine_grid(
+              amr_tuner,
+              static_cast<unsigned int>(std::round(time / postprocessor.output_tick)));
+
+             integrator.reinit(solution_height, solution_discharge, solution_tracer,
+               rk_register_height_1,
+               rk_register_discharge_1,
+               rk_register_tracer_1,
+               rk_register_height_2,
+               rk_register_discharge_2,
+               rk_register_tracer_2);
+          }
 
         if (static_cast<int>(time / postprocessor.output_tick) !=
               static_cast<int>((time - time_step) / postprocessor.output_tick) ||
