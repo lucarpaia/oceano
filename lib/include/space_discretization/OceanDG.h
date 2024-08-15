@@ -20,7 +20,7 @@
  */
 #ifndef OCEANDG_HPP
 #define OCEANDG_HPP
- 
+
 #include <deal.II/base/conditional_ostream.h>
 #include <deal.II/base/function.h>
 #include <deal.II/base/logstream.h>
@@ -238,7 +238,7 @@ namespace SpaceDiscretization
     ICBC::BcBase<dim, 1+dim+n_tra> *bc;
 
     // The switch between the different models is realized with
-    // Preprocessor keys. As already explained we have avoided pointers to 
+    // Preprocessor keys. As already explained we have avoided pointers to
     // interface classes. The Euler and the Shallow Water class must expose
     // the same interfaces with identical member functions. Note that the
     // model class is public beacause it must be accessed, during postprocessing
@@ -444,7 +444,7 @@ namespace SpaceDiscretization
   // multi-component case. One variant utilizes an FEEvaluation
   // object with multiple components embedded into it, specified by an additional
   // template argument `n_vars` for the components in the shallow water system.
-  // The alternative variant followed here uses several FEEvaluation objects, 
+  // The alternative variant followed here uses several FEEvaluation objects,
   // a scalar one for the height and a vector-valued one with `dim` components for the
   // momentum.
   // To ensure that those components point to the correct part of the solution, the
@@ -534,7 +534,8 @@ namespace SpaceDiscretization
     const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
     const std::pair<unsigned int, unsigned int>                   &cell_range) const
   {
-    FEEvaluation<dim, degree, n_points_1d, 1, Number> phi_height(data,0);
+    FEEvaluation<dim, degree, n_points_1d, 1, Number> phi_height(data,0),
+                                                      phi_bathymetry(data,0);
     FEEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge(data,1);
 
     for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
@@ -545,6 +546,9 @@ namespace SpaceDiscretization
         phi_discharge.reinit(cell);
         phi_discharge.gather_evaluate(src[1], EvaluationFlags::values);
 
+        phi_bathymetry.reinit(cell);
+        phi_bathymetry.gather_evaluate(src.back(), EvaluationFlags::values);
+
         for (unsigned int q = 0; q < phi_discharge.n_q_points; ++q)
           {
             const auto q_q = phi_discharge.get_value(q);
@@ -554,6 +558,7 @@ namespace SpaceDiscretization
             Tensor<1, dim+3, VectorizedArray<Number>> data_q =
               evaluate_function<dim, Number, dim+3>(
                 *bc->problem_data, phi_discharge.quadrature_point(q));
+            data_q[0] = phi_bathymetry.get_value(q);
 
             phi_discharge.submit_gradient(
               model.advectiveflux<dim>(z_q, q_q, data_q[0]), q);
@@ -576,7 +581,8 @@ namespace SpaceDiscretization
     const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
     const std::pair<unsigned int, unsigned int>                   &cell_range) const
   {
-    FEEvaluation<dim, degree, n_points_1d, 1, Number> phi_height(data,0);
+    FEEvaluation<dim, degree, n_points_1d, 1, Number> phi_height(data,0),
+                                                      phi_bathymetry(data,0);
     FEEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge(data,1);
 
     for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
@@ -587,6 +593,9 @@ namespace SpaceDiscretization
         phi_discharge.reinit(cell);
         phi_discharge.gather_evaluate(src[1], EvaluationFlags::values);
 
+        phi_bathymetry.reinit(cell);
+        phi_bathymetry.gather_evaluate(src.back(), EvaluationFlags::values);
+
         for (unsigned int q = 0; q < phi_discharge.n_q_points; ++q)
           {
             const auto q_q = phi_discharge.get_value(q);
@@ -596,6 +605,7 @@ namespace SpaceDiscretization
             Tensor<1, dim+3, VectorizedArray<Number>> data_q =
               evaluate_function<dim, Number, dim+3>(
                 *bc->problem_data, phi_discharge.quadrature_point(q));
+            data_q[0] = phi_bathymetry.get_value(q);
 
             phi_discharge.submit_gradient(
               model.advectiveflux<dim>(z_q, q_q, data_q[0]), q);
@@ -618,7 +628,8 @@ namespace SpaceDiscretization
     const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
     const std::pair<unsigned int, unsigned int>                   &cell_range) const
   {
-    FEEvaluation<dim, degree, n_points_1d, 1, Number> phi_height(data,0);
+    FEEvaluation<dim, degree, n_points_1d, 1, Number> phi_height(data,0),
+                                                      phi_bathymetry(data,0);
     FEEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge(data,1);
 
     for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
@@ -628,6 +639,9 @@ namespace SpaceDiscretization
         phi_discharge.reinit(cell);
         phi_discharge.gather_evaluate(src[1], EvaluationFlags::values);
 
+        phi_bathymetry.reinit(cell);
+        phi_bathymetry.gather_evaluate(src.back(), EvaluationFlags::values);
+
         for (unsigned int q = 0; q < phi_discharge.n_q_points; ++q)
           {
             const auto q_q = phi_discharge.get_value(q);
@@ -636,6 +650,7 @@ namespace SpaceDiscretization
             Tensor<1, 2, VectorizedArray<Number>> data_q =
               evaluate_function<dim, Number, 2>(
                 *bc->problem_data, phi_discharge.quadrature_point(q));
+            data_q[0] = phi_bathymetry.get_value(q);
 
             phi_discharge.submit_value(
               model.source_stiff<dim>(z_q, q_q, data_q),
@@ -703,12 +718,12 @@ namespace SpaceDiscretization
   // argument in the list. At the quadrature points, we then go to our
   // free-standing functions for the numerical flux. They receives the solution
   // evaluated at quadrature points from both sides (i.e., $\mathbf{w}^-$ and
-  // $\mathbf{w}^+$), as well as the normal vector onto the minus side. 
+  // $\mathbf{w}^+$), as well as the normal vector onto the minus side.
   // We separate numerical fluxes coming from terms written in weak form from
-  // terms written in strong form. A simple trick is used to have  
-  // discontinuous bathymetry at the quadrature points along the edges. The 
+  // terms written in strong form. A simple trick is used to have
+  // discontinuous bathymetry at the quadrature points along the edges. The
   // quadrature point is shifted perpendicularly to the edge direction by a
-  // very small quantity. Givent the outward sign of the normal, the offset is 
+  // very small quantity. Givent the outward sign of the normal, the offset is
   // positive for the "there" side and negative for the "here" side.
   //
   // For the shallow water equations mass-flux
@@ -734,9 +749,13 @@ namespace SpaceDiscretization
     const std::pair<unsigned int, unsigned int>                   &face_range) const
   {
     FEFaceEvaluation<dim, degree, n_points_1d, 1, Number> phi_height_m(data,
-                                                                      true, 0);
+                                                                      true, 0),
+                                                          phi_bathymetry_m(data,
+                                                                           true, 0);
     FEFaceEvaluation<dim, degree, n_points_1d, 1, Number> phi_height_p(data,
-                                                                      false, 0);
+                                                                      false, 0),
+                                                          phi_bathymetry_p(data,
+                                                                           false, 0);
     FEFaceEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge_m(data,
                                                                       true, 1);
     FEFaceEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge_p(data,
@@ -748,20 +767,20 @@ namespace SpaceDiscretization
         phi_height_p.gather_evaluate(src[0], EvaluationFlags::values);
         phi_discharge_p.reinit(face);
         phi_discharge_p.gather_evaluate(src[1], EvaluationFlags::values);
+        phi_bathymetry_p.reinit(face);
+        phi_bathymetry_p.gather_evaluate(src.back(), EvaluationFlags::values);
 
         phi_height_m.reinit(face);
         phi_height_m.gather_evaluate(src[0], EvaluationFlags::values);
         phi_discharge_m.reinit(face);
         phi_discharge_m.gather_evaluate(src[1], EvaluationFlags::values);
+        phi_bathymetry_m.reinit(face);
+        phi_bathymetry_m.gather_evaluate(src.back(), EvaluationFlags::values);
 
         for (unsigned int q = 0; q < phi_height_m.n_q_points; ++q)
           {
-            const VectorizedArray<Number> data_m =
-              evaluate_function<dim, Number>(*bc->problem_data,
-                phi_height_m.quadrature_point(q)-1e-12*phi_height_m.normal_vector(q), 0);
-            const VectorizedArray<Number> data_p =
-              evaluate_function<dim, Number>(*bc->problem_data,
-                phi_height_m.quadrature_point(q)+1e-12*phi_height_m.normal_vector(q), 0);
+            const VectorizedArray<Number> data_m = phi_bathymetry_m.get_value(q);
+            const VectorizedArray<Number> data_p = phi_bathymetry_p.get_value(q);
 
             auto numerical_flux_p =
               num_flux.numerical_massflux_weak<dim>(phi_height_m.get_value(q),
@@ -789,9 +808,13 @@ namespace SpaceDiscretization
     const std::pair<unsigned int, unsigned int>                   &face_range) const
   {
     FEFaceEvaluation<dim, degree, n_points_1d, 1, Number> phi_height_m(data,
-                                                                      true, 0);
+                                                                      true, 0),
+                                                          phi_bathymetry_m(data,
+                                                                           true, 0);
     FEFaceEvaluation<dim, degree, n_points_1d, 1, Number> phi_height_p(data,
-                                                                      false, 0);
+                                                                      false, 0),
+                                                          phi_bathymetry_p(data,
+                                                                           false, 0);
     FEFaceEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge_m(data,
                                                                       true, 1);
     FEFaceEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge_p(data,
@@ -803,11 +826,15 @@ namespace SpaceDiscretization
         phi_height_p.gather_evaluate(src[0], EvaluationFlags::values);
         phi_discharge_p.reinit(face);
         phi_discharge_p.gather_evaluate(src[1], EvaluationFlags::values);
+        phi_bathymetry_p.reinit(face);
+        phi_bathymetry_p.gather_evaluate(src.back(), EvaluationFlags::values);
 
         phi_height_m.reinit(face);
         phi_height_m.gather_evaluate(src[0], EvaluationFlags::values);
         phi_discharge_m.reinit(face);
         phi_discharge_m.gather_evaluate(src[1], EvaluationFlags::values);
+        phi_bathymetry_m.reinit(face);
+        phi_bathymetry_m.gather_evaluate(src.back(), EvaluationFlags::values);
 
         for (unsigned int q = 0; q < phi_discharge_m.n_q_points; ++q)
           {
@@ -815,12 +842,8 @@ namespace SpaceDiscretization
             const auto z_p    = phi_height_p.get_value(q);
             const auto normal = phi_discharge_m.normal_vector(q);
 
-            const VectorizedArray<Number> data_m =
-              evaluate_function<dim, Number>(*bc->problem_data,
-                phi_discharge_m.quadrature_point(q)-1e-12*phi_discharge_m.normal_vector(q), 0);
-            const VectorizedArray<Number> data_p =
-              evaluate_function<dim, Number>(*bc->problem_data,
-                phi_discharge_m.quadrature_point(q)+1e-12*phi_discharge_m.normal_vector(q), 0);
+            const VectorizedArray<Number> data_m = phi_bathymetry_m.get_value(q);
+            const VectorizedArray<Number> data_p = phi_bathymetry_p.get_value(q);
 
             auto numerical_flux_p =
               num_flux.numerical_advflux_weak<dim>(z_m,
@@ -920,7 +943,8 @@ namespace SpaceDiscretization
     const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
     const std::pair<unsigned int, unsigned int>                   &face_range) const
   {
-    FEFaceEvaluation<dim, degree, n_points_1d, 1, Number> phi_height(data, true, 0);
+    FEFaceEvaluation<dim, degree, n_points_1d, 1, Number> phi_height(data, true, 0),
+                                                          phi_bathymetry(data, true, 0);
     FEFaceEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge(data, true, 1);
 
     const unsigned int n_vars = dim+1;
@@ -931,15 +955,15 @@ namespace SpaceDiscretization
         phi_height.gather_evaluate(src[0], EvaluationFlags::values);
         phi_discharge.reinit(face);
         phi_discharge.gather_evaluate(src[1], EvaluationFlags::values);
+        phi_bathymetry.reinit(face);
+        phi_bathymetry.gather_evaluate(src.back(), EvaluationFlags::values);
 
         for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
           {
             const auto z_m    = phi_height.get_value(q);
             const auto q_m    = phi_discharge.get_value(q);
             const auto normal = phi_height.normal_vector(q);
-            const VectorizedArray<Number> data_m =
-              evaluate_function<dim, Number>(
-                *bc->problem_data, phi_height.quadrature_point(q), 0);
+            const VectorizedArray<Number> data_m = phi_bathymetry.get_value(q);
 
             auto rho_u_dot_n = q_m * normal;
 
@@ -1033,14 +1057,15 @@ namespace SpaceDiscretization
     const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
     const std::pair<unsigned int, unsigned int>                   &face_range) const
   {
-    FEFaceEvaluation<dim, degree, n_points_1d, 1, Number> phi_height(data, true, 0);
+    FEFaceEvaluation<dim, degree, n_points_1d, 1, Number> phi_height(data, true, 0),
+                                                          phi_bathymetry(data, true, 0);
     FEFaceEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge(data, true, 1);
 
     const unsigned int n_vars = dim+1;
 
     for (unsigned int face = face_range.first; face < face_range.second; ++face)
       {
-        phi_height.reinit(face);        
+        phi_height.reinit(face);
         phi_height.gather_evaluate(src[0], EvaluationFlags::values);
         phi_discharge.reinit(face);
         phi_discharge.gather_evaluate(src[1], EvaluationFlags::values);
@@ -1050,9 +1075,7 @@ namespace SpaceDiscretization
             const auto z_m    = phi_height.get_value(q);
             const auto q_m    = phi_discharge.get_value(q);
             const auto normal = phi_discharge.normal_vector(q);
-            const VectorizedArray<Number> data_m =
-              evaluate_function<dim, Number>(
-                *bc->problem_data, phi_discharge.quadrature_point(q), 0);
+            const VectorizedArray<Number> data_m = phi_bathymetry.get_value(q);
 
             auto rho_u_dot_n = q_m * normal;
 
@@ -1235,7 +1258,8 @@ namespace SpaceDiscretization
     const std::pair<unsigned int, unsigned int>                   &cell_range) const
   {
     FEEvaluation<dim, degree, degree + 1, dim, Number> phi_discharge(data, 1, 1);
-    FEEvaluation<dim, degree, degree + 1, 1, Number> phi_height_ri(data, 0, 1);
+    FEEvaluation<dim, degree, degree + 1, 1, Number> phi_height_ri(data, 0, 1),
+                                                     phi_bathymetry(data, 0, 1);
     FEEvaluation<dim, degree, degree + 1, dim, Number> phi_discharge_ri(data, 1, 1);
     MatrixFreeOperators::CellwiseInverseMassMatrix<dim, degree, dim, Number>
       inverse(phi_discharge);
@@ -1250,14 +1274,15 @@ namespace SpaceDiscretization
         phi_discharge_ri.reinit(cell);
         phi_discharge_ri.gather_evaluate(src[2], EvaluationFlags::values);
 
+        phi_bathymetry.reinit(cell);
+        phi_bathymetry.gather_evaluate(src.back(), EvaluationFlags::values);
+
 	AlignedVector<VectorizedArray<Number>> inverse_jxw(phi_discharge.n_q_points);
 	inverse.fill_inverse_JxW_values(inverse_jxw);
 
         for (unsigned int q = 0; q < phi_discharge.n_q_points; ++q)
           {
-            const VectorizedArray<Number> data_q =
-              evaluate_function<dim, Number>(
-                *bc->problem_data, phi_discharge.quadrature_point(q), 0);
+            const VectorizedArray<Number> data_q = phi_bathymetry.get_value(q);
             const VectorizedArray<Number> drag_q =
               evaluate_function<dim, Number>(
                 *bc->problem_data, phi_discharge.quadrature_point(q), 1);
@@ -1400,7 +1425,7 @@ namespace SpaceDiscretization
     LinearAlgebra::distributed::Vector<Number>                    &solution_height,
     LinearAlgebra::distributed::Vector<Number>                    &solution_discharge,
     LinearAlgebra::distributed::Vector<Number>                    &next_ri_height,
-    LinearAlgebra::distributed::Vector<Number>                    &next_ri_discharge) const  
+    LinearAlgebra::distributed::Vector<Number>                    &next_ri_discharge) const
   {
     {
       TimerOutput::Scope t(timer, "rk_stage hydro - integrals L_h");
@@ -1500,7 +1525,7 @@ namespace SpaceDiscretization
             }
         },
         1);
-    }    
+    }
   }
 
   // We apply the same concepts to the explicit Runge-Kutta method written
@@ -1894,8 +1919,8 @@ namespace SpaceDiscretization
   // this because every vector entry has contributions from only a single
   // cell for discontinuous Galerkin discretizations.
   //
-  // The quadrature choosen to do the integral is the normal one stored in 
-  // the finite element evaluation class, thus a Gaussian quadrature 
+  // The quadrature choosen to do the integral is the normal one stored in
+  // the finite element evaluation class, thus a Gaussian quadrature
   // with the points lying at the interior
   // of the cell. This allows to mantain a discontinuous datum with
   // the jump passing through the edges of the cell.
@@ -1932,7 +1957,7 @@ namespace SpaceDiscretization
       {
         Tensor<1, dim, VectorizedArray<Number>> discharge;
         phi_discharge.reinit(cell);
-        for (unsigned int q = 0; q < phi_discharge.n_q_points; ++q) 
+        for (unsigned int q = 0; q < phi_discharge.n_q_points; ++q)
           {
             for (unsigned int d = 0; d < dim; ++d)
               discharge[d] = evaluate_function<dim, Number>(function,
@@ -1970,7 +1995,7 @@ namespace SpaceDiscretization
   // number of lanes with valid data. It equals VectorizedArray::size() on
   // most cells, but can be less on the last cell batch if the number of cells
   // has a remainder compared to the SIMD width.
-  // 
+  //
   // Pay also attention to the implementation of the error formula. The error has
   // dimension `2` because we compute only one error for all the
   // momentum components.
@@ -1998,9 +2023,9 @@ namespace SpaceDiscretization
         for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
           {
             error[0] = evaluate_function<dim, Number>(
-                              function, 
+                              function,
               		      phi_height.quadrature_point(q),
-              		      0) - 
+              		      0) -
               	       phi_height.get_value(q);
             const auto JxW = phi_height.JxW(q);
             local_errors_squared[0] += error[0] * error[0] * JxW;
@@ -2009,7 +2034,7 @@ namespace SpaceDiscretization
           {
             for (unsigned int d = 0; d < dim; ++d)
               error[d+1] = evaluate_function<dim, Number>(
-              			function, 
+              			function,
               			phi_discharge.quadrature_point(q),
               			d+1) -
               		  phi_discharge.get_value(q)[d];
@@ -2076,11 +2101,13 @@ namespace SpaceDiscretization
   template <int dim, int n_tra, int degree, int n_points_1d>
   double OceanoOperator<dim, n_tra, degree, n_points_1d>::compute_cell_transport_speed(
     const LinearAlgebra::distributed::Vector<Number> &solution_height,
-    const LinearAlgebra::distributed::Vector<Number> &solution_discharge) const
+    const LinearAlgebra::distributed::Vector<Number> &solution_discharge,
+    const LinearAlgebra::distributed::Vector<Number> &bathymetry) const
   {
     TimerOutput::Scope t(timer, "compute transport speed");
     Number             max_transport = 0;
-    FEEvaluation<dim, degree, degree + 1, 1, Number> phi_height(data, 0, 1);
+    FEEvaluation<dim, degree, degree + 1, 1, Number> phi_height(data, 0, 1),
+                                                     phi_bathymetry(data, 0, 1);
     FEEvaluation<dim, degree, degree + 1, dim, Number> phi_discharge(data, 1, 1);
 
     for (unsigned int cell = 0; cell < data.n_cell_batches(); ++cell)
@@ -2089,12 +2116,12 @@ namespace SpaceDiscretization
         phi_height.gather_evaluate(solution_height, EvaluationFlags::values);
         phi_discharge.reinit(cell);
         phi_discharge.gather_evaluate(solution_discharge, EvaluationFlags::values);
+        phi_bathymetry.reinit(cell);
+        phi_bathymetry.gather_evaluate(bathymetry, EvaluationFlags::values);
         VectorizedArray<Number> local_max = 0.;
         for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
           {
-            const VectorizedArray<Number> data_q =
-              evaluate_function<dim, Number>(
-                *bc->problem_data, phi_height.quadrature_point(q), 0);
+            const VectorizedArray<Number> data_q = phi_bathymetry.get_value(q);
             const auto zq = phi_height.get_value(q);
             const auto qq = phi_discharge.get_value(q);
             const auto velocity = model.velocity<dim>(zq, qq, data_q);
@@ -2168,7 +2195,7 @@ namespace SpaceDiscretization
     const LinearAlgebra::distributed::Vector<Number>        &solution_height,
     const LinearAlgebra::distributed::Vector<Number>        &solution_discharge,
     const LinearAlgebra::distributed::Vector<Number>        &/*solution_tracer*/,
-    const std::map<unsigned int, Point<dim>>                &evaluation_points,
+    const LinearAlgebra::distributed::Vector<Number>        &bathymetry_pol,
     LinearAlgebra::distributed::Vector<Number>              &computed_vector_quantities,
     std::vector<LinearAlgebra::distributed::Vector<Number>> &computed_scalar_quantities) const
   {
@@ -2184,7 +2211,6 @@ namespace SpaceDiscretization
            ExcInternalError());
 
     //std::cout << n_evaluation_points << " - " << evaluation_points.size() << std::endl; !lrp: still to debug in //
-    auto it = evaluation_points.begin();
     for (unsigned int p = 0; p < n_evaluation_points; ++p)
       {
         const auto height = solution_height.local_element(p);
@@ -2192,13 +2218,7 @@ namespace SpaceDiscretization
         for (unsigned int d = 0; d < dim; ++d)
           discharge[d] = solution_discharge.local_element(dim*p+d);
 
-        Point<dim, VectorizedArray<Number>> x_evaluation_points;
-        for (unsigned int d = 0; d < dim; ++d)
-          x_evaluation_points[d] = it->second[d];
-	it++;
-
-        const auto data = evaluate_function<dim, Number>(
-            *bc->problem_data, x_evaluation_points, 0);
+        const auto data = bathymetry_pol[p];
 
         const Tensor<1, dim> velocity = model.velocity<dim>(height, discharge, data[0]);
 

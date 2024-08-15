@@ -19,17 +19,17 @@
  *         Giuseppe Orlando,   2024
  */
 
-// Run-time polymorphism can be an elegant solution do deal within a single code 
-// with multiple physical models and different numerical choices. One for example 
-// would like to test different numerical fluxes or time integrators. Also the 
+// Run-time polymorphism can be an elegant solution do deal within a single code
+// with multiple physical models and different numerical choices. One for example
+// would like to test different numerical fluxes or time integrators. Also the
 // initial and boundary conditions specific to each test case can be resolved with
-// a pointer base class which act as an interface with virtual functions defined in it. 
+// a pointer base class which act as an interface with virtual functions defined in it.
 // However, calls to virtual functions (model flux, numerical flux, boundary conditions)
 // happens at each quadrature points and this can be the cause of a bit of overhead.
-// Moreover these choices are tested in a development phase and typically 
-// both the model and the numerics are kept fixed by users. Also boundary and initial 
-// conditions for real case scenario consists in reading external data and not in 
-// using analytical functions. In order to not introduce in the optimized deal.II code 
+// Moreover these choices are tested in a development phase and typically
+// both the model and the numerics are kept fixed by users. Also boundary and initial
+// conditions for real case scenario consists in reading external data and not in
+// using analytical functions. In order to not introduce in the optimized deal.II code
 // call to virtual functions that would point, almost always, to the same derived class,
 // we use instead c++ preprocessors. C++ preprocessor allows to avoid interface classes
 // and to define just the classes actually used. Each pre-processor must begins with
@@ -146,8 +146,8 @@
 #include <io/CommandLineParser.h>
 #include <amr/AmrTuner.h>
 // The following files are included depending on
-// the Preprocessor keys. This is necessary because 
-// we have done a limited use of virtual classes; on the contrary 
+// the Preprocessor keys. This is necessary because
+// we have done a limited use of virtual classes; on the contrary
 // each of these header files contains the same class definition, so they
 // cannot be linked together.
 #if defined TIMEINTEGRATOR_LOWSTORAGERUNGEKUTTA
@@ -180,7 +180,7 @@ namespace Problem
   using namespace dealii;
 
   // We collect some parameters that control the execution of the program at the top of the
-  // file. These are parameters that the user should not change for operational 
+  // file. These are parameters that the user should not change for operational
   // simuations. They can be thus considered known at compile time leading, I guess,
   // to some optimization. Besides the dimension and polynomial degree we want to run with, we
   // also specify a number of points in the Gaussian quadrature formula we
@@ -229,7 +229,7 @@ namespace Problem
   // however reused many functions.
   // The interface of the DataPostprocessor class is intuitive,
   // requiring us to provide information about what needs to be evaluated
-  // (typically only the values of the solution, but for vorticity we need 
+  // (typically only the values of the solution, but for vorticity we need
   // also the gradients of the solution), and the names of what
   // gets evaluated. Note that it would also be possible to extract most
   // information by calculator tools within visualization programs such as
@@ -262,6 +262,8 @@ namespace Problem
     LinearAlgebra::distributed::Vector<Number> solution_height;
     LinearAlgebra::distributed::Vector<Number> solution_discharge;
     LinearAlgebra::distributed::Vector<Number> solution_tracer;
+
+    LinearAlgebra::distributed::Vector<Number> bathymetry;
 
     ParameterHandler &prm;
 
@@ -407,15 +409,15 @@ namespace Problem
 
 
 
-  // It is possible to create the mesh inside 
-  // deal.II using the functions in the namespace GridGenearator. However 
-  // here we use only the possibility to import the mesh from an external mesher, Gmsh. 
-  // Gmsh is the smallest and most quickly set up open source tool we are aware of. 
-  // One of the issues is that deal.II, at least until version 9.2, 
-  // can only deal with meshes that only consist of quadrilaterals and hexahedra - 
-  // tetrahedral meshes were not supported and will likely not be supported with all 
-  // of the features deal.II offers for quadrilateral and hexahedral meshes for several 
-  // versions following the 9.3 release that introduced support for simplicial and 
+  // It is possible to create the mesh inside
+  // deal.II using the functions in the namespace GridGenearator. However
+  // here we use only the possibility to import the mesh from an external mesher, Gmsh.
+  // Gmsh is the smallest and most quickly set up open source tool we are aware of.
+  // One of the issues is that deal.II, at least until version 9.2,
+  // can only deal with meshes that only consist of quadrilaterals and hexahedra -
+  // tetrahedral meshes were not supported and will likely not be supported with all
+  // of the features deal.II offers for quadrilateral and hexahedral meshes for several
+  // versions following the 9.3 release that introduced support for simplicial and
   // mixed meshes first. Gmsh can generate unstructured 2d quad meshes.
   // Having the base mesh in place (including the manifolds set by
   // GridGenerator::channel_with_cylinder()), we can then perform the
@@ -435,17 +437,17 @@ namespace Problem
   {
     oceano_operator.bc->set_problem_data(std::make_unique<ICBC::ProblemData<dim>>(prm));
 
-    // The class GridIn can read many different mesh formats from a 
-    // file from disk. In order to read a grid from a file, we generate an object 
-    // of data type GridIn and associate the triangulation to it (i.e. we tell 
-    // it to fill our triangulation object when we ask it to read the file). 
-    // Then we open the respective file and initialize the triangulation with 
+    // The class GridIn can read many different mesh formats from a
+    // file from disk. In order to read a grid from a file, we generate an object
+    // of data type GridIn and associate the triangulation to it (i.e. we tell
+    // it to fill our triangulation object when we ask it to read the file).
+    // Then we open the respective file and initialize the triangulation with
     // the data in the file. The path to the file is reconstructed from the current
     // directory, that means that the mesh file must exist in the same directory where
     // the executable is lunched.
     GridIn<dim> gridin;
     gridin.attach_triangulation(triangulation);
-  
+
     char cwd[1024];
     if (getcwd(cwd, sizeof(cwd)) == NULL)
       ExcInternalError();
@@ -456,11 +458,11 @@ namespace Problem
     const std::string file_msh = prm.get("Mesh_filename");
     const unsigned int n_global_refinements = prm.get_integer("Number_of_refinements");
     prm.leave_subsection();
-         
+
     std::ifstream f(current_working_directory+slash+file_msh);
     pcout << "Reading mesh file: " << file_msh << std::endl;
     gridin.read_msh(f);
- 
+
     std::locale s = pcout.get_stream().getloc();
     pcout.get_stream().imbue(std::locale(""));
     pcout << "Initial number of cells: " << std::setw(8) << triangulation.n_global_active_cells()
@@ -486,6 +488,7 @@ namespace Problem
                                     dof_handler_discharge,
                                     dof_handler_tracer);
     oceano_operator.initialize_vector(solution_height, 0);
+    oceano_operator.initialize_vector(bathymetry, 0);
     oceano_operator.initialize_vector(solution_discharge, 1);
 #ifdef OCEANO_WITH_TRACERS
     oceano_operator.initialize_vector(solution_tracer, 2);
@@ -577,6 +580,10 @@ namespace Problem
         solution_transfer_discharge(dof_handler_discharge);
       solution_transfer_discharge.prepare_for_coarsening_and_refinement(solution_discharge);
 
+      parallel::distributed::SolutionTransfer<dim, LinearAlgebra::distributed::Vector<Number>>
+        solution_transfer_bathymetry(dof_handler_height);
+      solution_transfer_bathymetry.prepare_for_coarsening_and_refinement(bathymetry);
+
 #ifdef OCEANO_WITH_TRACERS
       parallel::distributed::SolutionTransfer<dim, LinearAlgebra::distributed::Vector<Number>>
         solution_transfer_tracer(dof_handler_tracer);
@@ -599,8 +606,15 @@ namespace Problem
       solution_transfer_discharge.interpolate(transfer_discharge);
       transfer_discharge.update_ghost_values();
 
+      LinearAlgebra::distributed::Vector<Number> transfer_bathymetry;
+      transfer_bathymetry.reinit(bathymetry);
+      transfer_bathymetry.zero_out_ghost_values();
+      solution_transfer_bathymetry.interpolate(transfer_bathymetry);
+      transfer_bathymetry.update_ghost_values();
+
       solution_height = transfer_height;
       solution_discharge = transfer_discharge;
+      bathymetry = transfer_bathymetry;
 
 #ifdef OCEANO_WITH_TRACERS
       LinearAlgebra::distributed::Vector<Number> transfer_tracer;
@@ -731,7 +745,7 @@ namespace Problem
         oceano_operator.evaluate_vector_field(solution_height,
                                               solution_discharge,
                                               solution_tracer,
-                                              x_evaluation_points,
+                                              bathymetry,
                                               postprocess_vector_variables,
                                               postprocess_scalar_variables);
 
@@ -848,6 +862,7 @@ namespace Problem
 
     oceano_operator.project_hydro(
       ICBC::Ic<dimension, n_variables>(prm), solution_height, solution_discharge);
+    //TODO: Add projection of the bathymetry (do it inside project hydro or outside???)  
 #ifdef OCEANO_WITH_TRACERS
     oceano_operator.project_tracers(
       ICBC::Ic<dimension, n_variables>(prm), solution_tracer);
@@ -987,12 +1002,14 @@ namespace Problem
 
     time_step = courant_number  /
       oceano_operator.compute_cell_transport_speed(solution_height,
-                                                   solution_discharge);
+                                                   solution_discharge,
+                                                   bathymetry);
     pcout << "Time step size: " << time_step
           << ", initial minimal h: " << min_vertex_distance
           << ", initial transport scaling: "
           << 1. / oceano_operator.compute_cell_transport_speed(solution_height,
-                                                               solution_discharge)
+                                                               solution_discharge,
+                                                               bathymetry)
           << std::endl
           << std::endl;
 
@@ -1006,7 +1023,7 @@ namespace Problem
     output_results(postprocessor, 0);
 
     // Now we are ready to start the time loop, which we run until the time
-    // has reached the desired end time. Every 5 time steps, we compute a new    
+    // has reached the desired end time. Every 5 time steps, we compute a new
     // estimate for the time step -- since the solution is nonlinear, it is
     // most effective to adapt the value during the course of the
     // simulation. In case the Courant number was chosen too aggressively, the
@@ -1031,7 +1048,8 @@ namespace Problem
             courant_number /
             Utilities::truncate_to_n_digits(
               oceano_operator.compute_cell_transport_speed(solution_height,
-                                                           solution_discharge), 3);
+                                                           solution_discharge,
+                                                           bathymetry), 3);
 
         {
           TimerOutput::Scope t(timer, "rk time stepping total");
@@ -1041,6 +1059,7 @@ namespace Problem
                                        solution_height,
                                        solution_discharge,
                                        solution_tracer,
+                                       bathymetry,
                                        rk_register_height_1,
                                        rk_register_discharge_1,
                                        rk_register_tracer_1,
@@ -1103,23 +1122,23 @@ int main(int argc, char **argv)
       IO::CommandLineParser prs;
       prs.parse_command_line(argc, argv);
 
-      // We define `ParameterHandler` and `ParameterReader` objects, and let the latter 
+      // We define `ParameterHandler` and `ParameterReader` objects, and let the latter
       // read in the parameter values from a configuration textfile. The values so
       // read are then handed over to an instance of the OceanoProblem class:
       IO::ParameterHandler prm;
-      IO::ParameterReader  param(prm);      
+      IO::ParameterReader  param(prm);
       param.read_parameters(argv[2]);
 
       // The boundary condition class is the only class declared as a pointer.
-      // This is because we want to realize run-time polymrophism. In the base class 
-      // there are defined a bunch of members that are needed for all the test cases. 
-      // Next, the pointer is allocated as a derived class specific 
-      // to the test-case which will override the boundary conditions. 
+      // This is because we want to realize run-time polymrophism. In the base class
+      // there are defined a bunch of members that are needed for all the test cases.
+      // Next, the pointer is allocated as a derived class specific
+      // to the test-case which will override the boundary conditions.
       // The pointer is easily pass as argument to the `OceanoProblem` class.
       ICBC::BcBase<dimension, n_variables> *bc;
       // The switch between the different test-cases is realized with Preprocessor keys.
       // The choice to use a Preprocessor also for the boundary conditions is because we
-      // use it for the initial condition and we have mantained the same directive 
+      // use it for the initial condition and we have mantained the same directive
       // to easily switch both initial and boundary conditions depending on the test-case.
 #if defined ICBC_ISENTROPICVORTEX
       bc = new ICBC::BcIsentropicVortex<dimension, n_variables>(prm);
@@ -1140,15 +1159,15 @@ int main(int argc, char **argv)
 #else
       Assert(false, ExcNotImplemented());
       return 0.;
-#endif 
-      
+#endif
+
       // The OceanoProblem class takes as argument the only two classes that have been
       // previously defined and that are filled at runtime. One is the pointer class
       // for the boundary conditions, the other is a reference to the parameter
-      // class to read the paramteres from an external config file.     
+      // class to read the paramteres from an external config file.
       OceanoProblem<dimension, n_tracers> oceano_problem(prm, bc);
       oceano_problem.run();
-      
+
       delete bc;
     }
   catch (std::exception &exc)
