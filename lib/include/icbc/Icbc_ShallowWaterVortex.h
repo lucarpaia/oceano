@@ -52,10 +52,10 @@ namespace ICBC
   // such as the undisturbed water depth and the free-strem velocity.
   // We choose a channel $[0,1]\times[0,2]$ with a depth of 10. The vortex have an
   // amplitude of 1 and a radius less than half of the channel width.
-  constexpr double h0      = 10.0;
+  constexpr double h0      = 1.0;
   constexpr double uoo     = 6.0;
   // the depth at the center:  
-  constexpr double hmin    = 9.0;
+  constexpr double hmin    = 0.9;
   // the radius:
   constexpr double radius0 = 0.25;
 
