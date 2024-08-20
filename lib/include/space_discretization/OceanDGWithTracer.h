@@ -40,16 +40,16 @@ namespace SpaceDiscretization
   // evaluation calls as multiple points get batched together via a
   // VectorizedArray argument. Here they are used for inquiry the data
   // initial/boundary conditions for the tracer equations. Both functions, apparently
-  // do the same operation. Tthe reason of the duplication, which
+  // do the same operation. The reason of the duplication, which
   // is resolved with an overloading depending on the third dummy argument,
   // is to handle the case of one single tracer and multiple tracers without
-  // and `if` statement.
+  // an `if` statement.
   template <int dim, typename Number, int n_vars>
   VectorizedArray<Number>
   evaluate_function_tracer(
     const Function<dim>                       &function,
     const Point<dim, VectorizedArray<Number>> &p_vectorized,
-    const VectorizedArray<Number>              /*dummy*/)
+    const VectorizedArray<Number>             &/*dummy*/)
   {
     VectorizedArray<Number> result;
     for (unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v)
@@ -141,10 +141,11 @@ namespace SpaceDiscretization
       const LinearAlgebra::distributed::Vector<Number> &solution_tracer) const;
 
     void evaluate_vector_field(
+      const DoFHandler<dim>                                   &dof_handler,
       const LinearAlgebra::distributed::Vector<Number>        &solution_height,
       const LinearAlgebra::distributed::Vector<Number>        &solution_discharge,
       const LinearAlgebra::distributed::Vector<Number>        &solution_tracer,
-      const std::vector<Point<dim>>                           &evaluation_points,
+      std::map<unsigned int, Point<dim>>                      &evaluation_points,
       LinearAlgebra::distributed::Vector<Number>              &computed_vector_quantities,
       std::vector<LinearAlgebra::distributed::Vector<Number>> &computed_scalar_quantities) const;
 
@@ -608,14 +609,32 @@ namespace SpaceDiscretization
                     *bc->height_inflow_boundaries.find(boundary_id)->second,
                     phi_height.quadrature_point(q), 0);
                 q_p = q_m;
-                if (rho_u_dot_n < -1e-12)
+
+                VectorizedArray<Number> mask_outflow;
+                unsigned int at_outflow = 0;
+                for (unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v)
                   {
-                    t_p = evaluate_function_tracer<dim, Number, n_tra>(
-                          *bc->supercritical_inflow_boundaries.find(boundary_id)->second,
-                          phi_tracer.quadrature_point(q),
-                          phi_tracer.get_value(q));
+                    if (rho_u_dot_n[v] < -1e-12)
+                        mask_outflow[v] = 0.;
+                    else
+                      {
+                        at_outflow += 1;
+                        mask_outflow[v] = 1.;
+                      }
                   }
-                else t_p = t_m;
+                if (at_outflow == 0)
+                  t_p = evaluate_function_tracer<dim, Number, n_tra>(
+                        *bc->supercritical_inflow_boundaries.find(boundary_id)->second,
+                        phi_tracer.quadrature_point(q),
+                        phi_tracer.get_value(q));
+                else if (at_outflow == VectorizedArray<Number>::size())
+                  t_p = t_m;
+                else
+                  t_p = evaluate_function_tracer<dim, Number, n_tra>(
+                        *bc->supercritical_inflow_boundaries.find(boundary_id)->second,
+                        phi_tracer.quadrature_point(q),
+                        phi_tracer.get_value(q)) * (1.-mask_outflow) + mask_outflow*t_m;
+
               }
             else if (bc->discharge_inflow_boundaries.find(boundary_id) !=
                      bc->discharge_inflow_boundaries.end())
@@ -625,14 +644,32 @@ namespace SpaceDiscretization
                   evaluate_function<dim, Number>(
                     *bc->discharge_inflow_boundaries.find(boundary_id)->second,
                     phi_height.quadrature_point(q), 1) * normal;
-                if (rho_u_dot_n < -1e-12)
+
+                VectorizedArray<Number> mask_outflow;
+                unsigned int at_outflow = 0;
+                for (unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v)
                   {
-                    t_p = evaluate_function_tracer<dim, Number, n_tra>(
-                          *bc->supercritical_inflow_boundaries.find(boundary_id)->second,
-                          phi_tracer.quadrature_point(q),
-                          phi_tracer.get_value(q));
+                    if (rho_u_dot_n[v] < -1e-12)
+                        mask_outflow[v] = 0.;
+                    else
+                      {
+                        at_outflow += 1;
+                        mask_outflow[v] = 1.;
+                      }
                   }
-                else t_p = t_m;
+                if (at_outflow == 0)
+                  t_p = evaluate_function_tracer<dim, Number, n_tra>(
+                        *bc->supercritical_inflow_boundaries.find(boundary_id)->second,
+                        phi_tracer.quadrature_point(q),
+                        phi_tracer.get_value(q));
+                else if (at_outflow == VectorizedArray<Number>::size())
+                  t_p = t_m;
+                else
+                  t_p = evaluate_function_tracer<dim, Number, n_tra>(
+                        *bc->supercritical_inflow_boundaries.find(boundary_id)->second,
+                        phi_tracer.quadrature_point(q),
+                        phi_tracer.get_value(q)) * (1.-mask_outflow) + mask_outflow*t_m;
+
               }
             else if (bc->absorbing_outflow_boundaries.find(boundary_id) !=
                      bc->absorbing_outflow_boundaries.end())
@@ -1102,37 +1139,39 @@ namespace SpaceDiscretization
   // the `evaluate_function` has been adapted to a non-vectorized loop.
   template <int dim, int n_tra, int degree, int n_points_1d>
   void OceanoOperatorWithTracer<dim, n_tra, degree, n_points_1d>::evaluate_vector_field(
+    const DoFHandler<dim>                                   &dof_handler,
     const LinearAlgebra::distributed::Vector<Number>        &solution_height,
     const LinearAlgebra::distributed::Vector<Number>        &solution_discharge,
     const LinearAlgebra::distributed::Vector<Number>        &solution_tracer,
-    const std::vector<Point<dim>>                           &evaluation_points,
+    std::map<unsigned int, Point<dim>>                      &evaluation_points,
     LinearAlgebra::distributed::Vector<Number>              &computed_vector_quantities,
     std::vector<LinearAlgebra::distributed::Vector<Number>> &computed_scalar_quantities) const
   {
-    const unsigned int n_evaluation_points = solution_height.size();
     const std::vector<std::string> postproc_names = model.postproc_vars_name;
 
-    //if (do_schlieren_plot == true)
-    //  Assert(inputs.solution_gradients.size() == n_evaluation_points,
-    //         ExcInternalError());
-    Assert(computed_vector_quantities.size() == n_evaluation_points*dim,
+    Assert(computed_vector_quantities.locally_owned_size() == solution_height.locally_owned_size()*dim,
            ExcInternalError());
-    Assert(computed_scalar_quantities.size() == postproc_names.size()-dim,
+    Assert(computed_scalar_quantities.size() == postproc_names.size()-dim ||
+           computed_scalar_quantities.empty(),
+           ExcInternalError());
+    Assert(solution_discharge.locally_owned_size() == solution_height.locally_owned_size()*dim,
            ExcInternalError());
 
-    for (unsigned int p = 0; p < n_evaluation_points; ++p)
+    IndexSet myset = dof_handler.locally_owned_dofs();
+    IndexSet::ElementIterator index = myset.begin();
+    for (index=myset.begin(); index!=myset.end(); ++index)
       {
-        const auto height = solution_height[p];
+        const auto height = solution_height(*index);
         Tensor<1, dim> discharge;
         for (unsigned int d = 0; d < dim; ++d)
-          discharge[d] = solution_discharge[dim*p+d];
+          discharge[d] = solution_discharge(*index*dim+d);
         Tensor<1, n_tra> tracer;
         for (unsigned int t = 0; t < n_tra; ++t)
-          tracer[t] = solution_tracer[n_tra*p+t];
+          tracer[t] = solution_tracer(*index*n_tra+t);
 
-        Point<dim, VectorizedArray<Number>> x_evaluation_points;
+        Point<dim,VectorizedArray<Number>> x_evaluation_points;
         for (unsigned int d = 0; d < dim; ++d)
-          x_evaluation_points[d] = evaluation_points[p][d];
+          x_evaluation_points[d] = evaluation_points[*index][d];
 
         const auto data = evaluate_function<dim, Number>(
             *bc->problem_data, x_evaluation_points, 0);
@@ -1140,34 +1179,31 @@ namespace SpaceDiscretization
         const Tensor<1, dim> velocity = model.velocity(height, discharge, data[0]);
 
         for (unsigned int d = 0; d < dim; ++d)
-          computed_vector_quantities[dim*p+d] = velocity[d];
+          computed_vector_quantities(*index*dim+d) = velocity[d];
 
-        for (unsigned int v = 0; v < postproc_names.size()-dim; ++v)
-          {
-            if (postproc_names[v+dim] == "pressure")
-              computed_scalar_quantities[v][p] =
-                model.pressure(height, data[0]);
-            else if (postproc_names[v+dim] == "depth")
-              computed_scalar_quantities[v][p] = height + data[0];
-            else if (postproc_names[v+dim] == "speed_of_sound")
-              computed_scalar_quantities[v][p] =
-                std::sqrt(model.square_wavespeed(height, data[0]));
-            else if (postproc_names[v+dim] == "tracer")
-              for (unsigned int t = 0; t < n_tra; ++t)
-                computed_scalar_quantities[v][p] =
-                  model.tracer(height, tracer, data[0])[t];
-            else
-              {
-                std::cout << "Postprocessing variable " << postproc_names[dim+v]
-                          << " does not exist. Consider to code it in your model"
-                          << std::endl;
-                 Assert(false, ExcNotImplemented());
-              }
-          }
-
-        //if (do_schlieren_plot == true)
-        //  computed_quantities[p](n_vars) =
-        //    inputs.solution_gradients[p][0] * inputs.solution_gradients[p][0];
+        if (!computed_scalar_quantities.empty())
+          for (unsigned int v = 0; v < postproc_names.size()-dim; ++v)
+            {
+              if (postproc_names[v+dim] == "pressure")
+                computed_scalar_quantities[v](*index) =
+                  model.pressure(height, data[0]);
+              else if (postproc_names[v+dim] == "depth")
+                computed_scalar_quantities[v](*index) = height + data[0];
+              else if (postproc_names[v+dim] == "speed_of_sound")
+                computed_scalar_quantities[v](*index) =
+                  std::sqrt(model.square_wavespeed(height, data[0]));
+              else if (postproc_names[v+dim] == "tracer")
+                for (unsigned int t = 0; t < n_tra; ++t)
+                  computed_scalar_quantities[v](*index) =
+                    model.tracer(height, tracer, data[0])[t];
+              else
+                {
+                  std::cout << "Postprocessing variable " << postproc_names[dim+v]
+                            << " does not exist. Consider to code it in your model"
+                            << std::endl;
+                  Assert(false, ExcNotImplemented());
+                }
+            }
       }
   }
 

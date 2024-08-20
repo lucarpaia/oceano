@@ -46,6 +46,15 @@ namespace Amr
   // classes under the same namespace. Since just one estimate function
   // is changing, we simply switches the different estimate with the
   // preprocessors.
+  //
+  // Derivative of the solutions are computed with the class `DerivativeApproximation`.
+  // Ghost indices made available in the vector are a tight set of only those
+  // indices that are requested by the the function that compute the approximate
+  // derivatives. Consequently the solution vector as-is is not suitable for the
+  // `DerivativeApproximation` class. The trick is to change the ghost part of the
+  // partition, for example using a temporary vector and
+  // `LinearAlgebra::distributed::Vector::copy_locally_owned_data_from()` as
+  // shown below.
   class AmrTuner
   {
   public:
@@ -62,10 +71,11 @@ namespace Amr
     // It is overloaded by the same function defined in the derived classes.
     template <int dim, typename Number>
     void estimate_error(
-      const Mapping<dim>                               &mapping,
-      const DoFHandler<dim>                            &dof,
-      const LinearAlgebra::distributed::Vector<Number> &solution,
-      Vector<float>                                    &error_estimate) const;
+      const parallel::distributed::Triangulation<dim>               &triangulation,
+      const Mapping<dim>                                            &mapping,
+      const std::vector<DoFHandler<dim> *>                          &dof,
+      const std::vector<LinearAlgebra::distributed::Vector<Number>> &solution,
+      Vector<float>                                                 &error_estimate) const;
   };
     
   // The constructor of the class takes as arguments 
@@ -83,24 +93,75 @@ namespace Amr
     output_filename = prm.get("Error_filename");
     prm.leave_subsection();
   }
-  
-  
+
+
 #if defined AMR_HEIGHTGRADIENT
   // The first error estimator is the simpler one. The gradient of the
-  // free-surface. This is recommended only for surface waves
+  // free-surface (its norm). This is recommended only for surface waves
   // that are freely propagating. It is well suited for tsunamis waves,
   // for example.
   template <int dim, typename Number>
     void AmrTuner::estimate_error(
-      const Mapping<dim>                               &mapping,
-      const DoFHandler<dim>                            &dof,
-      const LinearAlgebra::distributed::Vector<Number> &solution,
-      Vector<float>                                    &error_estimate) const
+      const parallel::distributed::Triangulation<dim>               &triangulation,
+      const Mapping<dim>                                            &mapping,
+      const std::vector<DoFHandler<dim> *>                          &dof,
+      const std::vector<LinearAlgebra::distributed::Vector<Number>> &solution,
+      Vector<float>                                                 &error_estimate) const
   {
+    const IndexSet locally_relevant_dofs = DoFTools::extract_locally_relevant_dofs(*dof[0]);
+    LinearAlgebra::distributed::Vector<Number> copy_vec(solution[0]);
+    copy_vec.reinit(dof[0]->locally_owned_dofs(),
+                    locally_relevant_dofs,
+                    triangulation.get_communicator());
+    copy_vec.copy_locally_owned_data_from(solution[0]);
+    copy_vec.update_ghost_values();
+
     DerivativeApproximation::approximate_gradient(mapping,
-                                                  dof,
-                                                  solution,
+                                                  *dof[0],
+                                                  copy_vec,
                                                   error_estimate);
+  }
+#elif defined AMR_VORTICITY
+  // The second error estimator uses the vorticity. This can detect
+  // vortices, eddies and fronts.
+  template <int dim, typename Number>
+    void AmrTuner::estimate_error(
+      const parallel::distributed::Triangulation<dim>               &triangulation,
+      const Mapping<dim>                                            &mapping,
+      const std::vector<DoFHandler<dim> *>                          &dof,
+      const std::vector<LinearAlgebra::distributed::Vector<Number>> &solution,
+      Vector<float>                                                 &error_estimate) const
+  {
+    Tensor<1,dim> du;
+    Tensor<1,dim> dv;
+
+    const IndexSet locally_relevant_dofs = DoFTools::extract_locally_relevant_dofs(*dof[1]);
+    LinearAlgebra::distributed::Vector<Number> copy_vec(solution[1]);
+    copy_vec.reinit(dof[1]->locally_owned_dofs(),
+                    locally_relevant_dofs,
+                    triangulation.get_communicator());
+    copy_vec.copy_locally_owned_data_from(solution[1]);
+    copy_vec.update_ghost_values();
+
+    for (const auto &cell : dof[1]->active_cell_iterators())
+      {
+        if (cell->is_locally_owned())
+          {
+            DerivativeApproximation::approximate_derivative_tensor(mapping,
+                                                                   *dof[1],
+                                                                   copy_vec,
+                                                                   cell,
+                                                                   du,
+                                                                   0);
+            DerivativeApproximation::approximate_derivative_tensor(mapping,
+                                                                   *dof[1],
+                                                                   copy_vec,
+                                                                   cell,
+                                                                   dv,
+                                                                   1);
+          }
+        error_estimate(cell->active_cell_index()) = std::abs(dv[0]-du[1]);
+      }
   }
 #endif
 

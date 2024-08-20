@@ -224,10 +224,11 @@ namespace SpaceDiscretization
       const LinearAlgebra::distributed::Vector<Number> &solution_discharge) const;
 
     void evaluate_vector_field(
+      const DoFHandler<dim>                                   &dof_handler_height,
       const LinearAlgebra::distributed::Vector<Number>        &solution_height,
       const LinearAlgebra::distributed::Vector<Number>        &solution_discharge,
       const LinearAlgebra::distributed::Vector<Number>        &solution_tracer,
-      const std::map<unsigned int, Point<dim>>                &evaluation_points,
+      std::map<unsigned int, Point<dim>>                      &evaluation_points,
       LinearAlgebra::distributed::Vector<Number>              &computed_vector_quantities,
       std::vector<LinearAlgebra::distributed::Vector<Number>> &computed_scalar_quantities) const;
 
@@ -890,7 +891,9 @@ namespace SpaceDiscretization
   // variables. We do this in a post-processing step, and only for the case
   // when we both are at an outflow boundary and the dot product between the
   // normal vector and the momentum (or, equivalently, velocity) is
-  // negative.
+  // negative. As we work on data of several quadrature points at once for
+  // SIMD vectorizations, we here need to explicitly loop over the array
+  // entries of the SIMD array.
   //
   // The fourth boundary conditions is very important in coastal ocean and
   // hydraulic simulation since the flow conditions are essentially
@@ -901,9 +904,6 @@ namespace SpaceDiscretization
   // boundary state from a far-field state (typically a flow at rest) from
   // the theory of characteristics, that is by equating at the boundary location,
   // the outgoing Riemann invariant with the ingoing one.
-  // As we work on data of several quadrature points at once for
-  // SIMD vectorizations, we here need to explicitly loop over the array
-  // entries of the SIMD array.
   //
   // In the implementation below, we check for the various types
   // of boundaries at the level of quadrature points. Of course, we could also
@@ -2154,48 +2154,63 @@ namespace SpaceDiscretization
   // For now these variables can depend only on the solution and on given data. For the
   // implementation of output variables depending on given data see the deal.ii documentation:
   // https://www.dealii.org/current/doxygen/deal.II/classDataPostprocessorVector.html
-  // In general the output can also depend on the solution gradient (think for example to the
-  // vorticity) but this part has been commented for now, see `do_schlieren_plot`.
+  // In general the output can also depend on the solution gradient (think for example
+  // to the vorticity) but this part has been commented for now, see `do_schlieren_plot`.
   // For the postprocessed variables, a well defined order must be followed: first the
   // velocity vector, then all the scalars.
   //
-  // The loop over the evaluation points seems not vectorized.
-  // However the usual way to recover data is with
-  // the `evaluate_function` that operates on vectorized data. With a few tricks the
+  // A few more words about the loop over the evaluation points. We use the class
+  // `IndexSet` that represents a subset of dofs. It can be used to denote the set
+  // of locally owned degrees of freedom or those among all degrees of freedom that
+  // are stored on a particular processor in a distributed parallel computation.
+  // We iterate over the `IndexSets` with the usual `begin()` and `end()`. Then the
+  // access to the vector is done with the global index. Since we are operating
+  // on locally owened dofs that represent a contiguous range, the access should be
+  // as fast as a local access.
+  // Of course we are assuming that all the solution variables are distributed in the
+  // same fashion over the processores. For safaty the last assert checks
+  // the size of the solution vectors on each processor and throw an exception if
+  // they are not equals.
+  //
+  // The iterator is not vectorized. However the usual way to recover data with
+  // the `evaluate_function` operates on vectorized data. With a few tricks the
   // the `evaluate_function` has been adapted to a non-vectorized loop.
+  //
+  // In some case we would like to compute only the velocity field.
+  // Instead of using a default parameter, which does not fit well with arguments
+  // passed by reference, we just check if the entry scalar field is empty or not.
   template <int dim, int n_tra, int degree, int n_points_1d>
   void OceanoOperator<dim, n_tra, degree, n_points_1d>::evaluate_vector_field(
+    const DoFHandler<dim>                                   &dof_handler,
     const LinearAlgebra::distributed::Vector<Number>        &solution_height,
     const LinearAlgebra::distributed::Vector<Number>        &solution_discharge,
     const LinearAlgebra::distributed::Vector<Number>        &/*solution_tracer*/,
-    const std::map<unsigned int, Point<dim>>                &evaluation_points,
+    std::map<unsigned int, Point<dim>>                      &evaluation_points,
     LinearAlgebra::distributed::Vector<Number>              &computed_vector_quantities,
     std::vector<LinearAlgebra::distributed::Vector<Number>> &computed_scalar_quantities) const
   {
-    const unsigned int n_evaluation_points = solution_height.locally_owned_size(); //solution_height.size();
     const std::vector<std::string> postproc_names = model.postproc_vars_name;
 
-    //if (do_schlieren_plot == true)
-    //  Assert(inputs.solution_gradients.size() == n_evaluation_points,
-    //         ExcInternalError());
-    Assert(computed_vector_quantities.locally_owned_size() == n_evaluation_points*dim,
+    Assert(computed_vector_quantities.locally_owned_size() == solution_height.locally_owned_size()*dim,
            ExcInternalError());
-    Assert(computed_scalar_quantities.size() == postproc_names.size()-dim,
+    Assert(computed_scalar_quantities.size() == postproc_names.size()-dim ||
+           computed_scalar_quantities.empty(),
+           ExcInternalError());
+    Assert(solution_discharge.locally_owned_size() == solution_height.locally_owned_size()*dim,
            ExcInternalError());
 
-    //std::cout << n_evaluation_points << " - " << evaluation_points.size() << std::endl; !lrp: still to debug in //
-    auto it = evaluation_points.begin();
-    for (unsigned int p = 0; p < n_evaluation_points; ++p)
+    IndexSet myset = dof_handler.locally_owned_dofs();
+    IndexSet::ElementIterator index = myset.begin();
+    for (index=myset.begin(); index!=myset.end(); ++index)
       {
-        const auto height = solution_height.local_element(p);
+        const auto height = solution_height(*index);
         Tensor<1, dim> discharge;
         for (unsigned int d = 0; d < dim; ++d)
-          discharge[d] = solution_discharge.local_element(dim*p+d);
+          discharge[d] = solution_discharge(*index*dim+d);
 
-        Point<dim, VectorizedArray<Number>> x_evaluation_points;
+        Point<dim,VectorizedArray<Number>> x_evaluation_points;
         for (unsigned int d = 0; d < dim; ++d)
-          x_evaluation_points[d] = it->second[d];
-	it++;
+          x_evaluation_points[d] = evaluation_points[*index][d];
 
         const auto data = evaluate_function<dim, Number>(
             *bc->problem_data, x_evaluation_points, 0);
@@ -2203,30 +2218,27 @@ namespace SpaceDiscretization
         const Tensor<1, dim> velocity = model.velocity<dim>(height, discharge, data[0]);
 
         for (unsigned int d = 0; d < dim; ++d)
-          computed_vector_quantities.local_element(dim*p+d) = velocity[d];
+          computed_vector_quantities(*index*dim+d) = velocity[d];
 
-        for (unsigned int v = 0; v < postproc_names.size()-dim; ++v)
-          {
-            if (postproc_names[v+dim] == "pressure")
-              computed_scalar_quantities[v].local_element(p) =
-                model.pressure(height, data[0]);
-            else if (postproc_names[v+dim] == "depth")
-              computed_scalar_quantities[v].local_element(p) = height + data[0];
-            else if (postproc_names[v+dim] == "speed_of_sound")
-              computed_scalar_quantities[v].local_element(p) =
-                std::sqrt(model.square_wavespeed(height, data[0]));
-            else
-              {
-                std::cout << "Postprocessing variable " << postproc_names[dim+v]
-                          << " does not exist. Consider to code it in your model"
-                          << std::endl;
-                Assert(false, ExcNotImplemented());
-              }
-          }
-
-        //if (do_schlieren_plot == true)
-        //  computed_quantities[p](n_vars) =
-        //    inputs.solution_gradients[p][0] * inputs.solution_gradients[p][0];
+        if (!computed_scalar_quantities.empty())
+          for (unsigned int v = 0; v < postproc_names.size()-dim; ++v)
+            {
+              if (postproc_names[v+dim] == "pressure")
+                computed_scalar_quantities[v](*index) =
+                  model.pressure(height, data[0]);
+              else if (postproc_names[v+dim] == "depth")
+                computed_scalar_quantities[v](*index) = height + data[0];
+              else if (postproc_names[v+dim] == "speed_of_sound")
+                computed_scalar_quantities[v](*index) =
+                  std::sqrt(model.square_wavespeed(height, data[0]));
+              else
+                {
+                  std::cout << "Postprocessing variable " << postproc_names[dim+v]
+                            << " does not exist. Consider to code it in your model"
+                            << std::endl;
+                  Assert(false, ExcNotImplemented());
+                }
+            }
       }
   }
 

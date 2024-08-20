@@ -82,6 +82,7 @@
 #undef  PHYSICS_WINDSTRESSQUADRATIC
 // We end with a tuner class for the AMR:
 #define AMR_HEIGHTGRADIENT
+#undef  AMR_VORTICITY
 //
 //
 //
@@ -465,8 +466,12 @@ namespace Problem
     pcout.get_stream().imbue(std::locale(""));
     pcout << "Initial number of cells: " << std::setw(8) << triangulation.n_global_active_cells()
           << std::endl;
-    pcout.get_stream().imbue(s);
+
     triangulation.refine_global(n_global_refinements);
+
+    pcout << "Initial number of cells after global refinement: " << std::setw(8)
+          << triangulation.n_global_active_cells() << std::endl;
+    pcout.get_stream().imbue(s);
 
     oceano_operator.bc->set_boundary_conditions();
   }
@@ -499,7 +504,9 @@ namespace Problem
   // cells for refinement/coarsening, execute the remeshing and transfer the solution
   // onto the new grid. We have a look to each task:
   // \begin{itemize}
-  // \item
+  // \item we estimate the error. Since this operation is case-dependent it is left
+  // to a specific class and to its member function `estimate_error`. We only remark
+  // that it computes a cellwise error based on all the components of the solution.
   // \item next we find out which cells to refine/coarsen: we use two functions from
   // a class that implements several different algorithms to refine a triangulation
   // based on cell-wise error indicators. This function are very simple: mark for
@@ -534,10 +541,31 @@ namespace Problem
 #ifdef DEAL_II_WITH_P4EST
       Vector<float> estimated_error_per_cell(triangulation.n_active_cells());
 
-      amr_tuner.estimate_error(mapping,
-                               dof_handler_height,
-                               solution_height,
-                               estimated_error_per_cell);
+      std::map<unsigned int, Point<dim>> x_evaluation_points =
+        DoFTools::map_dofs_to_support_points(mapping,
+                                             dof_handler_height);
+
+      LinearAlgebra::distributed::Vector<Number> postprocess_velocity;
+      postprocess_velocity.reinit(solution_discharge);
+      std::vector<LinearAlgebra::distributed::Vector<Number>>
+        postprocess_scalar_variables;
+
+      oceano_operator.evaluate_vector_field(dof_handler_height,
+                                            solution_height,
+                                            solution_discharge,
+                                            solution_tracer,
+                                            x_evaluation_points,
+                                            postprocess_velocity,
+                                            postprocess_scalar_variables);
+
+      std::vector<DoFHandler<dim> *> dof_handlers;
+      dof_handlers.push_back(&dof_handler_height);
+      dof_handlers.push_back(&dof_handler_discharge);
+      amr_tuner.estimate_error<dim,Number>(triangulation,
+                                           mapping,
+                                           dof_handlers,
+                                           {solution_height, postprocess_velocity},
+                                           estimated_error_per_cell);
 
       float max = estimated_error_per_cell.linfty_norm();
       if (max > FLT_EPSILON)
@@ -728,7 +756,8 @@ namespace Problem
         std::vector<LinearAlgebra::distributed::Vector<Number>>
           postprocess_scalar_variables(postprocessor.n_postproc_vars-dim, solution_height);
 
-        oceano_operator.evaluate_vector_field(solution_height,
+        oceano_operator.evaluate_vector_field(dof_handler_height,
+                                              solution_height,
                                               solution_discharge,
                                               solution_tracer,
                                               x_evaluation_points,
@@ -882,6 +911,8 @@ namespace Problem
     // detail.
     std::locale s = pcout.get_stream().getloc();
     pcout.get_stream().imbue(std::locale(""));
+    pcout << "Initial number of cells after local  refinement: " << std::setw(8)
+          << triangulation.n_global_active_cells() << std::endl;
     pcout << "Initial number of degrees of freedom: " << dof_handler_height.n_dofs()
              + dof_handler_discharge.n_dofs() + dof_handler_tracer.n_dofs()
           << " ( = " << ( 1 + dim + n_tra ) << " [vars] x "
