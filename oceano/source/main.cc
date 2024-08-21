@@ -502,34 +502,11 @@ namespace Problem
   // This function takes care of the adaptive mesh refinement. The tasks this
   // function performs are the classical one of AMR: estimate the error, mark the
   // cells for refinement/coarsening, execute the remeshing and transfer the solution
-  // onto the new grid. We have a look to each task:
-  // \begin{itemize}
-  // \item we estimate the error. Since this operation is case-dependent it is left
-  // to a specific class and to its member function `estimate_error`. We only remark
-  // that it computes a cellwise error based on all the components of the solution.
-  // \item next we find out which cells to refine/coarsen: we use two functions from
-  // a class that implements several different algorithms to refine a triangulation
-  // based on cell-wise error indicators. This function are very simple: mark for
-  // refinement if the error is above a given threshold, mark for coarsening if the
-  // error is below another minimal threshold. A successive intermediate step is
-  // necessary to make sure that no two cells are adjacent with a refinement level
-  // differing with more than one.
-  // \item As part of mesh refinement we need to transfer the solution vectors from
-  // the old mesh to the new one. To this end we use the SolutionTransfer class and
-  // the solution vectors that should be transferred to the new grid. Consequently, we
-  // we have to prepare initialize a SolutionTransfer object by attaching it to the old
-  // DoF handler. We then prepare the data vector containing the old solution for
-  // refinement.
-  // \item we actually do the refinement and recreate the DoF structure on the new grid.
-  // \item we transfer the solution vectors between the two different grids. We initialize
-  // a temporary vector to store the interpolated solution. Please note that in parallel
-  // computations the interpolation operates only on locally owned dofs. We thus zero out
-  // the ghost dofs of the source vector and after the interpolation we need to syncronize
-  // the ghost dofs owned on other processor with an update.
-  // \end{itemize}
+  // onto the new grid.
   // The preprocessor point out that we have implemented the AMR only with P4est, a tool that
   // handle mesh refinement on distributed architecture. Without a Deal.ii version compiled
   // with P4est mesh refinement is not active and a warning system is raised.
+  // We have a look to each task into more details.
   template <int dim, int n_tra>
   void OceanoProblem<dim, n_tra>::refine_grid(
     const Amr::AmrTuner &amr_tuner,
@@ -539,6 +516,12 @@ namespace Problem
       TimerOutput::Scope t(timer, "amr - remesh + remap");
 
 #ifdef DEAL_II_WITH_P4EST
+      // We estimate the error. Since this operation is case-dependent it is left
+      // to a specific class and to its member function `estimate_error`.
+      // This computes a cellwise error based on all the components of the solution.
+      // To reduce at the miniumum the calibration of the refinement/coarsen thresholds,
+      // we use dimensionless thresholds and we multiply them by the maximum error into
+      // the domain.
       Vector<float> estimated_error_per_cell(triangulation.n_active_cells());
 
       std::map<unsigned int, Point<dim>> x_evaluation_points =
@@ -567,9 +550,8 @@ namespace Problem
                                            {solution_height, postprocess_velocity},
                                            estimated_error_per_cell);
 
-      float max = estimated_error_per_cell.linfty_norm();
-      if (max > FLT_EPSILON)
-        estimated_error_per_cell /= max;
+      float max_error = estimated_error_per_cell.linfty_norm();
+      max_error = Utilities::MPI::max(max_error, MPI_COMM_WORLD);
 
       if (!amr_tuner.output_filename.empty())
         {
@@ -585,10 +567,17 @@ namespace Problem
           data_out.write_vtu_in_parallel(filename, MPI_COMM_WORLD);
         }
 
+      // Next we find out which cells to refine/coarsen: we use two functions from
+      // a class that implements several different algorithms to refine a triangulation
+      // based on cell-wise error indicators. This function are very simple: mark for
+      // refinement if the error is above a given threshold, mark for coarsening if the
+      // error is below another minimal threshold. A successive intermediate step is
+      // necessary to make sure that no two cells are adjacent with a refinement level
+      // differing with more than one.
       GridRefinement::refine(
-        triangulation, estimated_error_per_cell, amr_tuner.threshold_refinement);
+        triangulation, estimated_error_per_cell, amr_tuner.threshold_refinement * max_error);
       GridRefinement::coarsen(
-        triangulation, estimated_error_per_cell, amr_tuner.threshold_coarsening);
+        triangulation, estimated_error_per_cell, amr_tuner.threshold_coarsening * max_error);
       const unsigned int max_grid_level = amr_tuner.max_level_refinement;
       if (triangulation.n_levels() > max_grid_level)
         for (const auto &cell :
@@ -596,7 +585,12 @@ namespace Problem
           cell->clear_refine_flag();
       triangulation.prepare_coarsening_and_refinement();
 
-
+      // As part of mesh refinement we need to transfer the solution vectors from
+      // the old mesh to the new one. To this end we use the SolutionTransfer class and
+      // the solution vectors that should be transferred to the new grid. Consequently, we
+      // we have to initialize a SolutionTransfer object by attaching it to the old
+      // DoF handler. We then prepare the data vector containing the old solution for
+      // refinement.
       parallel::distributed::SolutionTransfer<dim, LinearAlgebra::distributed::Vector<Number>>
         solution_transfer_height(dof_handler_height);
       solution_transfer_height.prepare_for_coarsening_and_refinement(solution_height);
@@ -611,10 +605,15 @@ namespace Problem
       solution_transfer_tracer.prepare_for_coarsening_and_refinement(solution_tracer);
 #endif
 
-
+      // We actually do the refinement and recreate the DoF structure on the new grid.
       triangulation.execute_coarsening_and_refinement();
       make_dofs();
 
+      // We transfer the solution vectors between the two different grids. We initialize
+      // a temporary vector to store the interpolated solution. Please note that in parallel
+      // computations the interpolation operates only on locally owned dofs. We thus zero out
+      // the ghost dofs of the source vector and after the interpolation we need to syncronize
+      // the ghost dofs owned on other processor with an update.
       LinearAlgebra::distributed::Vector<Number> transfer_height;
       transfer_height.reinit(solution_height);
       transfer_height.zero_out_ghost_values();
