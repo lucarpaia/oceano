@@ -262,8 +262,7 @@ namespace Problem
     LinearAlgebra::distributed::Vector<Number> solution_height;
     LinearAlgebra::distributed::Vector<Number> solution_discharge;
     LinearAlgebra::distributed::Vector<Number> solution_tracer;
-
-    LinearAlgebra::distributed::Vector<Number> bathymetry;
+    LinearAlgebra::distributed::Vector<Number> data_bathymetry;
 
     ParameterHandler &prm;
 
@@ -488,7 +487,7 @@ namespace Problem
                                     dof_handler_discharge,
                                     dof_handler_tracer);
     oceano_operator.initialize_vector(solution_height, 0);
-    oceano_operator.initialize_vector(bathymetry, 0);
+    oceano_operator.initialize_vector(data_bathymetry, 0);
     oceano_operator.initialize_vector(solution_discharge, 1);
 #ifdef OCEANO_WITH_TRACERS
     oceano_operator.initialize_vector(solution_tracer, 2);
@@ -582,7 +581,7 @@ namespace Problem
 
       parallel::distributed::SolutionTransfer<dim, LinearAlgebra::distributed::Vector<Number>>
         solution_transfer_bathymetry(dof_handler_height);
-      solution_transfer_bathymetry.prepare_for_coarsening_and_refinement(bathymetry);
+      solution_transfer_bathymetry.prepare_for_coarsening_and_refinement(data_bathymetry);
 
 #ifdef OCEANO_WITH_TRACERS
       parallel::distributed::SolutionTransfer<dim, LinearAlgebra::distributed::Vector<Number>>
@@ -607,14 +606,14 @@ namespace Problem
       transfer_discharge.update_ghost_values();
 
       LinearAlgebra::distributed::Vector<Number> transfer_bathymetry;
-      transfer_bathymetry.reinit(bathymetry);
+      transfer_bathymetry.reinit(data_bathymetry);
       transfer_bathymetry.zero_out_ghost_values();
       solution_transfer_bathymetry.interpolate(transfer_bathymetry);
       transfer_bathymetry.update_ghost_values();
 
       solution_height = transfer_height;
       solution_discharge = transfer_discharge;
-      bathymetry = transfer_bathymetry;
+      data_bathymetry = transfer_bathymetry;
 
 #ifdef OCEANO_WITH_TRACERS
       LinearAlgebra::distributed::Vector<Number> transfer_tracer;
@@ -745,7 +744,7 @@ namespace Problem
         oceano_operator.evaluate_vector_field(solution_height,
                                               solution_discharge,
                                               solution_tracer,
-                                              bathymetry,
+                                              data_bathymetry,
                                               postprocess_vector_variables,
                                               postprocess_scalar_variables);
 
@@ -862,7 +861,8 @@ namespace Problem
 
     oceano_operator.project_hydro(
       ICBC::Ic<dimension, n_variables>(prm), solution_height, solution_discharge);
-    //TODO: Add projection of the bathymetry (do it inside project hydro or outside???)  
+    oceano_operator.project_data(
+      *oceano_operator.bc->problem_data, data_bathymetry);
 #ifdef OCEANO_WITH_TRACERS
     oceano_operator.project_tracers(
       ICBC::Ic<dimension, n_variables>(prm), solution_tracer);
@@ -1003,13 +1003,13 @@ namespace Problem
     time_step = courant_number  /
       oceano_operator.compute_cell_transport_speed(solution_height,
                                                    solution_discharge,
-                                                   bathymetry);
+                                                   data_bathymetry);
     pcout << "Time step size: " << time_step
           << ", initial minimal h: " << min_vertex_distance
           << ", initial transport scaling: "
           << 1. / oceano_operator.compute_cell_transport_speed(solution_height,
                                                                solution_discharge,
-                                                               bathymetry)
+                                                               data_bathymetry)
           << std::endl
           << std::endl;
 
@@ -1049,7 +1049,8 @@ namespace Problem
             Utilities::truncate_to_n_digits(
               oceano_operator.compute_cell_transport_speed(solution_height,
                                                            solution_discharge,
-                                                           bathymetry), 3);
+                                                           data_bathymetry
+                                                           ), 3);
 
         {
           TimerOutput::Scope t(timer, "rk time stepping total");
@@ -1059,7 +1060,7 @@ namespace Problem
                                        solution_height,
                                        solution_discharge,
                                        solution_tracer,
-                                       bathymetry,
+                                       data_bathymetry,
                                        rk_register_height_1,
                                        rk_register_discharge_1,
                                        rk_register_tracer_1,

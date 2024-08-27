@@ -96,6 +96,7 @@ namespace TimeIntegrator
                            VectorType              &solution_height,
                            VectorType              &solution_discharge,
                            VectorType              &solution_tracer,
+                           const VectorType        &data_bathymetry,
                            VectorType              &vec_ri_height,
                            VectorType              &vec_ri_discharge,
                            VectorType              &vec_ri_tracer,
@@ -215,6 +216,7 @@ namespace TimeIntegrator
     VectorType              &solution_height,
     VectorType              &solution_discharge,
     VectorType              &solution_tracer,
+    const VectorType        &data_bathymetry,
     VectorType              &vec_ri_height,
     VectorType              &vec_ri_discharge,
     VectorType              &vec_ri_tracer,
@@ -241,7 +243,7 @@ namespace TimeIntegrator
                                      (0 == ci.size() - 1 ?
                                        &b_i[0] :
                                        &a_i[0][0]),
-                                     {solution_height, solution_discharge},
+                                     {solution_height, solution_discharge, data_bathymetry},
                                      vec_ki_height,
                                      vec_ki_discharge,
                                      solution_height,
@@ -253,7 +255,7 @@ namespace TimeIntegrator
                                        (0 == ci.size() - 1 ?
                                          &b_i[0] :
                                          &a_i[0][0]),
-                                       {solution_height, solution_discharge, solution_tracer},
+                                       {solution_height, solution_discharge, solution_tracer, data_bathymetry},
                                        vec_ki_tracer,
                                        solution_tracer,
                                        vec_ri_tracer);
@@ -268,7 +270,7 @@ namespace TimeIntegrator
                                          (stage == ci.size() - 1 ?
                                            &b_i[0] :
                                            &a_i[stage][0]),
-                                         {vec_ri_height, vec_ri_discharge},
+                                         {vec_ri_height, vec_ri_discharge, data_bathymetry},
                                          vec_ki_height,
                                          vec_ki_discharge,
                                          solution_height,
@@ -280,7 +282,7 @@ namespace TimeIntegrator
                                            (stage == ci.size() - 1 ?
                                              &b_i[0] :
                                              &a_i[stage][0]),
-                                          {vec_ri_height, vec_ri_discharge, vec_ri_tracer},
+                                          {vec_ri_height, vec_ri_discharge, vec_ri_tracer, data_bathymetry},
                                           vec_ki_tracer,
                                           solution_tracer,
                                           vec_ri_tracer);

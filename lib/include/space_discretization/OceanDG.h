@@ -214,6 +214,9 @@ namespace SpaceDiscretization
                        LinearAlgebra::distributed::Vector<Number> &solution_height,
                        LinearAlgebra::distributed::Vector<Number> &solution_discharge) const;
 
+    void project_data(const Function<dim> &                       function,
+                      LinearAlgebra::distributed::Vector<Number> &data) const;
+
     std::array<double, 2> compute_errors_hydro(
       const Function<dim> &                             function,
       const LinearAlgebra::distributed::Vector<Number> &solution_height,
@@ -221,13 +224,14 @@ namespace SpaceDiscretization
 
     double compute_cell_transport_speed(
       const LinearAlgebra::distributed::Vector<Number> &solution_height,
-      const LinearAlgebra::distributed::Vector<Number> &solution_discharge) const;
+      const LinearAlgebra::distributed::Vector<Number> &solution_discharge,
+      const LinearAlgebra::distributed::Vector<Number> &data_bathymetry) const;
 
     void evaluate_vector_field(
       const LinearAlgebra::distributed::Vector<Number>        &solution_height,
       const LinearAlgebra::distributed::Vector<Number>        &solution_discharge,
       const LinearAlgebra::distributed::Vector<Number>        &solution_tracer,
-      const std::map<unsigned int, Point<dim>>                &evaluation_points,
+      const LinearAlgebra::distributed::Vector<Number>        &data_bathymetry,
       LinearAlgebra::distributed::Vector<Number>              &computed_vector_quantities,
       std::vector<LinearAlgebra::distributed::Vector<Number>> &computed_scalar_quantities) const;
 
@@ -545,7 +549,6 @@ namespace SpaceDiscretization
                               | EvaluationFlags::gradients);
         phi_discharge.reinit(cell);
         phi_discharge.gather_evaluate(src[1], EvaluationFlags::values);
-
         phi_bathymetry.reinit(cell);
         phi_bathymetry.gather_evaluate(src.back(), EvaluationFlags::values);
 
@@ -592,7 +595,6 @@ namespace SpaceDiscretization
                               | EvaluationFlags::gradients);
         phi_discharge.reinit(cell);
         phi_discharge.gather_evaluate(src[1], EvaluationFlags::values);
-
         phi_bathymetry.reinit(cell);
         phi_bathymetry.gather_evaluate(src.back(), EvaluationFlags::values);
 
@@ -638,7 +640,6 @@ namespace SpaceDiscretization
         phi_height.gather_evaluate(src[0], EvaluationFlags::values);
         phi_discharge.reinit(cell);
         phi_discharge.gather_evaluate(src[1], EvaluationFlags::values);
-
         phi_bathymetry.reinit(cell);
         phi_bathymetry.gather_evaluate(src.back(), EvaluationFlags::values);
 
@@ -751,11 +752,11 @@ namespace SpaceDiscretization
     FEFaceEvaluation<dim, degree, n_points_1d, 1, Number> phi_height_m(data,
                                                                       true, 0),
                                                           phi_bathymetry_m(data,
-                                                                           true, 0);
+                                                                          true, 0);
     FEFaceEvaluation<dim, degree, n_points_1d, 1, Number> phi_height_p(data,
                                                                       false, 0),
                                                           phi_bathymetry_p(data,
-                                                                           false, 0);
+                                                                          false, 0);
     FEFaceEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge_m(data,
                                                                       true, 1);
     FEFaceEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge_p(data,
@@ -808,11 +809,11 @@ namespace SpaceDiscretization
     const std::pair<unsigned int, unsigned int>                   &face_range) const
   {
     FEFaceEvaluation<dim, degree, n_points_1d, 1, Number> phi_height_m(data,
-                                                                      true, 0),
+                                                                       true, 0),
                                                           phi_bathymetry_m(data,
                                                                            true, 0);
     FEFaceEvaluation<dim, degree, n_points_1d, 1, Number> phi_height_p(data,
-                                                                      false, 0),
+                                                                       false, 0),
                                                           phi_bathymetry_p(data,
                                                                            false, 0);
     FEFaceEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge_m(data,
@@ -1069,6 +1070,8 @@ namespace SpaceDiscretization
         phi_height.gather_evaluate(src[0], EvaluationFlags::values);
         phi_discharge.reinit(face);
         phi_discharge.gather_evaluate(src[1], EvaluationFlags::values);
+        phi_bathymetry.reinit(face);
+        phi_bathymetry.gather_evaluate(src.back(), EvaluationFlags::values);
 
         for (unsigned int q = 0; q < phi_discharge.n_q_points; ++q)
           {
@@ -1273,7 +1276,6 @@ namespace SpaceDiscretization
         phi_height_ri.gather_evaluate(src[1], EvaluationFlags::values);
         phi_discharge_ri.reinit(cell);
         phi_discharge_ri.gather_evaluate(src[2], EvaluationFlags::values);
-
         phi_bathymetry.reinit(cell);
         phi_bathymetry.gather_evaluate(src.back(), EvaluationFlags::values);
 
@@ -1972,6 +1974,31 @@ namespace SpaceDiscretization
       }
   }
 
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_tra, degree, n_points_1d>::project_data(
+    const Function<dim> &                       function,
+    LinearAlgebra::distributed::Vector<Number> &data_bathymetry) const
+  {
+    FEEvaluation<dim, degree, degree + 1, 1, Number> phi_height(data, 0, 1);
+    MatrixFreeOperators::CellwiseInverseMassMatrix<dim, degree, 1, Number>
+      inverse_height(phi_height);
+    data_bathymetry.zero_out_ghost_values();
+    for (unsigned int cell = 0; cell < data.n_cell_batches(); ++cell)
+      {
+        phi_height.reinit(cell);
+        for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
+          phi_height.submit_dof_value(evaluate_function<dim, Number>(
+          					 function,
+                                                 phi_height.quadrature_point(q),
+                                                 0),
+                               q);
+        inverse_height.transform_from_q_points_to_basis(1,
+                                                 phi_height.begin_dof_values(),
+                                                 phi_height.begin_dof_values());
+        phi_height.set_dof_values(data_bathymetry);
+      }
+  }
+
   // The next function again repeats functionality also provided by the
   // deal.II library, namely VectorTools::integrate_difference(). We here show
   // the explicit code to highlight how the vectorization across several cells
@@ -2102,7 +2129,7 @@ namespace SpaceDiscretization
   double OceanoOperator<dim, n_tra, degree, n_points_1d>::compute_cell_transport_speed(
     const LinearAlgebra::distributed::Vector<Number> &solution_height,
     const LinearAlgebra::distributed::Vector<Number> &solution_discharge,
-    const LinearAlgebra::distributed::Vector<Number> &bathymetry) const
+    const LinearAlgebra::distributed::Vector<Number> &data_bathymetry) const
   {
     TimerOutput::Scope t(timer, "compute transport speed");
     Number             max_transport = 0;
@@ -2117,11 +2144,13 @@ namespace SpaceDiscretization
         phi_discharge.reinit(cell);
         phi_discharge.gather_evaluate(solution_discharge, EvaluationFlags::values);
         phi_bathymetry.reinit(cell);
-        phi_bathymetry.gather_evaluate(bathymetry, EvaluationFlags::values);
+        phi_bathymetry.gather_evaluate(data_bathymetry, EvaluationFlags::values);
+
         VectorizedArray<Number> local_max = 0.;
         for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
           {
             const VectorizedArray<Number> data_q = phi_bathymetry.get_value(q);
+
             const auto zq = phi_height.get_value(q);
             const auto qq = phi_discharge.get_value(q);
             const auto velocity = model.velocity<dim>(zq, qq, data_q);
@@ -2195,7 +2224,7 @@ namespace SpaceDiscretization
     const LinearAlgebra::distributed::Vector<Number>        &solution_height,
     const LinearAlgebra::distributed::Vector<Number>        &solution_discharge,
     const LinearAlgebra::distributed::Vector<Number>        &/*solution_tracer*/,
-    const LinearAlgebra::distributed::Vector<Number>        &bathymetry_pol,
+    const LinearAlgebra::distributed::Vector<Number>        &data_bathymetry,
     LinearAlgebra::distributed::Vector<Number>              &computed_vector_quantities,
     std::vector<LinearAlgebra::distributed::Vector<Number>> &computed_scalar_quantities) const
   {
@@ -2218,9 +2247,9 @@ namespace SpaceDiscretization
         for (unsigned int d = 0; d < dim; ++d)
           discharge[d] = solution_discharge.local_element(dim*p+d);
 
-        const auto data = bathymetry_pol[p];
-
-        const Tensor<1, dim> velocity = model.velocity<dim>(height, discharge, data[0]);
+        const auto data =
+            data_bathymetry.local_element(p);
+        const Tensor<1, dim> velocity = model.velocity<dim>(height, discharge, data);//[0]);
 
         for (unsigned int d = 0; d < dim; ++d)
           computed_vector_quantities.local_element(dim*p+d) = velocity[d];
@@ -2229,12 +2258,12 @@ namespace SpaceDiscretization
           {
             if (postproc_names[v+dim] == "pressure")
               computed_scalar_quantities[v].local_element(p) =
-                model.pressure(height, data[0]);
+                model.pressure(height, data);
             else if (postproc_names[v+dim] == "depth")
-              computed_scalar_quantities[v].local_element(p) = height + data[0];
+              computed_scalar_quantities[v].local_element(p) = height + data;
             else if (postproc_names[v+dim] == "speed_of_sound")
               computed_scalar_quantities[v].local_element(p) =
-                std::sqrt(model.square_wavespeed(height, data[0]));
+                std::sqrt(model.square_wavespeed(height, data));
             else
               {
                 std::cout << "Postprocessing variable " << postproc_names[dim+v]
