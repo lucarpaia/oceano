@@ -45,7 +45,7 @@ namespace ICBC
   // the unperturbed regions. To use the discontinuous bathymetry use the following
   // cpp key:
 #undef  ICBC_LAKEATREST_BATHYMETRYDISCONTINUOUS
-#define ICBC_LAKEATREST_WATERATREST
+#undef  ICBC_LAKEATREST_WATERATREST
 
   using namespace dealii;
   
@@ -55,6 +55,12 @@ namespace ICBC
   constexpr double h0      = 1.0;
   // the amplitude of the perturbation:
   constexpr double a0      = 0.01;
+  // the amplitude of the bathymetry
+#if defined ICBC_LAKEATREST_BATHYMETRYDISCONTINUOUS
+  constexpr double b0      = 0.6;
+#else
+  constexpr double b0      = 0.8;
+#endif
 
   // @sect3{Equation data}
 
@@ -228,13 +234,13 @@ namespace ICBC
     if ( x[0] >= 0.9 && x[0] <= 1.1 && x[1] >= 0.3 && x[1] <= 0.7 )
       {
         const double pot = std::sqrt( x0 * x0 + x1 * x1 );
-        return h0 - 0.6 * std::exp(pot);
+        return h0 - b0 * std::exp(pot);
       }
     else
 #endif
       {
         const double pot = -5. * x0 * x0 - 50. * x1 * x1;
-        return h0 - 0.8 * std::exp(pot);
+        return h0 - b0 * std::exp(pot);
       }
   }
 
