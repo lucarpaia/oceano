@@ -217,6 +217,10 @@ namespace SpaceDiscretization
     void project_data(const Function<dim> &                       function,
                       LinearAlgebra::distributed::Vector<Number> &data) const;
 
+    void interpolate_data(const DoFHandler<dim>                      &dof_handler,
+                          std::map<unsigned int, Point<dim>>         &evaluation_points,
+                          LinearAlgebra::distributed::Vector<Number> &data_bathymetry) const;
+
     std::array<double, 2> compute_errors_hydro(
       const Function<dim> &                             function,
       const LinearAlgebra::distributed::Vector<Number> &solution_height,
@@ -562,6 +566,12 @@ namespace SpaceDiscretization
               evaluate_function<dim, Number, dim+3>(
                 *bc->problem_data, phi_discharge.quadrature_point(q));
             data_q[0] = phi_bathymetry.get_value(q);
+            for (unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v)
+              {
+                const auto h_q = z_q[v] + data_q[0][v];
+                if (h_q < 1e-3)
+                  std::cout << "negative water depth:" << h_q << std::endl;
+              }
 
             phi_discharge.submit_gradient(
               model.advectiveflux<dim>(z_q, q_q, data_q[0]), q);
@@ -1997,6 +2007,26 @@ namespace SpaceDiscretization
                                                  phi_height.begin_dof_values());
         phi_height.set_dof_values(data_bathymetry);
       }
+  }
+
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_tra, degree, n_points_1d>::interpolate_data(
+    const DoFHandler<dim>                                   &dof_handler,
+    std::map<unsigned int, Point<dim>>                      &evaluation_points,
+    LinearAlgebra::distributed::Vector<Number>              &data_bathymetry) const
+  {
+    IndexSet myset = dof_handler.locally_owned_dofs();
+    IndexSet::ElementIterator index = myset.begin();
+    for (index=myset.begin(); index!=myset.end(); ++index)
+      {
+        Point<dim,VectorizedArray<Number>> x_evaluation_points;
+        for (unsigned int d = 0; d < dim; ++d)
+          x_evaluation_points[d] = evaluation_points[*index][d];
+
+        const auto data = evaluate_function<dim, Number>(
+            *bc->problem_data, x_evaluation_points, 0);
+        data_bathymetry(*index) = data[0];
+      }  
   }
 
   // The next function again repeats functionality also provided by the

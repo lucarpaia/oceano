@@ -82,6 +82,11 @@
 #undef  PHYSICS_WINDSTRESSQUADRATIC
 // We end with a tuner class for the AMR:
 #define AMR_HEIGHTGRADIENT
+// This switch controls the bathymetry computatation at
+// the dofs: for now we have two options. A Lagrange
+// interpolation and an L2 projection.
+#undef  BATHYMETRY_L2PROJECTION
+#define BATHYMETRY_INTERPOLATION
 //
 //
 //
@@ -861,8 +866,20 @@ namespace Problem
 
     oceano_operator.project_hydro(
       ICBC::Ic<dimension, n_variables>(prm), solution_height, solution_discharge);
+
+#if defined BATHYMETRY_L2PROJECTION
     oceano_operator.project_data(
       *oceano_operator.bc->problem_data, data_bathymetry);
+#elif defined BATHYMETRY_INTERPOLATION
+    std::map<unsigned int, Point<dim>> x_evaluation_points =
+      DoFTools::map_dofs_to_support_points(mapping,
+                                           dof_handler_height);
+    oceano_operator.interpolate_data(dof_handler_height,
+                                     x_evaluation_points,
+                                     data_bathymetry);
+
+#endif
+
 #ifdef OCEANO_WITH_TRACERS
     oceano_operator.project_tracers(
       ICBC::Ic<dimension, n_variables>(prm), solution_tracer);
