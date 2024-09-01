@@ -56,9 +56,9 @@ namespace ICBC
   // the amplitude of the perturbation:
   constexpr double a0      = 0.01;
 #if defined ICBC_LAKEATREST_BATHYMETRYDISCONTINUOUS
-  constexpr double b0      = 0.6;
+  constexpr double b0      = 0.65;
 #else
-  constexpr double b0      = 0.8;
+  constexpr double b0      = 0.80;
 #endif
 
   // @sect3{Equation data}
