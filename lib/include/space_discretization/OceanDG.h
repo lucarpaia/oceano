@@ -1830,8 +1830,8 @@ namespace SpaceDiscretization
                                                              + factor_tilde_residual[0] * kim_i;
                   for (unsigned int j = 1; j < current_stage+1; ++j)
 		    {
-		      kex_i              = vec_ki_discharge[j+1].local_element(i);
-	              kim_i              = vec_ki_discharge[j+2].local_element(i);
+		      kex_i              = vec_ki_discharge[2*j+1].local_element(i);
+	              kim_i              = vec_ki_discharge[2*j+2].local_element(i);
 		      vec_ki_discharge.front().local_element(i) += factor_residual[j]        * kex_i
 		                                                 + factor_tilde_residual[j]  * kim_i;
 		    }
