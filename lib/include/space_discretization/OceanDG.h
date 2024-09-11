@@ -895,11 +895,22 @@ namespace SpaceDiscretization
   // SIMD vectorizations, we here need to explicitly loop over the array
   // entries of the SIMD array.
   //
-  // The fourth boundary conditions is very important in coastal ocean and
-  // hydraulic simulation since the flow conditions are essentially
-  // subcritical. The above outflow condition assume that all the eigenvalues
+  // The next boundary conditions are very important in coastal ocean and
+  // hydraulic simulation for which the flow conditions are essentially
+  // subcritical. The outflow condition seen sofar assumes that all the eigenvalues
   // are outgoing which cannot be true in the subcritical regime.
-  // We have implemented another outflow imposition where we recover the
+  // In subcritical regime we are sure only that one eigenvalue
+  // is always ingoing, than it is quite safe to specify only
+  // one boundary condition and the choice depends on the problem. It could be
+  // the normal discharge (relevant for river inflows) or the water level height
+  // (relevant for an open boundary with tide). Please note that in some
+  // application it can be better to set also the tangential flow but we do not
+  // treat this case here. Concerning the implementation, we use
+  // the evaluate function by component to get the normal discharge.
+  // Later it is projected along the boundary normal to get x and y
+  // discharge components to be used in the Riemann solver.
+  //
+  // We have implemented an absorbing outflow boundary where we recover the
   // information coming from the ingoing eigenvalue. We compute a
   // boundary state from a far-field state (typically a flow at rest) from
   // the theory of characteristics, that is by equating at the boundary location,
@@ -984,7 +995,7 @@ namespace SpaceDiscretization
                 q_p =
                   evaluate_function<dim, Number>(
                     *bc->discharge_inflow_boundaries.find(boundary_id)->second,
-                    phi_height.quadrature_point(q), 1) * normal;
+                    phi_height.quadrature_point(q), 1) * -normal;
               }
 #if defined MODEL_SHALLOWWATER
             else if (bc->absorbing_outflow_boundaries.find(boundary_id) !=
@@ -1073,7 +1084,7 @@ namespace SpaceDiscretization
                 w_p =
                   evaluate_function<dim, Number, n_vars>(
                     *bc->supercritical_inflow_boundaries.find(boundary_id)->second,
-                    phi_height.quadrature_point(q));
+                    phi_discharge.quadrature_point(q));
                 z_p = w_p[0];
                 for (unsigned int d = 0; d < dim; ++d) q_p[d] = w_p[d+1];
               }
@@ -1090,7 +1101,7 @@ namespace SpaceDiscretization
                 z_p =
                   evaluate_function<dim, Number>(
                     *bc->height_inflow_boundaries.find(boundary_id)->second,
-                    phi_height.quadrature_point(q), 0);
+                    phi_discharge.quadrature_point(q), 0);
                 q_p = q_m;
               }
             else if (bc->discharge_inflow_boundaries.find(boundary_id) !=
@@ -1100,7 +1111,7 @@ namespace SpaceDiscretization
                 q_p =
                   evaluate_function<dim, Number>(
                     *bc->discharge_inflow_boundaries.find(boundary_id)->second,
-                    phi_height.quadrature_point(q), 1) * normal;
+                    phi_discharge.quadrature_point(q), 1) * -normal;
               }
 #if defined MODEL_SHALLOWWATER
             else if (bc->absorbing_outflow_boundaries.find(boundary_id) !=
@@ -1109,7 +1120,7 @@ namespace SpaceDiscretization
                 w_p =
                   evaluate_function<dim, Number, n_vars>(
                     *bc->absorbing_outflow_boundaries.find(boundary_id)->second,
-                      phi_height.quadrature_point(q));
+                      phi_discharge.quadrature_point(q));
                 z_p = w_p[0];
                 for (unsigned int d = 0; d < dim; ++d) q_p[d] = w_p[d+1];
                 const auto r_p

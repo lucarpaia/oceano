@@ -50,7 +50,6 @@ namespace ICBC
   // The default case is supercritical. If you want to test the subcritical regime you
   // should uncomment the following cpp key:
 #undef  ICBC_CHANNELFLOW_SUPERCRITICAL
-#undef  ICBC_CHANNELFLOW_HIGHFRICTION
 
   using namespace dealii;
 
@@ -62,11 +61,7 @@ namespace ICBC
   constexpr double n0      = 0.04;
 #else
   constexpr double q0      = 0.5;
-#if defined ICBC_CHANNELFLOW_HIGHFRICTION
-  constexpr double n0      = 0.3;
-#else
   constexpr double n0      = 0.0033;
-#endif
 #endif
 
   // @sect3{Equation data}
@@ -162,15 +157,6 @@ namespace ICBC
   public:
     Ic(IO::ParameterHandler &prm)
       : Function<dim>(n_vars, 0.)
-#if defined ICBC_CHANNELFLOW_HIGHFRICTION
-      , ic_reader(ic_filename(prm))
-      , ic_data(
-          ic_reader.endpoints,
-          ic_reader.n_intervals,
-          Table<dim, double>(ic_reader.n_intervals.front()+1,
-                             ic_reader.n_intervals.back()+1,
-                             ic_reader.get_data(ic_reader.filename).begin()))
-#endif
     {
       prm.enter_subsection("Physical constants");
       g = prm.get_double("g");
@@ -181,25 +167,8 @@ namespace ICBC
     virtual double value(const Point<dim> & p,
                          const unsigned int component = 0) const override;
   private:
-#if defined ICBC_CHANNELFLOW_HIGHFRICTION
-    std::string ic_filename(IO::ParameterHandler &prm) const;
-    IO::TxtDataReader<dim> ic_reader;
-    const Functions::InterpolatedUniformGridData<dim> ic_data;
-#endif
     double g;
   };
-
-#if defined ICBC_CHANNELFLOW_HIGHFRICTION
-  template <int dim, int n_vars>
-  std::string Ic<dim, n_vars>::ic_filename(IO::ParameterHandler &prm) const
-  {
-    prm.enter_subsection("Input data files");
-    std::string filename = prm.get("Bathymetry_filename");
-    prm.leave_subsection();
-
-    return filename;
-  }
-#endif
 
   template <int dim, int n_vars>
   double Ic<dim, n_vars>::value(const Point<dim>  &x,
@@ -211,12 +180,8 @@ namespace ICBC
     if (component == 0)
       {
         const double h0 = std::pow(4./g, 1./3.);
-#if defined ICBC_CHANNELFLOW_HIGHFRICTION
-        return -ic_data.value(x) + h0;
-#else
         const double inv_depth = std::exp( std::log(h0) * 10./3. );
         return - n0*n0 * q0*q0/inv_depth * x[0];
-#endif
       }
     else if (component == 1)
         return q0;
@@ -256,7 +221,7 @@ namespace ICBC
 #else
     this->set_discharge_inflow_boundary(
       1, std::make_unique<ExactSolution<dim, n_vars>>(0, prm));
-          this->set_height_inflow_boundary(
+    this->set_height_inflow_boundary(
       2, std::make_unique<ExactSolution<dim, n_vars>>(0, prm));
 #endif
     this->set_wall_boundary(0);
