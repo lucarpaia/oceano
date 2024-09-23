@@ -45,6 +45,8 @@ namespace ICBC
   // the unperturbed regions. To use the discontinuous bathymetry use the following
   // cpp key:
 #undef  ICBC_LAKEATREST_BATHYMETRYDISCONTINUOUS
+  // You can also check the well-balanced property of the scheme with respect to the
+  // "water-at-rest" state, without the perturbation. Define the following cpp key:
 #undef  ICBC_LAKEATREST_WATERATREST
 
   using namespace dealii;
@@ -60,6 +62,10 @@ namespace ICBC
 #else
   constexpr double b0      = 0.80;
 #endif
+  // The initial set specify a non trivial initial state
+  // (a water height level different from zero). This is realized thanks to the
+  // following offset:
+  constexpr double z0      = 1.0;
 
   // @sect3{Equation data}
 
@@ -91,7 +97,7 @@ namespace ICBC
   {
     Assert(dim == 2, ExcNotImplemented());
     if (component == 0)
-      return 0.;
+      return z0;
     else if (component == 1)
       return 0.;
     else
@@ -123,7 +129,9 @@ namespace ICBC
   //
   // An absorbing outflow boundary condition is specified on the left and
   // right boundary of the domain. In this way we let the wave smoothly go out from the
-  // the domain. Top and bottom boundaries are walls.
+  // the domain. Top and bottom boundaries are walls. For the water-at-rest test
+  // we use a closed basin with four walls. This avoids spurious effects from the
+  // boundaries.
   template <int dim, int n_vars>
   class Ic : public Function<dim>
   {
@@ -147,12 +155,12 @@ namespace ICBC
     if (component == 0)
       if ((0.05 <= x[0]) && (x[0] <= 0.15))
 #ifndef ICBC_LAKEATREST_WATERATREST
-        return a0;
+        return z0 + a0;
 #else
-        return 0.;
+        return z0;
 #endif
       else
-        return 0.;
+        return z0;
     else
       return 0.;
   }
@@ -178,8 +186,12 @@ namespace ICBC
   template <int dim, int n_vars>
   void BcLakeAtRest<dim, n_vars>::set_boundary_conditions()
   {
+#ifndef ICBC_LAKEATREST_WATERATREST
     this->set_absorbing_outflow_boundary(
       1, std::make_unique<ExactSolution<dim, n_vars>>(0, prm));
+#else
+    this->set_wall_boundary(1);
+#endif
     this->set_wall_boundary(0);
   }         
 
@@ -233,13 +245,13 @@ namespace ICBC
     if ( x[0] >= 0.9 && x[0] <= 1.1 && x[1] >= 0.3 && x[1] <= 0.7 )
       {
         const double pot = std::sqrt( x0 * x0 + x1 * x1 );
-        return h0 - b0 * std::exp(pot);
+        return -z0 +h0 -b0 * std::exp(pot);
       }
     else
 #endif
       {
         const double pot = -5. * x0 * x0 - 50. * x1 * x1;
-        return h0 - b0 * std::exp(pot);
+        return -z0 +h0 -b0 * std::exp(pot);
       }
   }
 

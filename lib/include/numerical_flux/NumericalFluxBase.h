@@ -114,10 +114,15 @@ namespace NumericalFlux
       const Number                      data_m,
       const Number                      data_p) const
   {
-    const auto h_m = z_m + data_m;
     const auto h_p = z_p + data_p;
-
+#define NUMERICALFLUXBASE_TUMMOLO
+#undef  NUMERICALFLUXBASE_ORLANDO
+#if defined NUMERICALFLUXBASE_TUMMOLO
+    const auto h_m = z_m + data_m;
     return model.g * 0.25 * (h_p + h_m) * (z_p - z_m) * normal;
+#elif defined NUMERICALFLUXBASE_ORLANDO
+    return model.g * 0.5 * h_p * (z_p - z_m) * normal;
+#endif
   }
 #endif
    
