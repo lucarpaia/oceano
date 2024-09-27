@@ -47,7 +47,7 @@ namespace ICBC
 #undef  ICBC_LAKEATREST_BATHYMETRYDISCONTINUOUS
   // You can also check the well-balanced property of the scheme with respect to the
   // "water-at-rest" state, without the perturbation. Define the following cpp key:
-#undef  ICBC_LAKEATREST_WATERATREST
+#define ICBC_LAKEATREST_WATERATREST
 
   using namespace dealii;
   

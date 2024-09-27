@@ -83,6 +83,19 @@
 // We end with a tuner class for the AMR:
 #define AMR_HEIGHTGRADIENT
 #undef  AMR_VORTICITY
+// These are new pre-processors that I have introduced for testing
+// the well-balanced property. By default the error is computed as the
+// functional 2-norm. Integrals are computed with the standard Gauss
+// formula with $r+2$ points. In alternative you can compute the error
+// directly at dofs. In this case switch the define/undef order
+#undef  ERROR_VECTORNORM
+// By default, the intial solution is computed by projection, as this is
+// the correct procedure for Finite Volume. By defining the following
+// pre-processor the initial solution is specified at the dofs by
+// interpolating at the dof. Maybe this could feature could go in the
+// master (imagine if we really needs to conserve the bounds of the
+// initial solution ... tsunamis etc ...)
+#undef INITIALSOLUTION_INTERPOLATION
 //
 //
 //
@@ -701,7 +714,7 @@ namespace Problem
     Postprocessor      &postprocessor,
     const unsigned int  result_number)
   {
-    const std::array<double,2> errors_hydro =
+    std::array<double,2> errors_hydro =
       oceano_operator.compute_errors_hydro(
         ICBC::ExactSolution<dimension, n_variables>(time,prm),
         solution_height, solution_discharge);
@@ -709,6 +722,27 @@ namespace Problem
     const std::array<double,n_tra> errors_tracers =
       oceano_operator.compute_errors_tracers(
         ICBC::ExactSolution<dimension, n_variables>(time,prm), solution_tracer);
+#endif
+
+#ifdef ERROR_VECTORNORM
+    errors_hydro[0] = 0.;
+    errors_hydro[1] = 0.;
+    
+    for(const auto& cell: dof_handler_height.active_cell_iterators())
+      {
+        if(cell->is_locally_owned())
+          {
+            std::vector<types::global_dof_index> dof_indices(dof_handler_height.get_fe().dofs_per_cell);
+            cell->get_dof_indices(dof_indices);
+            for(unsigned int idx = 0; idx < dof_indices.size(); ++idx)
+              {
+                //std::cout << idx << " " << dof_indices[idx] << std::endl;
+                errors_hydro[0] +=  cell->measure()/dof_indices.size() * std::fabs(solution_height(dof_indices[idx]) - 1.);
+                for(unsigned int idim = 0; idim < 2; ++idim)
+                  errors_hydro[1] +=  cell->measure()/dof_indices.size() * std::fabs(solution_discharge(2*dof_indices[idx]+idim) - 0.);
+              }
+          }
+      }
 #endif
 
     const std::string quantity_name =
@@ -881,6 +915,24 @@ namespace Problem
       ICBC::Ic<dimension, n_variables>(prm), solution_tracer);
 #endif
 
+#ifdef INITIALSOLUTION_INTERPOLATION
+    for(const auto& cell: dof_handler_height.active_cell_iterators())
+      {
+        if(cell->is_locally_owned())
+          {
+            std::vector<types::global_dof_index> dof_indices(dof_handler_height.get_fe().dofs_per_cell);
+            cell->get_dof_indices(dof_indices);
+            for(unsigned int idx = 0; idx < dof_indices.size(); ++idx)
+              {
+
+                solution_height(dof_indices[idx]) = 1.;
+                for(unsigned int idim = 0; idim < 2; ++idim)
+                  solution_discharge(2*dof_indices[idx]+idim) = 0.;
+              }
+          }
+      }
+#endif
+
     // It is the turn of the constructor of the AmrTuner. We have collected
     // all the  tuning parameters for the AMR in a separate class in order
     // to keep things in order. This class is controlled via a preprocessor
@@ -900,7 +952,7 @@ namespace Problem
         oceano_operator.project_tracers(
           ICBC::Ic<dimension, n_variables>(prm), solution_tracer);
 #endif
-     }
+      }
 
     // In the following, we output some statistics about the problem. Because we
     // often end up with quite large numbers of cells or degrees of freedom, we
