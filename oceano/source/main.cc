@@ -48,9 +48,9 @@
 #define NUMERICALFLUX_LAXFRIEDRICHSMODIFIED
 #undef  NUMERICALFLUX_HARTENVANLEER
 // The following are the preprocessors that select the initial and boundary conditions.
-// We implement two different test cases. The first one is an analytical
-// solution in 2d, whereas the second is a channel flow around a cylinder as
-// described in the introduction.
+// We implement many test cases and a last generic class named as "Realistic".
+// Here the data are imported from external files and it can target any shallow
+// water simulation.
 #undef  ICBC_ISENTROPICVORTEX
 #undef  ICBC_FLOWAROUNDCYLINDER
 #undef  ICBC_IMPULSIVEWAVE
@@ -59,6 +59,7 @@
 #define ICBC_LAKEATREST
 #undef  ICBC_TRACERADVECTION
 #undef  ICBC_CHANNELFLOW
+#undef  ICBC_REALISTIC
 // We have two models: a non-hydrostatic Euler model for perfect gas which was the
 // original model coded in the deal.II example and the shallow water model. The Euler model
 // is only used for debugging, to check consistency with the original deal.II example and
@@ -123,10 +124,15 @@
 #include <deal.II/matrix_free/fe_evaluation.h>
 #include <deal.II/matrix_free/matrix_free.h>
 
+// The following files include functionalities for the model outputs:
+// these are the solution fields at specific ouput frequencies and the
+// solution time-series at specific points on the mesh:
 #include <deal.II/numerics/data_out.h>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <deal.II/base/mpi_remote_point_evaluation.h>
+#include <deal.II/numerics/vector_tools.h>
 
 // The following file includes the CellwiseInverseMassMatrix data structure
 // that we will use for the mass matrix inversion, the only new include
@@ -174,6 +180,8 @@
 #include <icbc/Icbc_TracerAdvection.h>
 #elif defined ICBC_CHANNELFLOW
 #include <icbc/Icbc_ChannelFlow.h>
+#elif defined ICBC_REALISTIC
+#include <icbc/Icbc_Realistic.h>
 #endif
 
 namespace Problem
@@ -230,9 +238,9 @@ namespace Problem
   // however reused many functions.
   // The interface of the DataPostprocessor class is intuitive,
   // requiring us to provide information about what needs to be evaluated
-  // (typically only the values of the solution, but for vorticity we need 
-  // also the gradients of the solution), and the names of what
-  // gets evaluated. Note that it would also be possible to extract most
+  // (typically the solution fields, the solution at specific points or the
+  // error), when it needs to be evaluated (at what frequency) and the names of
+  // what gets evaluated. Note that it would also be possible to extract most
   // information by calculator tools within visualization programs such as
   // ParaView, but it is so much more convenient to do it already when writing
   // the output.
@@ -306,19 +314,31 @@ namespace Problem
 
       ParameterHandler &prm;
 
+      Utilities::MPI::RemotePointEvaluation<dim, dim> cache;
+
       std::vector<std::string> get_names() const;
 
       std::vector<
         DataComponentInterpretation::DataComponentInterpretation>
       get_data_component_interpretation() const;
 
-      //UpdateFlags get_needed_update_flags() const;
+      void write_pointHistory_gnuplot() const;
+
+      std::string output_filename;
+
+      std::map<double, std::vector<std::vector<double>>> pointHistory_data;
+      std::vector<Point<dim>> point_vector;
+
+      // variables
       std::vector<std::string> postproc_vars_name;
       unsigned int n_postproc_vars;
-
+      // what
       bool do_error;
-      double output_tick;
-      std::string output_filename;
+      bool do_solution;
+      bool do_pointHistory;
+      // when
+      double solution_tick;
+      double pointHistory_tick;
     };
 
    private:
@@ -328,23 +348,28 @@ namespace Problem
   };
 
 
+
   // The constructor of the postprocessor class takes as arguments the parameters handler
   // class in order to read the output parameters defined from the parameter file. These
   // parameters are stored as class members.
   template <int dim, int n_tra>
   OceanoProblem<dim, n_tra>::Postprocessor::Postprocessor(
-    IO::ParameterHandler     &prm,
-    std::vector<std::string>  postproc_vars_name)
+      IO::ParameterHandler     &prm,
+      std::vector<std::string>  postproc_vars_name)
     : prm(prm)
     , postproc_vars_name(postproc_vars_name)
   {
     prm.enter_subsection("Output parameters");
     do_error = prm.get_double("Output_error");
-    output_tick = prm.get_double("Output_tick");
+    solution_tick = prm.get_double("Solution_tick");
+    pointHistory_tick = prm.get_double("Point_history_tick");
     output_filename = prm.get("Output_filename");
     prm.leave_subsection();
 
     n_postproc_vars = postproc_vars_name.size();
+    // lrp: TODO read from prm
+    point_vector.push_back(Point<dim>(298398., 5033334.));
+    point_vector.push_back(Point<dim>(318710., 5014560.));
   }
 
 
@@ -372,6 +397,57 @@ namespace Problem
       interpretation.push_back(DataComponentInterpretation::component_is_scalar);
 
     return interpretation;
+  }
+
+
+  // The user can request output files to be generated for the point history.
+  // These files are in Gnuplot format but are basically just regular text and can
+  // easily be imported into other programs well, for example into spreadsheets.
+  // We write out a series of gnuplot files named "point_history" + "-00.gpl", etc.
+  // The data file gives information about where the points and interpreting the
+  // data. The names of the data columns is supplied, depending on
+  // the model class.
+  //
+  // For each point, open a file to be written to, put helpful info about the
+  // point into the file as comments, write general data stored.
+  // Note that for the file name we use two digits, so up two 100 points can be
+  // written.
+  template <int dim, int n_tra>
+  void OceanoProblem<dim, n_tra>::Postprocessor::write_pointHistory_gnuplot() const
+  {
+    typename std::vector<Point<dim>>::const_iterator point = point_vector.begin();
+    for (unsigned int point_vector_index = 0;
+         point != point_vector.end();
+         ++point, ++point_vector_index)
+      {
+        const std::string filename =
+          output_filename + "_pointHistory_"
+          + Utilities::int_to_string(point_vector_index, 2) + ".gpl";
+
+        std::ofstream to_gnuplot(filename);
+
+        to_gnuplot << "# Requested location: " << *point
+                   << '\n';
+        to_gnuplot << "# Requested variables: " << "free_surface"; // lrp: TODO read from model class
+        for (unsigned int v = 0; v < n_postproc_vars; ++v)
+          {
+             to_gnuplot << " " << postproc_vars_name[v];
+          }
+        to_gnuplot << '\n';
+        to_gnuplot << "#\n";
+
+        for (auto i : pointHistory_data)
+          {
+            to_gnuplot << i.first;
+            to_gnuplot << " " << i.second[0][point_vector_index];
+            for (unsigned int v = 0; v < n_postproc_vars; ++v)
+              {
+                to_gnuplot << " " << i.second[v+1][point_vector_index];
+              }
+            to_gnuplot << '\n';
+          }
+        to_gnuplot.close();
+      }
   }
 
 
@@ -648,91 +724,122 @@ namespace Problem
 
 
 
-  // For output, we first let the Oceano operator compute the errors of the
-  // numerical results. More precisely, we compute the error against the
-  // analytical result for the analytical solution case, whereas we compute
-  // the deviation against the background field with constant density and
-  // energy and constant velocity in $x$ direction for the second test case.
+  // This method collects all the model outputs (to screen and to file).
+  // The input argument is the preprocessor class that contains useful
+  // tools that help in the outputting.
+  // We examine the outputs one by one. 
   //
-  // The next step is to create output. This is similar to what is done in
-  // step-33: We let the postprocessor defined above control most of the
-  // output, except for the primal field that we write directly. For the
-  // analytical solution test case, we also perform another projection of the
-  // analytical solution and print the difference between that field and the
-  // numerical solution. Once we have defined all quantities to be written, we
-  // build the patches for output. Similarly to step-65, we create a
-  // high-order VTK output by setting the appropriate flag, which enables us
-  // to visualize fields of high polynomial degrees. Finally, we call the
-  // `DataOutInterface::write_vtu_in_parallel()` function to write the result
-  // to the given file name. This function uses special MPI parallel write
-  // facilities, which are typically more optimized for parallel file systems
-  // than the standard library's `std::ofstream` variants used in most other
-  // tutorial programs. A particularly nice feature of the
-  // `write_vtu_in_parallel()` function is the fact that it can combine output
-  // from all MPI ranks into a single file, making it unnecessary to have a
-  // central record of all such files (namely, the "pvtu" file).
-  //
-  // For parallel programs, it is often instructive to look at the partitioning
-  // of cells among processors. To this end, one can pass a vector of numbers
-  // to DataOut::add_data_vector() that contains as many entries as the
-  // current processor has active cells; these numbers should then be the
-  // rank of the processor that owns each of these cells. Such a vector
-  // could, for example, be obtained from
-  // GridTools::get_subdomain_association(). On the other hand, on each MPI
-  // process, DataOut will only read those entries that correspond to locally
-  // owned cells, and these of course all have the same value: namely, the rank
-  // of the current process. What is in the remaining entries of the vector
-  // doesn't actually matter, and so we can just get away with a cheap trick: We
-  // just fill *all* values of the vector we give to DataOut::add_data_vector()
-  // with the rank of the current MPI process. The key is that on each process,
-  // only the entries corresponding to the locally owned cells will be read,
-  // ignoring the (wrong) values in other entries. The fact that every process
-  // submits a vector in which the correct subset of entries is correct is all
-  // that is necessary.
-  //
-  // @note As of 2023, Visit 3.3.3 can still not deal with higher-order cells.
-  //   Rather, it simply reports that there is no data to show. To view the
-  //   results of this program with Visit, you will want to comment out the
-  //   line that sets `flags.write_higher_order_cells = true;`. On the other
-  //   hand, Paraview is able to understand VTU files with higher order cells
-  //   just fine.
+  // At the beginning, we postprocess some variables depending on the model
+  // class request. The call `evaluate_vector_field` do the job here.
   template <int dim, int n_tra>
   void OceanoProblem<dim, n_tra>::output_results(
     Postprocessor      &postprocessor,
     const unsigned int  result_number)
   {
-    const std::array<double,2> errors_hydro =
-      oceano_operator.compute_errors_hydro(
-        ICBC::ExactSolution<dimension, n_variables>(time,prm),
-        solution_height, solution_discharge);
-#ifdef OCEANO_WITH_TRACERS
-    const std::array<double,n_tra> errors_tracers =
-      oceano_operator.compute_errors_tracers(
-        ICBC::ExactSolution<dimension, n_variables>(time,prm), solution_tracer);
-#endif
+      std::map<unsigned int, Point<dim>> x_evaluation_points =
+        DoFTools::map_dofs_to_support_points(mapping,
+                                             dof_handler_height);
+      LinearAlgebra::distributed::Vector<Number> postprocess_vector_variables;
+      postprocess_vector_variables.reinit(solution_discharge);
+      std::vector<LinearAlgebra::distributed::Vector<Number>>
+        postprocess_scalar_variables(postprocessor.n_postproc_vars-dim, solution_height);
 
-    const std::string quantity_name =
-      postprocessor.do_error == 1 ? "error" : "norm";
+      oceano_operator.evaluate_vector_field(dof_handler_height,
+                                            solution_height,
+                                            solution_discharge,
+                                            solution_tracer,
+                                            x_evaluation_points,
+                                            postprocess_vector_variables,
+                                            postprocess_scalar_variables);
 
-    std::vector<std::string> vars_names = oceano_operator.model.vars_name;
-
-    pcout << "Time:"     << std::setw(8) << std::setprecision(3) << time
-          << ", cells: " << std::setw(8) << triangulation.n_global_active_cells()
-          << ", dt: "    << std::setw(8) << std::setprecision(2) << time_step
-          << ", " << quantity_name  << " " + vars_names[0] + ": "
-          << std::setprecision(4) << std::setw(10) << errors_hydro[0]
-          << ", " + vars_names[1] + ": " << std::setprecision(4)
-          << std::setw(10) << errors_hydro[1];
-
-#ifdef OCEANO_WITH_TRACERS
-    for (unsigned int t = 0; t < n_tra; ++t)
-      pcout << ", "+ vars_names[dim+t+1] + ":" << std::setprecision(4)
-            << std::setw(10) << errors_tracers[t];
-#endif
-    pcout << std::endl;
-
+    if (postprocessor.do_solution)
     {
-      TimerOutput::Scope t(timer, "output");
+      TimerOutput::Scope t(timer, "output solution");
+
+      // We first let the Oceano operator compute the errors of the
+      // numerical results. More precisely, we compute the error against the
+      // a reference result (analytical or fine mesh computation), whereas we
+      // compute the deviation against a background field if no reference result
+      // is provided
+      const std::array<double,2> errors_hydro =
+        oceano_operator.compute_errors_hydro(
+          ICBC::ExactSolution<dimension, n_variables>(time,prm),
+          solution_height, solution_discharge);
+#ifdef OCEANO_WITH_TRACERS
+      const std::array<double,n_tra> errors_tracers =
+        oceano_operator.compute_errors_tracers(
+          ICBC::ExactSolution<dimension, n_variables>(time,prm), solution_tracer);
+#endif
+
+      const std::string quantity_name =
+        postprocessor.do_error == 1 ? "error" : "norm";
+
+      std::vector<std::string> vars_names = oceano_operator.model.vars_name;
+
+      pcout << "Time:"     << std::setw(8) << std::setprecision(3) << time
+            << ", cells: " << std::setw(8) << triangulation.n_global_active_cells()
+            << ", dt: "    << std::setw(8) << std::setprecision(2) << time_step
+            << ", " << quantity_name  << " " + vars_names[0] + ": "
+            << std::setprecision(4) << std::setw(10) << errors_hydro[0]
+            << ", " + vars_names[1] + ": " << std::setprecision(4)
+            << std::setw(10) << errors_hydro[1];
+
+#ifdef OCEANO_WITH_TRACERS
+      for (unsigned int t = 0; t < n_tra; ++t)
+        pcout << ", "+ vars_names[dim+t+1] + ":" << std::setprecision(4)
+              << std::setw(10) << errors_tracers[t];
+#endif
+      pcout << std::endl;
+
+      // The next step is to create a visualization of the results.
+      // Once we have defined all quantities to be written, we
+      // build the patches for output. Similarly to step-65, we create a
+      // high-order VTK output by setting the appropriate flag, which enables us
+      // to visualize fields of high polynomial degrees. Finally, we call the
+      // `DataOutInterface::write_vtu_in_parallel()` function to write the result
+      // to the given file name. This function uses special MPI parallel write
+      // facilities, which are typically more optimized for parallel file systems
+      // than the standard library's `std::ofstream` variants used in most other
+      // tutorial programs. A particularly nice feature of the
+      // `write_vtu_in_parallel()` function is the fact that it can combine output
+      // from all MPI ranks into a single file, making it unnecessary to have a
+      // central record of all such files (namely, the "pvtu" file).
+      //
+      // For parallel programs, it is often instructive to look at the partitioning
+      // of cells among processors. To this end, one can pass a vector of numbers
+      // to DataOut::add_data_vector() that contains as many entries as the
+      // current processor has active cells; these numbers should then be the
+      // rank of the processor that owns each of these cells. Such a vector
+      // could, for example, be obtained from
+      // GridTools::get_subdomain_association(). On the other hand, on each MPI
+      // process, DataOut will only read those entries that correspond to locally
+      // owned cells, and these of course all have the same value: namely, the rank
+      // of the current process. What is in the remaining entries of the vector
+      // doesn't actually matter, and so we can just get away with a cheap trick: We
+      // just fill *all* values of the vector we give to DataOut::add_data_vector()
+      // with the rank of the current MPI process. The key is that on each process,
+      // only the entries corresponding to the locally owned cells will be read,
+      // ignoring the (wrong) values in other entries. The fact that every process
+      // submits a vector in which the correct subset of entries is correct is all
+      // that is necessary.
+      //
+      // @note As of 2023, Visit 3.3.3 can still not deal with higher-order cells.
+      //   Rather, it simply reports that there is no data to show. To view the
+      //   results of this program with Visit, you will want to comment out the
+      //   line that sets `flags.write_higher_order_cells = true;`. On the other
+      //   hand, Paraview is able to understand VTU files with higher order cells
+      //   just fine.
+      std::vector<std::string> names_postproc = postprocessor.get_names();
+      std::vector<std::string> names_vector;
+      for (unsigned int d = 0; d < dim; ++d)
+        names_vector.emplace_back(names_postproc[d]);
+
+      std::vector<DataComponentInterpretation::DataComponentInterpretation>
+        interpretation_postproc = postprocessor.get_data_component_interpretation();
+      std::vector<DataComponentInterpretation::DataComponentInterpretation>
+        interpretation_vector;
+      for (unsigned int d = 0; d < dim; ++d)
+        interpretation_vector.push_back(interpretation_postproc[d]);
 
       DataOut<dim>  data_out;
 
@@ -747,40 +854,11 @@ namespace Problem
                                  vars_names[0],
                                  {DataComponentInterpretation::component_is_scalar});
 
-        std::map<unsigned int, Point<dim>> x_evaluation_points =
-          DoFTools::map_dofs_to_support_points(mapping,
-                                               dof_handler_height);
-        LinearAlgebra::distributed::Vector<Number> postprocess_vector_variables;
-        postprocess_vector_variables.reinit(solution_discharge);
-        std::vector<LinearAlgebra::distributed::Vector<Number>>
-          postprocess_scalar_variables(postprocessor.n_postproc_vars-dim, solution_height);
-
-        oceano_operator.evaluate_vector_field(dof_handler_height,
-                                              solution_height,
-                                              solution_discharge,
-                                              solution_tracer,
-                                              x_evaluation_points,
-                                              postprocess_vector_variables,
-                                              postprocess_scalar_variables);
-
-        std::vector<std::string> names_postproc
-          = postprocessor.get_names();
-        std::vector<std::string> names_vector;
-        for (unsigned int d = 0; d < dim; ++d)
-          names_vector.emplace_back(names_postproc[d]);
-
-        std::vector<DataComponentInterpretation::DataComponentInterpretation>
-          interpretation_postproc
-          = postprocessor.get_data_component_interpretation();
-        std::vector<DataComponentInterpretation::DataComponentInterpretation>
-          interpretation_vector;
-        for (unsigned int d = 0; d < dim; ++d)
-          interpretation_vector.push_back(interpretation_postproc[d]);
-
         data_out.add_data_vector(dof_handler_discharge,
                                  postprocess_vector_variables,
                                  names_vector,
                                  interpretation_vector);
+
         for (unsigned int v = 0; v < postprocessor.n_postproc_vars-dim; ++v)
           data_out.add_data_vector(dof_handler_height,
                                    postprocess_scalar_variables[v],
@@ -788,6 +866,9 @@ namespace Problem
                                    {interpretation_postproc[dim+v]});
       }
 
+      // For the analytical solution cases, we also perform another projection of
+      // the analytical solution and print the difference between that field and
+      // the numerical solution.
       LinearAlgebra::distributed::Vector<Number> reference_height;
       LinearAlgebra::distributed::Vector<Number> reference_discharge;
       LinearAlgebra::distributed::Vector<Number> reference_tracer;
@@ -836,6 +917,57 @@ namespace Problem
         postprocessor.output_filename + "_"
         + Utilities::int_to_string(result_number, 3) + ".vtu";
       data_out.write_vtu_in_parallel(filename, MPI_COMM_WORLD);
+    }
+
+    if (postprocessor.do_pointHistory)
+    {
+      // PointHistory tackles the overhead of plotting time series of solution values
+      // at specific points on the mesh. The user specifies the points which the solution
+      // should be monitored at ahead of time, as well as giving each solution vector
+      // that they want to record a mnemonic name. Then, for each step the user calls
+      // `VectorTools::point_values` to store the data from each time step, and the
+      // class extracts data for the requested points to store it.
+      // What is hide in `VectorTools::point_values` is absolutely non-trivial. In fact
+      // this need to perform two operations. Determine the cell and the reference
+      // position within the cell for a given point. Then evaluate the
+      // finite element solution. For a distributed mesh deal.II performs a
+      // two-level-search approach based on bounding-boxes, r-trees and a minimization.
+      // We cannot cover this topic here, we only mention that the search should be as
+      // fast as possible becouse it must be repeated at any tringulation change, to be
+      // compatible with adaptive mesh refinement.
+      // The search algorithm described above is implemented in the cache class
+      // `Utilities::MPI::RemotePointEvaluation`. Note that the cache is reinitialized
+      // manually to take into account the latest triangulation. The call to
+      // `VectorTools::point_values` is the cheapest one because it only evaluates the
+      // finite element solution with the determined information.
+      TimerOutput::Scope t(timer, "output point history");
+
+      postprocessor.cache.reinit(postprocessor.point_vector, triangulation, mapping);
+
+      const auto history_solution_height = VectorTools::point_values<1>(
+        postprocessor.cache,
+        dof_handler_height,
+        solution_height);
+      postprocessor.pointHistory_data[time].push_back( history_solution_height );
+
+      for (unsigned int d = 0; d < dim; ++d)
+        {
+          auto history_postproc_vector = VectorTools::point_values<1>(
+              postprocessor.cache,
+              dof_handler_discharge,
+              postprocess_vector_variables,
+              VectorTools::EvaluationFlags::avg, d);
+          postprocessor.pointHistory_data[time].push_back( history_postproc_vector );
+        }
+
+      for (unsigned int v = 0; v < postprocessor.n_postproc_vars-dim; ++v)
+        {
+          auto history_postproc_scalar = VectorTools::point_values<1>(
+            postprocessor.cache,
+            dof_handler_height,
+            postprocess_scalar_variables[v]);
+          postprocessor.pointHistory_data[time].push_back( history_postproc_scalar );
+        }
     }
   }
 
@@ -1015,6 +1147,22 @@ namespace Problem
     min_vertex_distance =
       Utilities::MPI::min(min_vertex_distance, MPI_COMM_WORLD);
 
+//      if (!output_filename.empty())
+//        { // lrp: remove or move to output_results()
+    Vector<float> minimum_vertex_distance(triangulation.n_active_cells());
+    for (const auto &cell : triangulation.active_cell_iterators())
+      if (cell->is_locally_owned())
+        minimum_vertex_distance(cell->active_cell_index()) = cell->minimum_vertex_distance();
+    DataOut<dim>  data_out;
+    DataOutBase::VtkFlags flags;
+    data_out.set_flags(flags);
+    data_out.attach_triangulation(triangulation);
+    data_out.add_data_vector(minimum_vertex_distance, "minimum_vertex_distance");
+    data_out.build_patches();
+    const std::string filename = "minimum_vertex_distance.vtu";
+    data_out.write_vtu_in_parallel(filename, MPI_COMM_WORLD);
+//        }
+
     time_step = courant_number  /
       oceano_operator.compute_cell_transport_speed(solution_height,
                                                    solution_discharge);
@@ -1023,7 +1171,6 @@ namespace Problem
           << ", initial transport scaling: "
           << 1. / oceano_operator.compute_cell_transport_speed(solution_height,
                                                                solution_discharge)
-          << std::endl
           << std::endl;
 
     // We have moved the constructor of the `Postprocessor` class in this
@@ -1086,7 +1233,7 @@ namespace Problem
           {
             refine_grid(
               amr_tuner,
-              static_cast<unsigned int>(std::round(time / postprocessor.output_tick)));
+              static_cast<unsigned int>(std::round(time / postprocessor.solution_tick)));
 
              integrator.reinit(solution_height, solution_discharge, solution_tracer,
                rk_register_height_1,
@@ -1097,13 +1244,21 @@ namespace Problem
                rk_register_tracer_2);
           }
 
-        if (static_cast<int>(time / postprocessor.output_tick) !=
-              static_cast<int>((time - time_step) / postprocessor.output_tick) ||
-            time >= final_time - 1e-12)
+        postprocessor.do_solution =
+          (static_cast<int>(time / postprocessor.solution_tick) !=
+            static_cast<int>((time - time_step) / postprocessor.solution_tick) ||
+              time >= final_time - 1e-12);
+        postprocessor.do_pointHistory =
+          (static_cast<int>(time / postprocessor.pointHistory_tick) !=
+            static_cast<int>((time - time_step) / postprocessor.pointHistory_tick) ||
+              time >= final_time - 1e-12);
+        if (postprocessor.do_solution || postprocessor.do_pointHistory)
           output_results(
             postprocessor,
-            static_cast<unsigned int>(std::round(time / postprocessor.output_tick)));
+            static_cast<unsigned int>(std::round(time / postprocessor.solution_tick)));
       }
+
+    postprocessor.write_pointHistory_gnuplot();
 
     timer.print_wall_time_statistics(MPI_COMM_WORLD);
     pcout << std::endl;
@@ -1167,6 +1322,8 @@ int main(int argc, char **argv)
       bc = new ICBC::BcTracerAdvection<dimension, n_variables>(prm);
 #elif defined ICBC_CHANNELFLOW
       bc = new ICBC::BcChannelFlow<dimension, n_variables>(prm);
+#elif defined ICBC_REALISTIC
+      bc = new ICBC::BcRealistic<dimension, n_variables>(prm);
 #else
       Assert(false, ExcNotImplemented());
       return 0.;
