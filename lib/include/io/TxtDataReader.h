@@ -47,7 +47,7 @@ namespace IO
   // @sect3{Reading data in txt format}
   //
   // The general layout of the class is discussed here.
-  // Following is its declaration, including one three member functions
+  // Following is its declaration, including three member functions
   // that we will need in initializing the <code>topography_data</code>
   // member variable. The class is templated with the dimension so that it
   // can be used for reading general one, two and three dimensional fields.
@@ -91,7 +91,7 @@ namespace IO
   // without first having to uncompress it on disk. The result is, basically,
   // just another input stream that, for all practical purposes, looks just like
   // the ones we always use.
-  // Then an iterator to the first of the 83,600 elements
+  // Then an iterator to the first of the elements
   // of a std::vector object returned by the <code>get_data()</code> function below.
   // Note that all this member functions is static because (i) they do not
   // access any member variables of the class, and (ii) because they are
@@ -143,15 +143,20 @@ namespace IO
       {
         try
           {
-            double xi, yi, datai;
-            in >> xi >> yi >> datai;
+            double xi, datai;
+            in >> xi;
+            for (unsigned int d = 0; d < dim-1; ++d)
+              {
+                in >> xi;
+              }
+            in >> datai;
             read_data.push_back(datai);
           }
         catch (...)
           {
             AssertThrow(false,
                         ExcMessage("Could not read all data points "
-                                   "from the file <topography.txt.gz>!"));
+                                   "from the file <"+filename+">!"));
           }
       }
  
@@ -184,7 +189,7 @@ namespace IO
           {
             AssertThrow(false,
                         ExcMessage("Could not read the endpoints "
-                                   "from the file <topography.txt.gz>!"));
+                                   "from the file <"+filename+">!"));
           }
       }
 
@@ -219,7 +224,7 @@ namespace IO
           {
             AssertThrow(false,
                         ExcMessage("Could not read the number of intervals "
-                                   "from the file <topography.txt.gz>!"));
+                                   "from the file <"+filename+">!"));
           }
       } 
 
