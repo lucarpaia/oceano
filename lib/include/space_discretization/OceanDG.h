@@ -1335,7 +1335,9 @@ namespace SpaceDiscretization
 
       for (auto &i : bc->supercritical_inflow_boundaries)
         i.second->set_time(current_time);
-      for (auto &i : bc->supercritical_outflow_boundaries)
+      for (auto &i : bc->height_inflow_boundaries)
+        i.second->set_time(current_time);
+      for (auto &i : bc->discharge_inflow_boundaries)
         i.second->set_time(current_time);
 
       data.loop(&OceanoOperator::local_apply_cell,
@@ -1418,7 +1420,9 @@ namespace SpaceDiscretization
 
       for (auto &i : bc->supercritical_inflow_boundaries)
         i.second->set_time(current_time);
-      for (auto &i : bc->supercritical_outflow_boundaries)
+      for (auto &i : bc->height_inflow_boundaries)
+        i.second->set_time(current_time);
+      for (auto &i : bc->discharge_inflow_boundaries)
         i.second->set_time(current_time);
 
       data.loop(&OceanoOperator::local_apply_cell_height,
@@ -1544,7 +1548,9 @@ namespace SpaceDiscretization
 
       for (auto &i : bc->supercritical_inflow_boundaries)
         i.second->set_time(current_time);
-      for (auto &i : bc->supercritical_outflow_boundaries)
+      for (auto &i : bc->height_inflow_boundaries)
+        i.second->set_time(current_time);
+      for (auto &i : bc->discharge_inflow_boundaries)
         i.second->set_time(current_time);
 
       data.loop(&OceanoOperator::local_apply_cell_height,
@@ -1702,7 +1708,9 @@ namespace SpaceDiscretization
 
       for (auto &i : bc->supercritical_inflow_boundaries)
         i.second->set_time(current_time);
-      for (auto &i : bc->supercritical_outflow_boundaries)
+      for (auto &i : bc->height_inflow_boundaries)
+        i.second->set_time(current_time);
+      for (auto &i : bc->discharge_inflow_boundaries)
         i.second->set_time(current_time);
 
       data.loop(&OceanoOperator::local_apply_cell_height,
@@ -2049,7 +2057,7 @@ namespace SpaceDiscretization
   // the time step size in the explicit time integrator. In the shallow water
   // equations, there are two speeds of transport, namely the convective
   // velocity $\mathbf{u}$ and the propagation of sound waves with sound
-  // speed $c = \sqrt{\gamma p/\rho}$ relative to the medium moving at
+  // speed $c = \sqrt{g h}$ relative to the medium moving at
   // velocity $\mathbf u$.
   //
   // In the formula for the time step size, we are interested not by
@@ -2178,7 +2186,7 @@ namespace SpaceDiscretization
   // access to the vector is done with the global index. Since we are operating
   // on locally owened dofs that represent a contiguous range, the access should be
   // as fast as a local access.
-  // Of course we are assuming that all the solution variables are distributed in the
+  // We are assuming that all the solution variables are distributed in the
   // same fashion over the processores. For safaty the last assert checks
   // the size of the solution vectors on each processor and throw an exception if
   // they are not equals.
