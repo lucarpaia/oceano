@@ -197,6 +197,17 @@ namespace IO
     }
     prm.leave_subsection();
 
+    // Boundary condition may be supplied via
+    prm.enter_subsection("Boundary conditions");
+    {
+      for (unsigned int count = 1; count < 20; ++count)
+        prm.declare_entry("Boundary_"+std::to_string(count),
+                          "There is no entry Boundary_ in the parameter file",
+                          Patterns::Anything(),
+                          "Boundary id, type and filename separated by a colon");
+    }
+    prm.leave_subsection();
+
     // Last but not least we would like to be able to change some properties
     // of the output, like output filename and time interval, through entries in the
     // configuration file, which is the purpose of the last subsection:
@@ -207,10 +218,15 @@ namespace IO
                         Patterns::Anything(),
                         "Name of the output file (without extension)");
 
-      prm.declare_entry("Output_tick",
+      prm.declare_entry("Solution_tick",
                         "10000000000.",
                         Patterns::Double(0),
-                        "Time interval we write the outputs");
+                        "Time interval we write the solution");
+
+      prm.declare_entry("Point_history_tick",
+                        "10000000000.",
+                        Patterns::Double(0),
+                        "Time interval we write the point history");
 
       prm.declare_entry("Output_error",
                         "0",
