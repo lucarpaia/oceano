@@ -386,7 +386,7 @@ namespace ICBC
            boundaryId[std::stoi(info[0])] = {info[1],info[2]};
       }
     prm.leave_subsection();
-    Assert(found_boundary == true,
+    AssertThrow(found_boundary == true,
       ExcMessage("In the parameter file you have not specified the entry:\n"
                  "set Boundary_x = ...\n"
                  "for any boundary id.\n" 
