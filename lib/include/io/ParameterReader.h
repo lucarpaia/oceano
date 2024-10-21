@@ -198,6 +198,12 @@ namespace IO
                         "2e-11",
                         Patterns::Double(0),
                         "Wind drag coefficient");
+
+      prm.declare_entry("bottom_friction",
+                        "0.0",
+                        Patterns::Double(0),
+                        "Bottom friction coefficient or Manning number"
+                        "depending on the bottom friction formulation");
     }
     prm.leave_subsection();
 

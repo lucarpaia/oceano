@@ -44,7 +44,6 @@ namespace ICBC
   // discharge and and the Manning coefficient:
   constexpr double z0      = 0.0;
   constexpr double q0      = 50./30.;
-  constexpr double n0      = 0.033;
 
   // @sect3{Equation data}
   
@@ -114,6 +113,8 @@ namespace ICBC
     std::string bathymetry_filename(IO::ParameterHandler &prm) const;
     IO::TxtDataReader<dim> bathymetry_data_reader;
     const Functions::InterpolatedUniformGridData<dim> bathymetry_data;
+
+    double cf;
   };
 
   template <int dim>
@@ -126,7 +127,11 @@ namespace ICBC
         Table<dim, double>(bathymetry_data_reader.n_intervals.front()+1,
                            bathymetry_data_reader.n_intervals.back()+1,
                            bathymetry_data_reader.get_data(bathymetry_data_reader.filename).begin()))
-  {}
+  {
+    prm.enter_subsection("Physical constants");
+    cf = prm.get_double("bottom_friction");
+    prm.leave_subsection();
+  }
 
 
 
@@ -147,7 +152,7 @@ namespace ICBC
     if (component == 0)
       return bathymetry_data.value(x);
     else if (component == 1)
-      return n0;
+      return cf;
     else
       return 0.0;
   }
