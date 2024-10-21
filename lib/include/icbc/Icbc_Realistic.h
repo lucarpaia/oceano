@@ -20,10 +20,8 @@
 #define ICBC_REALISTIC_HPP
 
 #include <deal.II/base/function.h>
-#include <boost/algorithm/string.hpp>
 // The following files include the oceano libraries
 #include <icbc/IcbcBase.h>
-#include <io/TxtDataReader.h>
 /**
  * Namespace containing the initial and boundary conditions.
  */
@@ -208,10 +206,7 @@ namespace ICBC
 
     if (component == 0)
     {
-      //std::cout << boundary_data_reader.endpoints[0].first << boundary_data_reader.endpoints[0].second << std::endl;
-      //std::cout << z0 + 0.1*std::sin(2.0*M_PI*t[0]/(12.41*3600)) << " vs " << boundary_data.value(t) << std::endl; 
       return boundary_data.value(t);
-      //return z0 + 0.1*std::sin(2.0*M_PI*t/(12.41*3600));
     }
     else if (component == 1)
       return boundary_data.value(t);
@@ -376,7 +371,7 @@ namespace ICBC
     for (unsigned int num = 1; num < 20; ++num)
       {
          std::string boundary_info = prm.get("Boundary_"+std::to_string(num));
-         if (boundary_info == "There is no entry Boundary_ in the parameter file")
+         if (boundary_info == "There is no entry Boundary in the parameter file")
            {
              continue;
            }

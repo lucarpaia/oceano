@@ -39,9 +39,9 @@
 // now we have coded general explicit schemes that belong to the family of Runge-Kutta scheme.
 // Apart from standard scheme we have also coded low-storage schemes privileges the rapidity
 // of accessing the memory.
-#define TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
+#undef  TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
 #undef  TIMEINTEGRATOR_LOWSTORAGERUNGEKUTTA
-#undef  TIMEINTEGRATOR_ADDITIVERUNGEKUTTA
+#define TIMEINTEGRATOR_ADDITIVERUNGEKUTTA
 // The numerical flux (Riemann solver) at the faces between cells. For this
 // program, we have implemented a modified variant of the Lax--Friedrichs
 // flux and the Harten--Lax--van Leer (HLL) flux:
@@ -56,10 +56,10 @@
 #undef  ICBC_IMPULSIVEWAVE
 #undef  ICBC_SHALLOWWATERVORTEX
 #undef  ICBC_STOMMELGYRE
-#define ICBC_LAKEATREST
+#undef  ICBC_LAKEATREST
 #undef  ICBC_TRACERADVECTION
 #undef  ICBC_CHANNELFLOW
-#undef  ICBC_REALISTIC
+#define ICBC_REALISTIC
 // We have two models: a non-hydrostatic Euler model for perfect gas which was the
 // original model coded in the deal.II example and the shallow water model. The Euler model
 // is only used for debugging, to check consistency with the original deal.II example and
@@ -82,8 +82,10 @@
 #define PHYSICS_WINDSTRESSGENERAL
 #undef  PHYSICS_WINDSTRESSQUADRATIC
 // We end with a tuner class for the AMR:
-#define AMR_HEIGHTGRADIENT
+#undef  AMR_HEIGHTGRADIENT
 #undef  AMR_VORTICITY
+#undef  AMR_BATHYMETRY
+#define AMR_FROMFILE
 //
 //
 //
@@ -124,15 +126,17 @@
 #include <deal.II/matrix_free/fe_evaluation.h>
 #include <deal.II/matrix_free/matrix_free.h>
 
-// The following files include functionalities for the model outputs:
-// these are the solution fields at specific ouput frequencies and the
-// solution time-series at specific points on the mesh:
+// The following files include functionalities for the model input/outputs:
+// these are some c++ functions to open and read files or to manipulate
+// strings but also deal.ii classes that write the finite element solutions
+// to files on distributed memories architectures
 #include <deal.II/numerics/data_out.h>
+#include <deal.II/base/mpi_remote_point_evaluation.h>
+#include <deal.II/numerics/vector_tools.h>
+#include <boost/algorithm/string.hpp>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
-#include <deal.II/base/mpi_remote_point_evaluation.h>
-#include <deal.II/numerics/vector_tools.h>
 
 // The following file includes the CellwiseInverseMassMatrix data structure
 // that we will use for the mass matrix inversion, the only new include
@@ -332,13 +336,13 @@ namespace Problem
       // variables
       std::vector<std::string> postproc_vars_name;
       unsigned int n_postproc_vars;
-      // what
-      bool do_error;
-      bool do_solution;
-      bool do_pointHistory;
       // when
       double solution_tick;
       double pointHistory_tick;
+      // what
+      bool do_solution;
+      bool do_pointHistory;
+      bool do_error;
     };
 
    private:
@@ -360,16 +364,29 @@ namespace Problem
     , postproc_vars_name(postproc_vars_name)
   {
     prm.enter_subsection("Output parameters");
-    do_error = prm.get_double("Output_error");
+    output_filename = prm.get("Output_filename");
     solution_tick = prm.get_double("Solution_tick");
     pointHistory_tick = prm.get_double("Point_history_tick");
-    output_filename = prm.get("Output_filename");
+
+    std::vector<std::string> info;
+    for (unsigned int num = 1; num < 20; ++num)
+      {
+         std::string pointHistory_info = prm.get("Point_history_"+std::to_string(num));
+         if (pointHistory_info == "There is no entry Point_history in the parameter file")
+           {
+             continue;
+           }
+         boost::split(info, pointHistory_info, boost::is_any_of(":"));
+         point_vector.push_back(Point<dim>(std::stof(info[0]), std::stof(info[1])));
+      }
+
+    do_solution = true;
+    do_pointHistory = !point_vector.empty();
+    do_error = prm.get_double("Output_error");
+
     prm.leave_subsection();
 
     n_postproc_vars = postproc_vars_name.size();
-    // lrp: TODO read from prm
-    point_vector.push_back(Point<dim>(298398., 5033334.));
-    point_vector.push_back(Point<dim>(318710., 5014560.));
   }
 
 
@@ -403,7 +420,7 @@ namespace Problem
   // The user can request output files to be generated for the point history.
   // These files are in Gnuplot format but are basically just regular text and can
   // easily be imported into other programs well, for example into spreadsheets.
-  // We write out a series of gnuplot files named "point_history" + "-00.gpl", etc.
+  // We write out a series of gnuplot files named "point_history" + "-01.gpl", etc.
   // The data file gives information about where the points and interpreting the
   // data. The names of the data columns is supplied, depending on
   // the model class.
@@ -422,7 +439,7 @@ namespace Problem
       {
         const std::string filename =
           output_filename + "_pointHistory_"
-          + Utilities::int_to_string(point_vector_index, 2) + ".gpl";
+          + Utilities::int_to_string(point_vector_index+1, 2) + ".gpl";
 
         std::ofstream to_gnuplot(filename);
 
@@ -453,19 +470,23 @@ namespace Problem
 
 
   // The constructor for this class is unsurprising: We set up a parallel
-  // triangulation based on the `MPI_COMM_WORLD` communicator, a vector finite
-  // element with `1+dim+n_tra` components for density, momentum, and tracers, a
-  // first-order mapping and initialize the time and time step to zero.
-  // Deal.ii supports also high order mappings, in principle of the same degree
-  // as the underlying finite element, but for ocean applications the use of such
-  // high order elements is questionable.
+  // triangulation based on the `MPI_COMM_WORLD` communicator. The
+  // Triangulation constructor takes an argument specifying whether a
+  // smoothing step shall be performed on the grid. Some degradation of
+  // approximation properties has been observed for grids which are too
+  // unstructured which are typical in ocean applications. For this reason
+  // we initialize the smoothing, with a flag `eliminate_unrefined_islands`.
+  // The we set up a vector finite element with `1+dim+n_tra` components
+  // for water level, momentum, and tracers, a first-order mapping and initialize
+  // the time and time step to zero. Deal.ii supports also high order mappings,
+  // in principle of the same degree as the underlying finite element.
   template <int dim, int n_tra>
   OceanoProblem<dim, n_tra>::OceanoProblem(IO::ParameterHandler           &param,
                                            ICBC::BcBase<dim, 1+dim+n_tra> *bc)
     : prm(param)
     , pcout(std::cout, Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
 #ifdef DEAL_II_WITH_P4EST
-    , triangulation(MPI_COMM_WORLD)
+    , triangulation(MPI_COMM_WORLD, Triangulation<dim>::MeshSmoothing::eliminate_unrefined_islands)
 #endif
     , fe_height(FE_DGQ<dim>(fe_degree), 1)
     , fe_discharge(FE_DGQ<dim>(fe_degree), dim)
@@ -595,19 +616,24 @@ namespace Problem
       // We estimate the error. Since this operation is case-dependent it is left
       // to a specific class and to its member function `estimate_error`.
       // This computes a cellwise error based on all the components of the solution.
+      // Some postprocessing of the variable may be necessary, depending on the error
+      // estimate. We let evaluate_vector_field() do the postprocessing. This operation
+      // is quite costly and we do only if it is needed. Think to move these lines
+      // inside the AmrTuner class and take out the preprocessor.
       // To reduce at the miniumum the calibration of the refinement/coarsen thresholds,
       // we use dimensionless thresholds and we multiply them by the maximum error into
       // the domain.
       Vector<float> estimated_error_per_cell(triangulation.n_active_cells());
 
-      std::map<unsigned int, Point<dim>> x_evaluation_points =
-        DoFTools::map_dofs_to_support_points(mapping,
-                                             dof_handler_height);
-
       LinearAlgebra::distributed::Vector<Number> postprocess_velocity;
+#if defined AMR_VORTICITY
       postprocess_velocity.reinit(solution_discharge);
       std::vector<LinearAlgebra::distributed::Vector<Number>>
         postprocess_scalar_variables;
+
+      std::map<unsigned int, Point<dim>> x_evaluation_points =
+        DoFTools::map_dofs_to_support_points(mapping,
+                                             dof_handler_height);
 
       oceano_operator.evaluate_vector_field(dof_handler_height,
                                             solution_height,
@@ -616,14 +642,20 @@ namespace Problem
                                             x_evaluation_points,
                                             postprocess_velocity,
                                             postprocess_scalar_variables);
+#endif
 
-      std::vector<DoFHandler<dim> *> dof_handlers;
+      std::vector<DoFHandler<dim>*> dof_handlers;
       dof_handlers.push_back(&dof_handler_height);
       dof_handlers.push_back(&dof_handler_discharge);
-      amr_tuner.estimate_error<dim,Number>(triangulation,
-                                           mapping,
+
+      std::vector<FESystem<dim>*> finite_elements;
+      finite_elements.push_back(&fe_height);
+      finite_elements.push_back(&fe_discharge);
+
+      amr_tuner.estimate_error<dim,Number>(finite_elements,
                                            dof_handlers,
                                            {solution_height, postprocess_velocity},
+                                           *oceano_operator.bc->problem_data,
                                            estimated_error_per_cell);
 
       float max_error = estimated_error_per_cell.linfty_norm();
@@ -647,18 +679,29 @@ namespace Problem
       // a class that implements several different algorithms to refine a triangulation
       // based on cell-wise error indicators. This function are very simple: mark for
       // refinement if the error is above a given threshold, mark for coarsening if the
-      // error is below another minimal threshold. A successive intermediate step is
+      // error is below another minimal threshold.
+      // We control the minimum mesh size thanks to two parameters, set by the user:
+      // the maximum level of refinement and the minimum mesh size. Above these thresholds
+      // a cell cannot be refined. A successive intermediate step is
       // necessary to make sure that no two cells are adjacent with a refinement level
       // differing with more than one.
       GridRefinement::refine(
         triangulation, estimated_error_per_cell, amr_tuner.threshold_refinement * max_error);
       GridRefinement::coarsen(
         triangulation, estimated_error_per_cell, amr_tuner.threshold_coarsening * max_error);
+
       const unsigned int max_grid_level = amr_tuner.max_level_refinement;
+      const unsigned int min_grid_size = amr_tuner.min_mesh_size;
       if (triangulation.n_levels() > max_grid_level)
         for (const auto &cell :
              triangulation.active_cell_iterators_on_level(max_grid_level))
           cell->clear_refine_flag();
+      if (min_grid_size > 0.)
+        for (const auto &cell :
+             triangulation.active_cell_iterators())
+          if (cell->minimum_vertex_distance() < min_grid_size)
+            cell->clear_refine_flag();
+
       triangulation.prepare_coarsening_and_refinement();
 
       // As part of mesh refinement we need to transfer the solution vectors from

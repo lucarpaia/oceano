@@ -61,9 +61,9 @@ namespace IO
   void ParameterReader::declare_parameters()
   {
 
-   // Parameters for mesh include the mesh file and the 
-   // number of global refinement steps that are applied to the initial 
-   // coarse mesh.
+    // Parameters for mesh include the mesh file and the
+    // number of global refinement steps that are applied to the initial
+    // coarse mesh.
     prm.enter_subsection("Mesh & geometry parameters");
     {
     
@@ -105,11 +105,11 @@ namespace IO
 
       // The max level of refinement is the
       // maximum grid level. The default value (zero) is important
-      // because it fix the correct behaviour of the code without mesh adaptation.
+      // because it fixes the correct behaviour of the code without mesh adaptation.
       // At this stage we have also fixed the maximum grid level to be less then
-      // 100 which means that the most refined cell can be "only" one hundred times
+      // 100 which means that the most refined cell can be "only" $2^10$ times
       // smaller then the initial one, e.g. if you start with a resolution of 100 km
-      // you can can have cells as smaller as 1 km.
+      // you can can have cells as smaller as 100 m.
       prm.declare_entry("Max_level_of_refinement",
                         "0", Patterns::Integer(0,100),
                         "Maximum level of grid refinement. "
@@ -117,10 +117,33 @@ namespace IO
                         "will be halved, etc ... "
                         "It controls the maximum resolution");
 
-      // The default beavhior is to not output any error map field identified by an
+      // The min mesh size is a second parameter that keeps under control how small
+      // are the elements after a mesh refinement stage. It is the minimum acceptable
+      // mesh size or the maximum resolution, computed as the minimum distance between
+      // the vertices of a cell. If a cell is smaller then such a threshold no
+      // refinement is possible for that cell. This is useful for meshes with variable
+      // mesh size, in order to let coarser regions to be refined until a desired
+      // resolution while preventing other regions to be over-resolved.
+      // By default it set to zero, so that the only parameter that controls the
+      // minimum mesh size is the previous one.
+      prm.declare_entry("Min_mesh_size",
+                        "0.0", Patterns::Double(0),
+                        "Minimum mesh size for all the cell. "
+                        "It controls the maximum resolution");
+
+      // A static refinement indicator can be read read from file, if the
+      // preprocessing `AMR_FROMFILE` is defined. Otherwise this parameter
+      // is ignored.
+      prm.declare_entry("Static_refinement_indicator_filename",
+                        "refinement_indicator.tzt.gz",
+                        Patterns::Anything(),
+                        "Name of the static refinement indicator file "
+                        "in structured format (with extension txt.gz)");
+
+      // The default beavhior is to not output any error map field, identified by an
       // empty string. In reality, especially for the first trials, it is of outmost
-      // importance to look the estimated error space distribution to tune the threshold
-      // or to choose a better estimator.
+      // importance to look the space distribution of the estimated error to tune the
+      // thresholds or to choose a better estimator.
       prm.declare_entry("Error_filename",
                         "",
                         Patterns::Anything(),
@@ -188,29 +211,34 @@ namespace IO
       prm.declare_entry("Bathymetry_filename",
                         "bathymetry.txt.gz",
                         Patterns::Anything(),
-                        "Bathymetry structured txt file name");
+                        "Name of the bathymetry file "
+                        "in structured format (with extension txt.gz)");
 
       prm.declare_entry("Exact_solution_filename",
                         "exact_solution.txt.gz",
                         Patterns::Anything(),
-                        "Bathymetry structured txt file name");
+                        "Name of the exact/reference solution file "
+                        "in structured format (with extension txt.gz)");
     }
     prm.leave_subsection();
 
-    // Boundary condition may be supplied via
+    // Boundary condition may be supplied via the following list. For each
+    // entry you write the boundary id of the gmsh file, the boundary condition
+    // type and a filename in structured format containing the boundary data
     prm.enter_subsection("Boundary conditions");
     {
       for (unsigned int count = 1; count < 20; ++count)
         prm.declare_entry("Boundary_"+std::to_string(count),
-                          "There is no entry Boundary_ in the parameter file",
+                          "There is no entry Boundary in the parameter file",
                           Patterns::Anything(),
                           "Boundary id, type and filename separated by a colon");
     }
     prm.leave_subsection();
 
     // Last but not least we would like to be able to change some properties
-    // of the output, like output filename and time interval, through entries in the
-    // configuration file, which is the purpose of the last subsection:
+    // of the output, like the output filename or the output time frequency,
+    // through entries in the configuration file, which is the purpose of the
+    // last subsection:
     prm.enter_subsection("Output parameters");
     {
       prm.declare_entry("Output_filename",
@@ -227,6 +255,12 @@ namespace IO
                         "10000000000.",
                         Patterns::Double(0),
                         "Time interval we write the point history");
+
+      for (unsigned int count = 1; count < 20; ++count)
+        prm.declare_entry("Point_history_"+std::to_string(count),
+                          "There is no entry Point_history in the parameter file",
+                          Patterns::Anything(),
+                          "Point history coordinates separated by a colon");
 
       prm.declare_entry("Output_error",
                         "0",
