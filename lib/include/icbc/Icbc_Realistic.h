@@ -278,7 +278,7 @@ namespace ICBC
 //      return data.value(x);
       return z0;
     else if (component == 1)
-      return q0;
+      return 0.;
     else
       return 0.;
   }
@@ -389,7 +389,7 @@ namespace ICBC
     AssertThrow(found_boundary == true,
       ExcMessage("In the parameter file you have not specified the entry:\n"
                  "set Boundary_x = ...\n"
-                 "for any boundary id.\n" 
+                 "for any boundary id.\n"
                  "Fill this entry for each boundary id"));
 
     for (auto &i : boundaryId)
@@ -404,6 +404,9 @@ namespace ICBC
         else if (type_and_filename.first == "discharge_inflow")
           this->set_discharge_inflow_boundary(
             i.first, std::make_unique<BoundaryData<dim, n_vars>>(0, type_and_filename.second, prm));
+        else if (type_and_filename.first == "absorbing_outflow")
+          this->set_absorbing_outflow_boundary(
+            i.first, std::make_unique<ExactSolution<dim, n_vars>>(0, prm));
       }
   }
 } // namespace ICBC
