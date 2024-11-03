@@ -139,15 +139,6 @@ namespace IO
                         Patterns::Anything(),
                         "Name of the static refinement indicator file "
                         "in structured format (with extension txt.gz)");
-
-      // The default beavhior is to not output any error map field, identified by an
-      // empty string. In reality, especially for the first trials, it is of outmost
-      // importance to look the space distribution of the estimated error to tune the
-      // thresholds or to choose a better estimator.
-      prm.declare_entry("Error_filename",
-                        "",
-                        Patterns::Anything(),
-                        "Name of the estimated error map file (without extension)");
      }
     prm.leave_subsection();
 
@@ -269,9 +260,14 @@ namespace IO
                           "Point history coordinates separated by a colon");
 
       prm.declare_entry("Output_error",
-                        "0",
-                        Patterns::Integer(0),
+                        "false",
+                        Patterns::Bool(),
                         "Flag to append also the error field to the output file");
+
+      prm.declare_entry("Output_meshsize",
+                        "false",
+                        Patterns::Bool(),
+                        "Flag to output the mesh size field");
 
       // Since different output formats may require different parameters for
       // generating output, it would be cumbersome if we had to declare all these

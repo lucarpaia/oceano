@@ -41,9 +41,9 @@ namespace ICBC
 
   // We define global parameters that help in the definition of the
   // initial and boundary conditions. For this test we just need the
-  // discharge and and the Manning coefficient:
+  // initial water level that is always zero, all other info are read from
+  // file:
   constexpr double z0      = 0.0;
-  constexpr double q0      = 50./30.;
 
   // @sect3{Equation data}
   
@@ -160,60 +160,53 @@ namespace ICBC
 
 
   // Apart from surface data we have the boundary conditions data.
-  // Boundary data has `n_var` components at maximum. For subcritical
-  // boundaries we need less conditions, thus less external data, but
+  // Boundary data has `n_var` components at maximum. In practice in
+  // coastal simulation we often use subcritical boundaries that we
+  //need less conditions, thus less external data, but
   // we keep the function general so we have hard-coded `n_var`
   // components.
   // In coastal simulations of small semi-enclosed basin, the boundary
   // data can be considered constant over the boundary and only
-  // time-varying.
+  // time-varying. For this reason, for now, it is represented as a
+  // one dimensional function of time only. The function is constructed
+  // taking as input the initial time which is not necessary zero and,
+  // in this way, it can be set externally by the user.
   template <int dim, int n_vars>  
   class BoundaryData : public Function<dim>
   {
   public:
     BoundaryData(const double time,
-                 std::string boundary_filename,
-                 IO::ParameterHandler &prm);
+                 std::string boundary_filename);
     ~BoundaryData(){};
 
     virtual double value(const Point<dim> & p,
                          const unsigned int component = 0) const override;
 
   private:
-    IO::TxtDataReader<1> boundary_data_reader; //lrp: pay attention to this multiple dimension: dim, 1 ... put order here!
+    IO::TxtDataReader<1> boundary_data_reader;
     const Functions::InterpolatedUniformGridData<1> boundary_data;
   };
 
   template <int dim, int n_vars>
   BoundaryData<dim, n_vars>::BoundaryData(const double          time,
-                                          std::string           boundary_filename,
-                                          IO::ParameterHandler &/*prm*/)
+                                          std::string           boundary_filename)
     : Function<dim>(n_vars, time)
     , boundary_data_reader(boundary_filename)
     , boundary_data(
         boundary_data_reader.endpoints,
         boundary_data_reader.n_intervals,
         Table<1, double>(boundary_data_reader.n_intervals.front()+1,
-               //            boundary_data_reader.n_intervals.back()+1,
-                           boundary_data_reader.get_data(boundary_filename).begin()))
+                         boundary_data_reader.get_data(boundary_filename).begin()))
   {}
 
   template <int dim, int n_vars>
   double BoundaryData<dim, n_vars>::value(const Point<dim>  &/*x*/,
                                           const unsigned int component) const
   {
-    //const double t = this->get_time();
-
-    Assert(dim == 2, ExcNotImplemented());
-        
     Point<1> t;
     t[0] = this->get_time();
 
-    if (component == 0)
-    {
-      return boundary_data.value(t);
-    }
-    else if (component == 1)
+    if (component == 0 || component == 1)
       return boundary_data.value(t);
     else
       return 0.;
@@ -222,21 +215,9 @@ namespace ICBC
 
 
   // The class `ExactSolution` defines a reference functions that can be used
-  // for diagnostic, for exmaple to measure the errors with respect ot another
-  // model. Apart for the template for the
-  // dimension which is in common with the base `Function` class, we have added
-  // the number of variables. As seen in the introduction the free-surface is
-  // available in a semi-analytical form and must be read from a file. We have
-  // thus modified the constructor with two classes: a data reader class and a
-  // the data class itself. Thanks to them we can read and compute the reference
-  // solution with a bilinear interpolation. We do not talk more about these two
-  // classes because they are discussed in detail when for the bathymetry.
-  //
-  // In the Oceano variables the exact solution must be given in the free-surface
-  // and discharge variables. We check that the test runs in two-dimensions
-  // which is consistent with the dimension of the file (otherwise it would raise
-  // an error difficult to detect). The free-surface is computed by a bilinear
-  // interpolation of the data read from file.
+  // for diagnostic, for example to measure the errors with respect ot another
+  // model. For the realistic test we do not have a reference solution, so we use
+  // a simple water at rest state.
   template <int dim, int n_vars>  
   class ExactSolution : public Function<dim>
   {
@@ -244,46 +225,18 @@ namespace ICBC
     ExactSolution(const double          time,
                   IO::ParameterHandler &/*prm*/)
       : Function<dim>(n_vars, time)
-/*      , data_reader(filename(prm))
-      , data(
-          data_reader.endpoints,
-          data_reader.n_intervals,
-          Table<dim, double>(data_reader.n_intervals.front()+1,
-                             data_reader.n_intervals.back()+1,
-                             data_reader.get_data(data_reader.filename).begin()))*/
     {}
 
     virtual double value(const Point<dim> & p,
                          const unsigned int component = 0) const override;
-
-/*  private:
-    std::string filename(IO::ParameterHandler &prm) const;
-    IO::TxtDataReader<dim> data_reader;
-    const Functions::InterpolatedUniformGridData<dim> data;*/
   };  
-
-/*  template <int dim, int n_vars>
-  std::string ExactSolution<dim, n_vars>::filename(IO::ParameterHandler &prm) const
-  {
-    prm.enter_subsection("Input data files");
-    std::string filename = prm.get("Exact_solution_filename");
-    prm.leave_subsection();
-
-    return filename;
-  }*/
 
   template <int dim, int n_vars>
   double ExactSolution<dim, n_vars>::value(const Point<dim> & /*x*/,
                                            const unsigned int component) const
   {
-//    //const double t = this->get_time();
-
-    Assert(dim == 2, ExcNotImplemented());
     if (component == 0)
-//      return data.value(x);
       return z0;
-    else if (component == 1)
-      return 0.;
     else
       return 0.;
   }
@@ -296,56 +249,54 @@ namespace ICBC
   // internally. This means that we can read the Parameter file from
   // anywhere when we are implementing ic/bc and we can access constants or
   // filenames from which the initial/boundary data depends.
-  // The initial conditions are a $\zeta(0,x) = 0\,m$ and $hu(0,x) = q_0\, m^2 /s$.
-  // We return either the water depth or the momentum depending on which component is
-  // requested. Two sanity checks have been added. One is to
-  // control that the space dimension is two (you cannot run this test in one dimension) and
-  // another one on the number of variables, that for two-dimensional shallow water equation
-  // is three or more (if you have tracers).
   //
-  // We start with a wet channel in equilibrium with a sloping topography without any bump or
-  // hill, that is with $\partial_x h=0$ in the above equation. The slope is thus controlled
-  // by the friction. In case the bathyemtry coincide with such a sloping channel then we
-  // should have an exact preservation of the flow.
-  // If tracers are presents they are simply set to zero.
-  // A supercritical inflow/outflow boundary condition is specified on the left and
-  // right boundary of the domain. Top and bottom boundaries are walls.
+  // For now, the initial condition for the realistic test is water at rest.
+  // We return either the water depth or the momentum depending on which component is
+  // requested. A sanity checks have been added. You cannot run the realistic
+  // test with tracers.
   template <int dim, int n_vars>
   class Ic : public Function<dim>
   {
   public:
-    Ic(IO::ParameterHandler &prm)
+    Ic(IO::ParameterHandler &/*prm*/)
       : Function<dim>(n_vars, 0.)
-    {
-      prm.enter_subsection("Physical constants");
-      g = prm.get_double("g");
-      prm.leave_subsection();
-    }
+    {}
     ~Ic(){};
 
     virtual double value(const Point<dim> & p,
                          const unsigned int component = 0) const override;
-  private:
-    double g;
   };
 
   template <int dim, int n_vars>
   double Ic<dim, n_vars>::value(const Point<dim>  &/*x*/,
                                 const unsigned int component) const
   {
-    Assert(dim == 2, ExcNotImplemented());
     Assert(n_vars < 4, ExcNotImplemented());
 
     if (component == 0)
         return z0;
-    else if (component == 1)
-        return 0.;
     else
         return 0.;
   }
 
 
 
+  // The boundary conditions are specified in the gmsh file, as flags
+  // that identifies Physical Curves, as well as in the parameter file.
+  // There, in an appropriate section, each flag must be associated to a
+  // boundary condition (type and value of the boundary data). Within
+  // the BcRealistic class, to set the boundary conditions, we have to
+  // perfrom this association. This is done with a map whose key is the
+  // boundary flag and the arguments are two strings: one for the boundary
+  // condition types and one for the file that contains the boundary data.
+  // After entering the parameter file a loop reads the boundary
+  // information, if no boundary information is found an exception is
+  // throw. That's not the end.
+  // This class uses another class BoundaryData. Each time a boundary
+  // condition that need some data (not the wall for instance but for
+  // example the tidal value for an open boundary or the discharge value
+  // for an upstream river boundary), we instantiate one new BoundaryData
+  // class to handle this data.
   template <int dim, int n_vars>  
   class BcRealistic : public BcBase<dim, n_vars>
   {
@@ -405,13 +356,13 @@ namespace ICBC
           this->set_wall_boundary(i.first);
         else if (type_and_filename.first == "height_inflow")
           this->set_height_inflow_boundary(
-            i.first, std::make_unique<BoundaryData<dim, n_vars>>(0, type_and_filename.second, prm));
+            i.first, std::make_unique<BoundaryData<dim, n_vars>>(0, type_and_filename.second));
         else if (type_and_filename.first == "discharge_inflow")
           this->set_discharge_inflow_boundary(
-            i.first, std::make_unique<BoundaryData<dim, n_vars>>(0, type_and_filename.second, prm));
+            i.first, std::make_unique<BoundaryData<dim, n_vars>>(0, type_and_filename.second));
         else if (type_and_filename.first == "absorbing_outflow")
           this->set_absorbing_outflow_boundary(
-            i.first, std::make_unique<ExactSolution<dim, n_vars>>(0, prm));
+            i.first, std::make_unique<BoundaryData<dim, n_vars>>(0, type_and_filename.second));
       }
   }
 } // namespace ICBC

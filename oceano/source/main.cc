@@ -268,9 +268,7 @@ namespace Problem
   private:
     void make_grid();
     void make_dofs();
-    void refine_grid(
-      const Amr::AmrTuner &amr_tuner,
-      const unsigned int   result_number);
+    void refine_grid(const Amr::AmrTuner &amr_tuner);
 
     LinearAlgebra::distributed::Vector<Number> solution_height;
     LinearAlgebra::distributed::Vector<Number> solution_discharge;
@@ -343,6 +341,7 @@ namespace Problem
       bool do_solution;
       bool do_pointHistory;
       bool do_error;
+      bool do_meshsize;
     };
 
    private:
@@ -380,9 +379,10 @@ namespace Problem
          point_vector.push_back(Point<dim>(std::stof(info[0]), std::stof(info[1])));
       }
 
-    do_solution = true;
+    do_solution     = true;
     do_pointHistory = !point_vector.empty();
-    do_error = prm.get_double("Output_error");
+    do_error        = prm.get_bool("Output_error");
+    do_meshsize     = prm.get_bool("Output_meshsize");
 
     prm.leave_subsection();
 
@@ -606,8 +606,7 @@ namespace Problem
   // We have a look to each task into more details.
   template <int dim, int n_tra>
   void OceanoProblem<dim, n_tra>::refine_grid(
-    const Amr::AmrTuner &amr_tuner,
-    const unsigned int   result_number)
+    const Amr::AmrTuner &amr_tuner)
   {
     {
       TimerOutput::Scope t(timer, "amr - remesh + remap");
@@ -660,20 +659,6 @@ namespace Problem
 
       float max_error = estimated_error_per_cell.linfty_norm();
       max_error = Utilities::MPI::max(max_error, MPI_COMM_WORLD);
-
-      if (!amr_tuner.output_filename.empty())
-        {
-          DataOut<dim>  data_out;
-          DataOutBase::VtkFlags flags;
-          data_out.set_flags(flags);
-          data_out.attach_triangulation(triangulation);
-          data_out.add_data_vector(estimated_error_per_cell, "estimated_error");
-          data_out.build_patches();
-          const std::string filename =
-            amr_tuner.output_filename + "_"
-            + Utilities::int_to_string(result_number, 3) + ".vtu";
-          data_out.write_vtu_in_parallel(filename, MPI_COMM_WORLD);
-        }
 
       // Next we find out which cells to refine/coarsen: we use two functions from
       // a class that implements several different algorithms to refine a triangulation
@@ -1012,6 +997,30 @@ namespace Problem
           postprocessor.pointHistory_data[time].push_back( history_postproc_scalar );
         }
     }
+
+    if (postprocessor.do_meshsize)
+    {
+      // Outputting the meshsize is useful to keep under control the timestep.
+      Vector<float> meshsize(triangulation.n_active_cells());
+      for (const auto &cell : triangulation.active_cell_iterators())
+        if (cell->is_locally_owned())
+          meshsize(cell->active_cell_index()) = cell->minimum_vertex_distance();
+
+      DataOut<dim>  data_out;
+
+      DataOutBase::VtkFlags flags;
+      data_out.set_flags(flags);
+
+      data_out.attach_triangulation(triangulation);
+      data_out.add_data_vector(meshsize, "minimum_vertex_distance");
+      data_out.build_patches();
+
+      const std::string filename =
+        postprocessor.output_filename + "_meshsize.vtu";
+      data_out.write_vtu_in_parallel(filename, MPI_COMM_WORLD);
+
+      postprocessor.do_meshsize = false;
+    }
   }
 
 
@@ -1065,9 +1074,7 @@ namespace Problem
     Amr::AmrTuner amr_tuner(prm);
     for (unsigned int lev = 0; lev < amr_tuner.max_level_refinement; ++lev)
       {
-        refine_grid(
-          amr_tuner,
-          static_cast<unsigned int>(std::round(0. / amr_tuner.remesh_tick)));
+        refine_grid(amr_tuner);
 
         oceano_operator.project_hydro(
           ICBC::Ic<dimension, n_variables>(prm), solution_height, solution_discharge);
@@ -1190,22 +1197,6 @@ namespace Problem
     min_vertex_distance =
       Utilities::MPI::min(min_vertex_distance, MPI_COMM_WORLD);
 
-//      if (!output_filename.empty())
-//        { // lrp: remove or move to output_results()
-    Vector<float> minimum_vertex_distance(triangulation.n_active_cells());
-    for (const auto &cell : triangulation.active_cell_iterators())
-      if (cell->is_locally_owned())
-        minimum_vertex_distance(cell->active_cell_index()) = cell->minimum_vertex_distance();
-    DataOut<dim>  data_out;
-    DataOutBase::VtkFlags flags;
-    data_out.set_flags(flags);
-    data_out.attach_triangulation(triangulation);
-    data_out.add_data_vector(minimum_vertex_distance, "minimum_vertex_distance");
-    data_out.build_patches();
-    const std::string filename = "minimum_vertex_distance.vtu";
-    data_out.write_vtu_in_parallel(filename, MPI_COMM_WORLD);
-//        }
-
     time_step = courant_number  /
       oceano_operator.compute_cell_transport_speed(solution_height,
                                                    solution_discharge);
@@ -1274,9 +1265,7 @@ namespace Problem
         if (static_cast<int>(time / amr_tuner.remesh_tick) !=
               static_cast<int>((time - time_step) / amr_tuner.remesh_tick))
           {
-            refine_grid(
-              amr_tuner,
-              static_cast<unsigned int>(std::round(time / postprocessor.solution_tick)));
+            refine_grid(amr_tuner);
 
              integrator.reinit(solution_height, solution_discharge, solution_tracer,
                rk_register_height_1,

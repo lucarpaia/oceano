@@ -76,7 +76,6 @@ namespace Amr
     float threshold_coarsening;
     float min_mesh_size;
     unsigned int max_level_refinement;
-    std::string output_filename;
     std::string refinement_filename;
 
     template <int dim, typename Number>
@@ -134,7 +133,6 @@ namespace Amr
     max_level_refinement = prm.get_integer("Max_level_of_refinement");
     min_mesh_size = prm.get_double("Min_mesh_size");
     refinement_filename = prm.get("Static_refinement_indicator_filename");
-    output_filename = prm.get("Error_filename");
     prm.leave_subsection();
   }
 
