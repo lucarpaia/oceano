@@ -56,27 +56,37 @@ namespace IO
   // of the executable.
   void CommandLineParser::parse_command_line(int argc, char **argv)
   {
-  
-    bool wrong_usage;      
-    if (argc == 1) {
-      std::cout << "No configuration file was given. Check again your command line."
-                << std::endl;
-      usage();
-      wrong_usage = true;      
-    }    
+    if (argc == 1)
+      {
+        usage();
+        AssertThrow(false,
+                    ExcMessage("No configuration file was given.\n"
+                               "Check again your command line."));
+      }
     std::string option(argv[1]);
-    if ( option == "-i" || option == "--input" ) {
-      std::cout << "Parsing configuration file: " 
-                << argv[2] 
-                << std::endl;
-      wrong_usage = false;
-    }
-    if ( option == "-h" || option == "--help" ) {
-      usage();
-      wrong_usage = true;
-    }
-    if ( wrong_usage ) std::exit(1);
-    
+    if ( option == "-h" || option == "--help" )
+      {
+        usage();
+        std::exit(1);
+      }
+    else if ( option == "-i" || option == "--input" )
+      {
+        if (argc == 2)
+          {
+            usage();
+            AssertThrow(false,
+                        ExcMessage("No configuration file was given after -i\n"
+                                   "Check again your command line."));
+         }
+      }
+    else
+      {
+        usage();
+        AssertThrow(false,
+                    ExcMessage("It was not possible to read the "
+                               "configuration file.\n"
+                               "Check again your command line."));
+      }
   }
   
 } // namespace IO
