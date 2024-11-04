@@ -1282,8 +1282,7 @@ namespace Problem
               time >= final_time - 1e-12);
         postprocessor.do_pointHistory =
           (static_cast<int>(time / postprocessor.pointHistory_tick) !=
-            static_cast<int>((time - time_step) / postprocessor.pointHistory_tick) ||
-              time >= final_time - 1e-12);
+            static_cast<int>((time - time_step) / postprocessor.pointHistory_tick));
         if (postprocessor.do_solution || postprocessor.do_pointHistory)
           output_results(
             postprocessor,

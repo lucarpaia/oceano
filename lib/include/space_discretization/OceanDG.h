@@ -1016,8 +1016,7 @@ namespace SpaceDiscretization
                 const auto u_b = 0.5 * (r_p + r_m);
 
                 z_p = h_b - data_m;
-                const auto norm = 1./normal.norm_square();
-                q_p =  u_b * h_b * norm * normal;
+                q_p =  u_b * h_b * normal;
               }
 #endif
             else
@@ -1132,8 +1131,7 @@ namespace SpaceDiscretization
                 const auto u_b = 0.5 * (r_p + r_m);
 
                 z_p = h_b - data_m;
-                const auto norm = 1./normal.norm_square();
-                q_p =  u_b * h_b * norm * normal;
+                q_p =  u_b * h_b * normal;
               }
 #endif
             else
