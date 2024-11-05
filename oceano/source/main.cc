@@ -1205,7 +1205,7 @@ namespace Problem
           << ", initial transport scaling: "
           << 1. / oceano_operator.compute_cell_transport_speed(solution_height,
                                                                solution_discharge)
-          << std::endl;
+          << "\n" << std::endl;
 
     // We have moved the constructor of the `Postprocessor` class in this
     // top level `run()`, so that we can pass it by reference to many
