@@ -200,7 +200,7 @@ namespace Problem
   // want to use for the nonlinear terms in the shallow water equations.
   constexpr unsigned int dimension            = 2;
   constexpr unsigned int fe_degree            = 1;
-  constexpr unsigned int n_q_points_1d        = fe_degree + 2;
+  constexpr unsigned int n_q_points_1d        = floor(1.5*fe_degree) + 1;
 #if defined MODEL_EULER
   constexpr unsigned int n_tracers            = 1;
 #elif defined MODEL_SHALLOWWATER
@@ -566,7 +566,7 @@ namespace Problem
 
     triangulation.refine_global(n_global_refinements);
 
-    pcout << "Initial number of cells after global refinement: " << std::setw(8)
+    pcout << "Number of cells after global refinement: " << std::setw(8)
           << triangulation.n_global_active_cells() << std::endl;
     pcout.get_stream().imbue(s);
 
@@ -1053,6 +1053,10 @@ namespace Problem
             << " = " << n_vect_bits << " bits ("
             << Utilities::System::get_current_vectorization_level() << ')'
             << std::endl;
+      pcout << "Number of quadrature points along a line: " << std::setw(4)
+            << n_q_points_1d << std::endl;
+      pcout << "Number of quadrature points in a cell   : " << std::setw(4)
+            << n_q_points_1d * n_q_points_1d  << std::endl;
     }
 
     make_grid();
@@ -1092,7 +1096,7 @@ namespace Problem
     // detail.
     std::locale s = pcout.get_stream().getloc();
     pcout.get_stream().imbue(std::locale(""));
-    pcout << "Initial number of cells after local  refinement: " << std::setw(8)
+    pcout << "Number of cells after local  refinement: " << std::setw(8)
           << triangulation.n_global_active_cells() << std::endl;
     pcout << "Initial number of degrees of freedom: " << dof_handler_height.n_dofs()
              + dof_handler_discharge.n_dofs() + dof_handler_tracer.n_dofs()
