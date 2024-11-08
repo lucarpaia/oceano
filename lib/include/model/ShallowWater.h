@@ -186,18 +186,8 @@ namespace Model
                    const Tensor<1, dim, Number> &discharge,
                    const Tensor<1, 2, Number>   &parameters) const;
 
-    // The next function computes an estimate of the square of the speed from the vector of conserved
-    // variables, using the formula $\lambda^2 =  \|\mathbf{u}\|^2+c^2$. The estimate
-    // instead of the the true formula is justyfied by efficiency arguments (one evaluation of the square root
-    // instead of four). Moroever for low Mach applications, the error committed is very small.
-    template <int dim, typename Number>
-    inline DEAL_II_ALWAYS_INLINE //
-      Number
-      square_speed_estimate(
-        const Number                  height,
-        const Tensor<1, dim, Number> &discharge,
-        const Number                  bathymetry) const;
-
+    // The next function computes an estimate of the square of the graivty wave speed, from
+    // the vector of conserved variables
     template <typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Number
@@ -365,19 +355,6 @@ namespace Model
     const Number depth = height + parameters[0];
 
     return -bottom_friction.source<dim, Number>(v, parameters[1], depth);
-  }
-
-  template <int dim, typename Number>
-  inline DEAL_II_ALWAYS_INLINE //
-    Number
-    ShallowWater::square_speed_estimate(
-      const Number                  height,
-      const Tensor<1, dim, Number> &discharge,
-      const Number                  bathymetry) const
-  {
-    const auto v = velocity<dim>(height, discharge, bathymetry);
-
-    return v.norm_square() + g * (height + bathymetry);
   }
 
   template <typename Number>

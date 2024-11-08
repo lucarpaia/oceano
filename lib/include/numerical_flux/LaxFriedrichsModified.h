@@ -127,26 +127,8 @@ namespace NumericalFlux
   // \frac{\lambda}{2}\left[\mathbf{w}^--\mathbf{w}^+\right]\otimes
   // \mathbf{n^-}$, where the factor $\lambda =
   // \max\left(\|\mathbf{u}^-\|+c^-, \|\mathbf{u}^+\|+c^+\right)$ gives the
-  // maximal wave speed and $c = \sqrt{\gamma p / \rho}$ is the speed of
-  // sound. Here, we choose two modifications of that expression for reasons
-  // of computational efficiency, given the small impact of the flux on the
-  // solution. For the above definition of the factor $\lambda$, we would need
-  // to take four square roots, two for the two velocity norms and two for the
-  // speed of sound on either side. The first modification is hence to rather
-  // use $\sqrt{\|\mathbf{u}\|^2+c^2}$ as an estimate of the maximal speed
-  // (which is at most a factor of 2 away from the actual maximum, as shown in
-  // the introduction). This allows us to pull the square root out of the
-  // maximum and get away with a single square root computation. The second
-  // modification is to further relax on the parameter $\lambda$---the smaller
-  // it is, the smaller the dissipation factor (which is multiplied by the
-  // jump in $\mathbf{w}$, which might result in a smaller or bigger
-  // dissipation in the end). This allows us to fit the spectrum into the
-  // stability region of the explicit Runge--Kutta integrator with bigger time
-  // steps. However, we cannot make dissipation too small because otherwise
-  // imaginary eigenvalues grow larger. Finally, the current conservative
-  // formulation is not energy-stable in the limit of $\lambda\to 0$ as it is
-  // not skew-symmetric, and would need additional measures such as split-form
-  // DG schemes in that case.
+  // maximal wave speed and $c = \sqrt{g h}$ is the speed of the gravity
+  // waves.
   //
   // Since the numerical flux is multiplied by the normal vector in the weak
   // form, we multiply by the result by the normal vector for all terms in the
@@ -164,11 +146,14 @@ namespace NumericalFlux
       const Number                      data_m,
       const Number                      data_p) const
   {
-    const auto lambda_m = model.square_speed_estimate<dim>(z_m, q_m, data_m);
-    const auto lambda_p = model.square_speed_estimate<dim>(z_p, q_p, data_p);
+    const auto v_m = model.velocity<dim>(z_m, q_m, data_m);
+    const auto v_p = model.velocity<dim>(z_p, q_p, data_p);
+
+    const auto lambda_m = v_m.norm() + std::sqrt(model.square_wavespeed(z_m, data_m));
+    const auto lambda_p = v_p.norm() + std::sqrt(model.square_wavespeed(z_p, data_p));
 
     const auto lambda =
-      0.5 * std::sqrt(std::max(lambda_p, lambda_m));
+      0.5 * std::max(lambda_p, lambda_m);
 
     return 0.5 * (q_m * normal + q_p * normal) +
            0.5 * lambda * (z_m - z_p);
@@ -186,14 +171,17 @@ namespace NumericalFlux
       const Number                   data_m,
       const Number                   data_p) const
   {
-    const auto lambda_m = model.square_speed_estimate<dim>(z_m, q_m, data_m);
-    const auto lambda_p = model.square_speed_estimate<dim>(z_p, q_p, data_p);
+    const auto v_m = model.velocity<dim>(z_m, q_m, data_m);
+    const auto v_p = model.velocity<dim>(z_p, q_p, data_p);
+
+    const auto lambda_m = v_m.norm() + std::sqrt(model.square_wavespeed(z_m, data_m));
+    const auto lambda_p = v_p.norm() + std::sqrt(model.square_wavespeed(z_p, data_p));
+
+    const auto lambda =
+      0.5 * std::max(lambda_p, lambda_m);
 
     const auto flux_m = model.advectiveflux<dim>(z_m, q_m, data_m);
     const auto flux_p = model.advectiveflux<dim>(z_p, q_p, data_p);
-
-    const auto lambda =
-      0.5 * std::sqrt(std::max(lambda_p, lambda_m));
 
     return 0.5 * (flux_m * normal + flux_p * normal) +
            0.5 * lambda * (q_m - q_p);
@@ -214,14 +202,17 @@ namespace NumericalFlux
       const Number                    data_m,
       const Number                    data_p) const
   {
-    const auto lambda_m = model.square_speed_estimate<dim>(z_m, q_m, data_m);
-    const auto lambda_p = model.square_speed_estimate<dim>(z_p, q_p, data_p);
+    const auto v_m = model.velocity<dim>(z_m, q_m, data_m);
+    const auto v_p = model.velocity<dim>(z_p, q_p, data_p);
+
+    const auto lambda_m = v_m.norm() + std::sqrt(model.square_wavespeed(z_m, data_m));
+    const auto lambda_p = v_p.norm() + std::sqrt(model.square_wavespeed(z_p, data_p));
+
+    const auto lambda =
+      0.5 * std::max(lambda_p, lambda_m);
 
     const auto flux_m = model.tracerflux<dim, n_tra>(z_m, q_m, t_m, data_m);
     const auto flux_p = model.tracerflux<dim, n_tra>(z_p, q_p, t_p, data_p);
-
-    const auto lambda =
-      0.5 * std::sqrt(std::max(lambda_p, lambda_m));
 
     Tensor<1, n_tra, Number> numflux;
     for (unsigned int t = 0; t < n_tra; ++t)
@@ -245,14 +236,17 @@ namespace NumericalFlux
       const Number                   data_m,
       const Number                   data_p) const
   {
-    const auto lambda_m = model.square_speed_estimate<dim>(z_m, q_m, data_m);
-    const auto lambda_p = model.square_speed_estimate<dim>(z_p, q_p, data_p);
+    const auto v_m = model.velocity<dim>(z_m, q_m, data_m);
+    const auto v_p = model.velocity<dim>(z_p, q_p, data_p);
+
+    const auto lambda_m = v_m.norm() + std::sqrt(model.square_wavespeed(z_m, data_m));
+    const auto lambda_p = v_p.norm() + std::sqrt(model.square_wavespeed(z_p, data_p));
+
+    const auto lambda =
+      0.5 * std::max(lambda_p, lambda_m);
 
     const auto flux_m = model.tracerflux(z_m, q_m, t_m, data_m);
     const auto flux_p = model.tracerflux(z_p, q_p, t_p, data_p);
-
-    const auto lambda =
-      0.5 * std::sqrt(std::max(lambda_p, lambda_m));
 
     return 0.5 * (flux_m * normal + flux_p * normal) +
            0.5 * lambda * (t_m - t_p);

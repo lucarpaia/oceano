@@ -131,17 +131,6 @@ namespace Model
              const Tensor<1, dim, Number>    &gradient_conserved_variables,
              const Tensor<1, dim+3, Number>  &parameters) const;
 
-    // The next function computes an estimate of the square of the speed from the vector of conserved
-    // variables, using the formula $\lambda^2 =  \|\mathbf{u}\|^2+c^2$. The estimate 
-    // instead of the the true formula is justyfied by efficiency arguments (one evaluation of the square root 
-    // instead of four). Moroever for low Mach applications, the error committed is very small.
-    template <int dim, int n_vars, typename Number>
-    inline DEAL_II_ALWAYS_INLINE //
-      Number
-      square_speed_estimate(
-        const Tensor<1, n_vars, Number> &conserved_variables,
-        const Number                     data) const;
-
     // The next function computes an the square of the speed of sound:
     template <int dim, int n_vars, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
@@ -244,19 +233,6 @@ namespace Model
         source[dim + 1] += parameters[d] * conserved_variables[d + 1];
 
     return source;
-  }
-
-  template <int dim, int n_vars, typename Number>
-  inline DEAL_II_ALWAYS_INLINE //
-    Number
-    Euler::square_speed_estimate(
-      const Tensor<1, n_vars, Number> &conserved_variables,
-      const Number                     data) const
-  {
-    const auto v = velocity<dim, n_vars>(conserved_variables, data);
-    const auto p = pressure<dim, n_vars>(conserved_variables, data);
-    
-    return v.norm_square() + gamma * p * (1. / conserved_variables[0]);
   }
 
   template <int dim, int n_vars, typename Number>
