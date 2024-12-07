@@ -833,16 +833,18 @@ namespace SpaceDiscretization
                                                    data_p);
             auto numerical_flux_m = -numerical_flux_p;
 
-#if defined MODEL_SHALLOWWATER
-            auto pressure_numerical_flux =
+            numerical_flux_m -=
               num_flux.numerical_presflux_strong<dim>(z_m,
                                                       z_p,
                                                       normal,
                                                       data_m,
                                                       data_p);
-            numerical_flux_m -= pressure_numerical_flux;
-            numerical_flux_p -= pressure_numerical_flux;
-#endif
+            numerical_flux_p +=
+              num_flux.numerical_presflux_strong<dim>(z_p,
+                                                      z_m,
+                                                      normal,
+                                                      data_p,
+                                                      data_m);
 
             phi_discharge_m.submit_value(numerical_flux_m, q);
             phi_discharge_p.submit_value(numerical_flux_p, q);
@@ -997,7 +999,6 @@ namespace SpaceDiscretization
                     *bc->discharge_inflow_boundaries.find(boundary_id)->second,
                     phi_height.quadrature_point(q), 1) * -normal;
               }
-#if defined MODEL_SHALLOWWATER
             else if (bc->absorbing_outflow_boundaries.find(boundary_id) !=
                      bc->absorbing_outflow_boundaries.end())
               {
@@ -1018,7 +1019,6 @@ namespace SpaceDiscretization
                 z_p = h_b - data_m;
                 q_p =  u_b * h_b * normal;
               }
-#endif
             else
               AssertThrow(false,
                           ExcMessage("Unknown boundary id, did "
@@ -1112,7 +1112,6 @@ namespace SpaceDiscretization
                     *bc->discharge_inflow_boundaries.find(boundary_id)->second,
                     phi_discharge.quadrature_point(q), 1) * -normal;
               }
-#if defined MODEL_SHALLOWWATER
             else if (bc->absorbing_outflow_boundaries.find(boundary_id) !=
                      bc->absorbing_outflow_boundaries.end())
               {
@@ -1133,7 +1132,6 @@ namespace SpaceDiscretization
                 z_p = h_b - data_m;
                 q_p =  u_b * h_b * normal;
               }
-#endif
             else
               AssertThrow(false,
                           ExcMessage("Unknown boundary id, did "
@@ -1143,11 +1141,9 @@ namespace SpaceDiscretization
             auto flux =
               num_flux.numerical_advflux_weak<dim>(z_m, z_p, q_m, q_p, normal, data_m, data_m);
 
-#if defined MODEL_SHALLOWWATER
             auto pressure_numerical_fluxes =
               num_flux.numerical_presflux_strong<dim>(z_m, z_p, normal, data_m, data_m);
             flux += pressure_numerical_fluxes;
-#endif
 
             if (at_outflow)
               for (unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v)

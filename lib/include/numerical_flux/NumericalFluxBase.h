@@ -100,7 +100,6 @@ namespace NumericalFlux
     : model(param)
   {} 
 
-#if defined MODEL_SHALLOWWATER
   // We implement the contribution to the numerical flux coming from the terms that
   // have been approximated with the strong formulation of discontinuos Galerkin.
   // This is the case for the pressure term in the shallow water equations.
@@ -115,16 +114,16 @@ namespace NumericalFlux
       const Number                      data_p) const
   {
     const auto h_p = z_p + data_p;
-#define NUMERICALFLUXBASE_TUMMOLO
-#undef  NUMERICALFLUXBASE_ORLANDO
-#if defined NUMERICALFLUXBASE_TUMMOLO
+#define NUMERICALFLUXBASE_CENTER
+#undef  NUMERICALFLUXBASE_OUTER
+#if defined NUMERICALFLUXBASE_CENTER
     const auto h_m = z_m + data_m;
     return model.g * 0.25 * (h_p + h_m) * (z_p - z_m) * normal;
-#elif defined NUMERICALFLUXBASE_ORLANDO
+#elif defined NUMERICALFLUXBASE_OUTER
+    (void) data_m;
     return model.g * 0.5 * h_p * (z_p - z_m) * normal;
 #endif
   }
-#endif
    
 } // namespace NumericalFlux
 
