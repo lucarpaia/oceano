@@ -255,8 +255,6 @@ namespace ICBC
       }
   }
 
-
-  
   template <int dim>
   double ProblemData<dim>::value(const Point<dim>  &x,
                                  const unsigned int component) const
@@ -266,7 +264,6 @@ namespace ICBC
     else
       return 0.0;
   }
-    
 } // namespace ICBC
 
 #endif //ICBC_LAKEATREST_HPP
