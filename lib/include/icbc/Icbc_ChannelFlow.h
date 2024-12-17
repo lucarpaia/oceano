@@ -257,7 +257,8 @@ namespace ICBC
     const double xc = x[0] - 0.5*L;
 
     double zb = d0 + 0.001*x[0];
-    zb =  fabs(xc) < c0 ? zb - b0 * std::cos(M_PI*xc/(2.*c0))*std::cos(M_PI*xc/(2.*c0)) : zb;
+    double cosx = std::cos(M_PI*xc/(2.*c0));
+    zb =  fabs(xc) < c0 ? zb - b0 *cosx*cosx*cosx*cosx : zb;
     return zb;
   }
 
