@@ -56,7 +56,7 @@ namespace ICBC
   constexpr double c0      = 10.;
   constexpr double d0      = 5.;
   constexpr double q0      = 5.;
-  constexpr double n0      = 0.04;
+  constexpr double n0      = 0.065;
 
   // @sect3{Equation data}
 
@@ -99,7 +99,7 @@ namespace ICBC
     std::string filename(IO::ParameterHandler &prm) const;
     IO::TxtDataReader<dim> data_reader;
     const Functions::InterpolatedUniformGridData<dim> data;
-  };  
+  };
 
   template <int dim, int n_vars>
   std::string ExactSolution<dim, n_vars>::filename(IO::ParameterHandler &prm) const
@@ -132,10 +132,8 @@ namespace ICBC
   // internally. This means that we can read the Parameter file from
   // anywhere when we are implementing ic/bc and we can access constants or
   // filenames from which the initial/boundary data depends.
-  // We start with a wet channel in equilibrium with a sloping topography
-  // without any bump or hill, that is with $\partial_x h=0$ in the above equation.
-  // The initial conditions are $hu(0,x) = q_0$ and a free-surface that in
-  // pressure-gradient friction balance.
+  // Since the slope of the channel is small we start with a wet channel
+  // with a constant water level equal to the exact one at left boundary.
   // We return either the water depth or the momentum depending on which
   // component is requested. Two sanity checks have been added. One is to
   // control that the space dimension is two (you cannot run this test in
@@ -166,17 +164,14 @@ namespace ICBC
   };
 
   template <int dim, int n_vars>
-  double Ic<dim, n_vars>::value(const Point<dim>  &x,
+  double Ic<dim, n_vars>::value(const Point<dim>  &/*x*/,
                                 const unsigned int component) const
   {
     Assert(dim == 2, ExcNotImplemented());
     Assert(n_vars < 4, ExcNotImplemented());
 
     if (component == 0)
-      {
-        const double inv_depth = std::exp( std::log(d0) * 10./3. );
-        return - n0*n0 * q0*q0/inv_depth * x[0];
-      }
+        return 0.;
     else if (component == 1)
         return q0;
     else
@@ -262,7 +257,7 @@ namespace ICBC
     const double xc = x[0] - 0.5*L;
 
     double zb = d0 + 0.001*x[0];
-    zb =  fabs(xc) < c0 ? zb - b0 * std::cos(M_PI*xc/(2.0*c0))*std::cos(M_PI*xc/(2.0*c0)) : zb;
+    zb =  fabs(xc) < c0 ? zb - b0 * std::cos(M_PI*xc/(2.*c0))*std::cos(M_PI*xc/(2.*c0)) : zb;
     return zb;
   }
 
