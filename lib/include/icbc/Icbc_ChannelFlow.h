@@ -32,7 +32,7 @@ namespace ICBC
 
   // This is a steady state solution of the one dimensional shallow water equations
   // with constant discharge $hu=q_0$, varying topography and friction. Given a
-  // bathymetry profile $z_b(x)$ we get the corresponding water depth from the
+  // smooth bathymetry profile $z_b(x)$ we get the corresponding water depth from the
   // integration of the following ODE:
   // \[
   // \partial_x h =
@@ -46,6 +46,12 @@ namespace ICBC
   // impose only one characteristic variable or a phyisical one. Based on physical
   // arguments we impose the discharge at the inflow and the water height at the
   // outflow.
+  //
+  // We have added a discontinuous bathymetry with a jump. The regular
+  // solution does not hold anymore but we can compute the weak solution from
+  // the jump relationships. If you want to test a constant flow over a jump
+  // undefine the following preprocessor
+#undef  ICBC_CHANNELFLOW_BATHYMETRYDISCONTINUOUS
 
   using namespace dealii;
 
@@ -53,7 +59,7 @@ namespace ICBC
   // and boundary conditions. For this test we just need the discharge and
   // and the Manning coefficient:
   constexpr double b0      = 2.;
-  constexpr double c0      = 10.;
+  constexpr double c0      = 20.;
   constexpr double d0      = 5.;
   constexpr double q0      = 5.;
   constexpr double n0      = 0.065;
@@ -256,10 +262,14 @@ namespace ICBC
     const double L = 100.;
     const double xc = x[0] - 0.5*L;
 
+#if defined ICBC_LAKEATREST_BATHYMETRYDISCONTINUOUS
+    return xc < -1e-6 ? d0 : d0 - b0;
+#else
     double zb = d0 + 0.001*x[0];
     double cosx = std::cos(M_PI*xc/(2.*c0));
     zb =  fabs(xc) < c0 ? zb - b0 *cosx*cosx*cosx*cosx : zb;
     return zb;
+#endif
   }
 
   template <int dim>
