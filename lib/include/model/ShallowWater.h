@@ -81,8 +81,10 @@ namespace Model
   // that the code maps to excellent machine code.
   //
   // I would have liked to template the model class with <int dim, typename Number>
-  // which would have been cleaner. But I was not able to compile a templated 
-  // numerical flux class. For now I have left both classes without template  
+  // which would have been cleaner. But I was not able to compile the call
+  // to the class functions which take `Number` while receive
+  // `VectorizedArray<Number>`. I don't know why, without a template class,
+  // everything works. For now I have left both classes without template.
   class ShallowWater
   {
   public:
@@ -113,6 +115,13 @@ namespace Model
 #endif
 
     Physics::CoriolisBeta coriolis_force;
+
+    // The next function computes the model variable names. It is not a
+    // constant function beacause it modifies the class members.
+    template <int dim, int n_tra>
+    inline DEAL_II_ALWAYS_INLINE //
+      void
+      set_vars_name();
 
     // The next function computes the velocity from the vector of conserved
     // variables
@@ -236,11 +245,21 @@ namespace Model
     prm.enter_subsection("Physical constants");
     g = prm.get_double("g");
     prm.leave_subsection();
-
-    vars_name = {"free_surface", "hu", "hu"};
-    postproc_vars_name = {"velocity", "velocity", "depth"};
   }
-  
+
+  template <int dim, int n_tra>
+  inline DEAL_II_ALWAYS_INLINE //
+    void
+    ShallowWater::set_vars_name()
+  {
+    vars_name.push_back("free_surface");
+    for (unsigned int d = 0; d < dim; ++d)
+      vars_name.push_back("hu");
+    for (unsigned int d = 0; d < dim; ++d)
+      postproc_vars_name.push_back("velocity");
+    postproc_vars_name.push_back("depth");
+  }
+
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>

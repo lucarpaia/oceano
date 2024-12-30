@@ -201,18 +201,13 @@ namespace Problem
   constexpr unsigned int dimension            = 2;
   constexpr unsigned int fe_degree            = 1;
   constexpr unsigned int n_q_points_1d        = floor(1.5*fe_degree) + 1;
-#if defined MODEL_EULER
-  constexpr unsigned int n_tracers            = 1;
-#elif defined MODEL_SHALLOWWATER
-  constexpr unsigned int n_tracers            = 0;
-#elif defined MODEL_SHALLOWWATERWITHTRACER
-  constexpr unsigned int n_tracers            = 1;
+#if defined MODEL_SHALLOWWATERWITHTRACER
+  constexpr unsigned int n_tracers            = 2;
 #endif
-  constexpr unsigned int n_variables          = dimension + 1 + n_tracers;
 
   using Number = double;
 
-  // Next off are some details of the time integrator:
+  // Next off is the choice of the time integrator scheme:
 #if defined TIMEINTEGRATOR_LOWSTORAGERUNGEKUTTA
   constexpr TimeIntegrator::LowStorageRungeKuttaScheme rk_scheme = TimeIntegrator::stage_3_order_3;
 #elif defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
@@ -220,6 +215,18 @@ namespace Problem
 #elif defined TIMEINTEGRATOR_ADDITIVERUNGEKUTTA
   constexpr TimeIntegrator::AdditiveRungeKuttaScheme rk_scheme = TimeIntegrator::stage_3_order_2;
 #endif
+  //
+  //
+  //
+  // The user should stop here. The next lines are a consistency check between
+  // the parameters and the preprocessors plus we set derived parameters that are
+  // also known at compile time:
+#if defined MODEL_EULER
+  constexpr unsigned int n_tracers            = 1;
+#elif defined MODEL_SHALLOWWATER
+  constexpr unsigned int n_tracers            = 0;
+#endif
+  constexpr unsigned int n_variables          = dimension + 1 + n_tracers;
 
   // @sect3{The OceanoProblem class}
 

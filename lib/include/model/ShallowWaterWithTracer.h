@@ -88,6 +88,11 @@ namespace Model
     ShallowWaterWithTracer(IO::ParameterHandler &prm);
     ~ShallowWaterWithTracer(){};
 
+    template <int dim, int n_tra>
+    inline DEAL_II_ALWAYS_INLINE //
+      void
+      set_vars_name();
+
     template <int n_tra, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, n_tra, Number>
@@ -127,9 +132,24 @@ namespace Model
   ShallowWaterWithTracer::ShallowWaterWithTracer(
     IO::ParameterHandler &prm)
     : ShallowWater(prm)
+  {}
+
+  template <int dim, int n_tra>
+  inline DEAL_II_ALWAYS_INLINE //
+    void
+    ShallowWaterWithTracer::set_vars_name()
   {
-    vars_name.push_back("ht");
-    postproc_vars_name.push_back("tracer");
+    vars_name.push_back("free_surface");
+    for (unsigned int d = 0; d < dim; ++d)
+      vars_name.push_back("hu");
+    for (unsigned int d = 0; d < dim; ++d)
+      postproc_vars_name.push_back("velocity");
+    postproc_vars_name.push_back("depth");
+
+    for (unsigned int t = 0; t < n_tra; ++t)
+        vars_name.push_back("ht_"+std::to_string(t+1));
+    for (unsigned int t = 0; t < n_tra; ++t)
+        postproc_vars_name.push_back("tracer_"+std::to_string(t+1));
   }
 
   template <int n_tra, typename Number>

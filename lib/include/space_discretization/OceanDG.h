@@ -346,6 +346,11 @@ namespace SpaceDiscretization
 
 
 
+  // The constructor initialize the fundamental classes of the Ocean Operator,
+  // namely the boundary conditions, the model and the numerical fluxes.
+  // Beside we set the name of the model variables. This is a trick to avoid
+  // initialization of such names into the model class constructor which is not
+  // templated (`dim` and `n_tra` are not available there).
   template <int dim, int n_tra, int degree, int n_points_1d>
   OceanoOperator<dim, n_tra, degree, n_points_1d>::OceanoOperator(
     IO::ParameterHandler             &param,
@@ -355,7 +360,9 @@ namespace SpaceDiscretization
     , model(param)
     , num_flux(param)
     , timer(timer)
-  {}
+  {
+     model.set_vars_name<dim, n_tra>();
+  }
 
 
 
