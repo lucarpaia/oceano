@@ -607,7 +607,7 @@ namespace SpaceDiscretization
                 z_p =
                   evaluate_function<dim, Number>(
                     *bc->height_inflow_boundaries.find(boundary_id)->second,
-                    phi_height.quadrature_point(q), 0);
+                    phi_tracer.quadrature_point(q), 0);
                 q_p = q_m;
 
                 VectorizedArray<Number> mask_outflow;
@@ -624,14 +624,14 @@ namespace SpaceDiscretization
                   }
                 if (at_outflow == 0)
                   t_p = evaluate_function_tracer<dim, Number, n_tra>(
-                        *bc->supercritical_inflow_boundaries.find(boundary_id)->second,
+                        *bc->height_inflow_boundaries.find(boundary_id)->second,
                         phi_tracer.quadrature_point(q),
                         phi_tracer.get_value(q));
                 else if (at_outflow == VectorizedArray<Number>::size())
                   t_p = t_m;
                 else
                   t_p = evaluate_function_tracer<dim, Number, n_tra>(
-                        *bc->supercritical_inflow_boundaries.find(boundary_id)->second,
+                        *bc->height_inflow_boundaries.find(boundary_id)->second,
                         phi_tracer.quadrature_point(q),
                         phi_tracer.get_value(q)) * (1.-mask_outflow) + mask_outflow*t_m;
 
@@ -643,7 +643,7 @@ namespace SpaceDiscretization
                 q_p =
                   evaluate_function<dim, Number>(
                     *bc->discharge_inflow_boundaries.find(boundary_id)->second,
-                    phi_height.quadrature_point(q), 1) * normal;
+                    phi_tracer.quadrature_point(q), 1) * -normal;
 
                 VectorizedArray<Number> mask_outflow;
                 unsigned int at_outflow = 0;
@@ -659,14 +659,14 @@ namespace SpaceDiscretization
                   }
                 if (at_outflow == 0)
                   t_p = evaluate_function_tracer<dim, Number, n_tra>(
-                        *bc->supercritical_inflow_boundaries.find(boundary_id)->second,
+                        *bc->discharge_inflow_boundaries.find(boundary_id)->second,
                         phi_tracer.quadrature_point(q),
                         phi_tracer.get_value(q));
                 else if (at_outflow == VectorizedArray<Number>::size())
                   t_p = t_m;
                 else
                   t_p = evaluate_function_tracer<dim, Number, n_tra>(
-                        *bc->supercritical_inflow_boundaries.find(boundary_id)->second,
+                        *bc->discharge_inflow_boundaries.find(boundary_id)->second,
                         phi_tracer.quadrature_point(q),
                         phi_tracer.get_value(q)) * (1.-mask_outflow) + mask_outflow*t_m;
 
@@ -1176,34 +1176,35 @@ namespace SpaceDiscretization
         const auto data = evaluate_function<dim, Number>(
             *bc->problem_data, x_evaluation_points, 0);
 
-        const Tensor<1, dim> velocity = model.velocity(height, discharge, data[0]);
+        const auto velocity = model.velocity(height, discharge, data[0]);
 
         for (unsigned int d = 0; d < dim; ++d)
           computed_vector_quantities(*index*dim+d) = velocity[d];
 
         if (!computed_scalar_quantities.empty())
-          for (unsigned int v = 0; v < postproc_names.size()-dim; ++v)
-            {
-              if (postproc_names[v+dim] == "pressure")
-                computed_scalar_quantities[v](*index) =
-                  model.pressure(height, data[0]);
-              else if (postproc_names[v+dim] == "depth")
-                computed_scalar_quantities[v](*index) = height + data[0];
-              else if (postproc_names[v+dim] == "speed_of_sound")
-                computed_scalar_quantities[v](*index) =
-                  std::sqrt(model.square_wavespeed(height, data[0]));
-              else if (postproc_names[v+dim] == "tracer")
-                for (unsigned int t = 0; t < n_tra; ++t)
+          {
+            for (unsigned int v = 0; v < postproc_names.size()-dim-n_tra; ++v)
+              {
+                if (postproc_names[v+dim] == "pressure")
                   computed_scalar_quantities[v](*index) =
-                    model.tracer(height, tracer, data[0])[t];
-              else
-                {
-                  std::cout << "Postprocessing variable " << postproc_names[dim+v]
-                            << " does not exist. Consider to code it in your model"
-                            << std::endl;
-                  Assert(false, ExcNotImplemented());
-                }
-            }
+                    model.pressure(height, data[0]);
+                else if (postproc_names[v+dim] == "depth")
+                  computed_scalar_quantities[v](*index) = height + data[0];
+                else if (postproc_names[v+dim] == "speed_of_sound")
+                  computed_scalar_quantities[v](*index) =
+                    std::sqrt(model.square_wavespeed(height, data[0]));
+                else
+                  {
+                    std::cout << "Postprocessing variable " << postproc_names[dim+v]
+                              << " does not exist. Consider to code it in your model"
+                              << std::endl;
+                    Assert(false, ExcNotImplemented());
+                  }
+              }
+            const auto tra = model.tracer(height, tracer, data[0]);
+            for (unsigned int t = 0; t < n_tra; ++t)
+              computed_scalar_quantities[postproc_names.size()-dim-n_tra+t](*index) = tra[t];
+          }
       }
   }
 
