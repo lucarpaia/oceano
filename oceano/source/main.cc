@@ -1087,7 +1087,7 @@ namespace Problem
         ic, solution_height, solution_discharge);
 #ifdef OCEANO_WITH_TRACERS
       oceano_operator.project_tracers(
-        ic, n_variables>(prm), solution_tracer);
+        ic, solution_tracer);
 #endif
 
       for (unsigned int lev = 0; lev < amr_tuner.max_level_refinement; ++lev)
@@ -1098,7 +1098,7 @@ namespace Problem
             ic, solution_height, solution_discharge);
 #ifdef OCEANO_WITH_TRACERS
           oceano_operator.project_tracers(
-            ic, n_variables>(prm), solution_tracer);
+            ic, solution_tracer);
 #endif
         }
     }
