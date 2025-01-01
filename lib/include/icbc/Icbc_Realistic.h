@@ -162,7 +162,7 @@ namespace ICBC
   // Apart from surface data we have the boundary conditions data.
   // Boundary data has `n_var` components at maximum. In practice in
   // coastal simulation we often use subcritical boundaries that we
-  //need less conditions, thus less external data, but
+  // need less conditions, thus less external data, but
   // we keep the function general so we have hard-coded `n_var`
   // components.
   // In coastal simulations of small semi-enclosed basin, the boundary
@@ -250,33 +250,81 @@ namespace ICBC
   // anywhere when we are implementing ic/bc and we can access constants or
   // filenames from which the initial/boundary data depends.
   //
-  // For now, the initial condition for the realistic test is water at rest.
-  // We return either the water depth or the momentum depending on which component is
-  // requested. A sanity checks have been added. You cannot run the realistic
-  // test with tracers.
+  // The initial condition for the realistic test is taken from files. This
+  // is done, as usual, with the class `Functions::InterpolatedUniformGridData`
+  // , but this time organized in a vector where each component represents the
+  // initial data for a prognostic variable.
+  // To simplify the setting, the user can impose constant initial functions.
+  // If no initial file is found, the code below automatically switch to the
+  // class `Functions::ConstantFunction`, also organized in a vector.
+  // If no constant data is given then a water-at-rest with unit tracers
+  // will be the initial condition.
   template <int dim, int n_vars>
   class Ic : public Function<dim>
   {
   public:
-    Ic(IO::ParameterHandler &/*prm*/)
-      : Function<dim>(n_vars, 0.)
-    {}
+    Ic(IO::ParameterHandler &prm);
     ~Ic(){};
 
     virtual double value(const Point<dim> & p,
                          const unsigned int component = 0) const override;
+
+  private:
+    std::array<std::pair<std::string,int>, n_vars> ic_type;
+    std::vector<Functions::InterpolatedUniformGridData<dim>> ic_data;
+    std::vector<Functions::ConstantFunction<dim>> ic_constant;
   };
 
   template <int dim, int n_vars>
-  double Ic<dim, n_vars>::value(const Point<dim>  &/*x*/,
+  Ic<dim, n_vars>::Ic(IO::ParameterHandler &prm)
+    : Function<dim>(n_vars, 0.)
+  {
+    std::array<std::string,n_vars> ic_vars_name;
+    ic_vars_name[0] = "Initial_freesurface";
+    ic_vars_name[1] = "Initial_discharge_x";
+    ic_vars_name[2] = "Initial_discharge_y";
+    for (unsigned int t = 0; t < n_vars-1-dim; ++t)
+      ic_vars_name[dim+1+t] = "Initial_tracer_"+std::to_string(t+1);
+
+    prm.enter_subsection("Input data files");
+    unsigned int count_constant = 0;
+    unsigned int count_data = 0;
+    for (unsigned int v = 0; v < n_vars; ++v)
+      {
+        std::string filename = prm.get(ic_vars_name[v]+"_filename");
+        if (filename == "There is no entry "+ic_vars_name[v]+"_filename in the parameter file")
+          {
+            const double v0 = prm.get_double(ic_vars_name[v]+"_value");
+            ic_constant.push_back(Functions::ConstantFunction<dim>(v0));
+            ic_type[v] = {"constant", count_constant};
+            count_constant++;
+          }
+        else
+          {
+            IO::TxtDataReader<dim> ic_data_reader(filename);
+            ic_data.push_back(
+              Functions::InterpolatedUniformGridData<dim>(
+                ic_data_reader.endpoints,
+                ic_data_reader.n_intervals,
+                Table<dim, double>(ic_data_reader.n_intervals.front()+1,
+                                   ic_data_reader.n_intervals.back()+1,
+                                   ic_data_reader.get_data(ic_data_reader.filename).begin())) );
+            ic_type[v] = {"data", count_data};
+            count_data++;
+          }
+      }
+    prm.leave_subsection();
+  }
+
+  template <int dim, int n_vars>
+  double Ic<dim, n_vars>::value(const Point<dim>  &x,
                                 const unsigned int component) const
   {
-    Assert(n_vars < 4, ExcNotImplemented());
-
-    if (component == 0)
-        return z0;
+    std::pair<std::string,int> type_and_count = ic_type[component];
+    if (type_and_count.first == "constant")
+      return ic_constant[type_and_count.second].value(x);
     else
-        return 0.;
+      return ic_data[type_and_count.second].value(x);
   }
 
 

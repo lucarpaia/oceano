@@ -1069,31 +1069,39 @@ namespace Problem
     make_grid();
     make_dofs();
 
-    oceano_operator.project_hydro(
-      ICBC::Ic<dimension, n_variables>(prm), solution_height, solution_discharge);
-#ifdef OCEANO_WITH_TRACERS
-    oceano_operator.project_tracers(
-      ICBC::Ic<dimension, n_variables>(prm), solution_tracer);
-#endif
-
     // It is the turn of the constructor of the AmrTuner. We have collected
     // all the  tuning parameters for the AMR in a separate class in order
     // to keep things in order. This class is controlled via a preprocessor
-    // for the choice of the error estimate. For initial value problem we may
-    // proceed with mesh refinement to the initial solution. The mesh is pushed
-    // to the maximum refinement level since the start.
+    // for the choice of the error estimate.
     Amr::AmrTuner amr_tuner(prm);
-    for (unsigned int lev = 0; lev < amr_tuner.max_level_refinement; ++lev)
-      {
-        refine_grid(amr_tuner);
 
-        oceano_operator.project_hydro(
-          ICBC::Ic<dimension, n_variables>(prm), solution_height, solution_discharge);
+    // We set the initial conditions. This is done in a scope to free
+    // the memory associated to the data stored in the initial condition class.
+    // For initial value problems we may proceed with mesh
+    // refinement to the initial solution. The mesh is pushed
+    // to the maximum refinement level since the start.
+    {
+      TimerOutput::Scope t(timer, "compute initial solution");
+      ICBC::Ic<dimension, n_variables> ic(prm);
+      oceano_operator.project_hydro(
+        ic, solution_height, solution_discharge);
 #ifdef OCEANO_WITH_TRACERS
-        oceano_operator.project_tracers(
-          ICBC::Ic<dimension, n_variables>(prm), solution_tracer);
+      oceano_operator.project_tracers(
+        ic, n_variables>(prm), solution_tracer);
 #endif
-     }
+
+      for (unsigned int lev = 0; lev < amr_tuner.max_level_refinement; ++lev)
+        {
+          refine_grid(amr_tuner);
+
+          oceano_operator.project_hydro(
+            ic, solution_height, solution_discharge);
+#ifdef OCEANO_WITH_TRACERS
+          oceano_operator.project_tracers(
+            ic, n_variables>(prm), solution_tracer);
+#endif
+        }
+    }
 
     // In the following, we output some statistics about the problem. Because we
     // often end up with quite large numbers of cells or degrees of freedom, we

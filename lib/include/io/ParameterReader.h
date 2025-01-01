@@ -203,6 +203,8 @@ namespace IO
     // To better handle large dataseta, data are inputted via txt compressed
     // file (e.g. ".txt.gz"). The next subsection fills the different data file
     // names.
+    // For the initial data, the default behaviour (no file given) is a warning
+    // message that automatically switches to a constant data initial condition.
     prm.enter_subsection("Input data files");
     {
       prm.declare_entry("Bathymetry_filename",
@@ -216,6 +218,53 @@ namespace IO
                         Patterns::Anything(),
                         "Name of the exact/reference solution file "
                         "in structured format (with extension txt.gz)");
+
+      prm.declare_entry("Initial_freesurface_filename",
+                        "There is no entry Initial_freesurface_filename in the parameter file",
+                        Patterns::Anything(),
+                        "Name of the file with the initial free-surface"
+                        "in structured format (with extension txt.gz)");
+
+      prm.declare_entry("Initial_discharge_x_filename",
+                        "There is no entry Initial_discharge_x_filename in the parameter file",
+                        Patterns::Anything(),
+                        "Name of the file with the initial discharge (x-component)"
+                        "in structured format (with extension txt.gz)");
+
+      prm.declare_entry("Initial_discharge_y_filename",
+                        "There is no entry Initial_discharge_y_filename in the parameter file",
+                        Patterns::Anything(),
+                        "Name of the file with the initial discharge (y-component)"
+                        "in structured format (with extension txt.gz)");
+
+      for (unsigned int count = 1; count < 20; ++count)
+        prm.declare_entry("Initial_tracer_"+std::to_string(count)+"_filename",
+                          "There is no entry Initial_tracer_"
+                          +std::to_string(count)+"_filename in the parameter file",
+                          Patterns::Anything(),
+                          "Name of the file with the initial tracer"
+                          "in structured format (with extension txt.gz)");
+
+      prm.declare_entry("Initial_freesurface_value",
+                        "0",
+                        Patterns::Double(0),
+                        "Constant value for the initial free-surface");
+
+      prm.declare_entry("Initial_discharge_x_value",
+                        "0",
+                        Patterns::Double(0),
+                        "Constant value for the initial discharge (x-component)");
+
+      prm.declare_entry("Initial_discharge_y_value",
+                        "0",
+                        Patterns::Double(0),
+                        "Constant value for the initial discharge (y-component)");
+
+      for (unsigned int count = 1; count < 20; ++count)
+        prm.declare_entry("Initial_tracer_"+std::to_string(count)+"_value",
+                          "1",
+                          Patterns::Double(0),
+                         "Constant value for the initial tracer");
     }
     prm.leave_subsection();
 
