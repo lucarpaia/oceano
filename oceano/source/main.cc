@@ -37,10 +37,7 @@
 
 // First come the numerics. The following preprocessor select the time integrator. For
 // now we have coded general explicit schemes that belong to the family of Runge-Kutta scheme.
-// Apart from standard scheme we have also coded low-storage schemes privileges the rapidity
-// of accessing the memory.
 #undef  TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
-#undef  TIMEINTEGRATOR_LOWSTORAGERUNGEKUTTA
 #define TIMEINTEGRATOR_ADDITIVERUNGEKUTTA
 // The numerical flux (Riemann solver) at the faces between cells. For this
 // program, we have implemented a modified variant of the Lax--Friedrichs
@@ -161,9 +158,7 @@
 // we have done a limited use of virtual classes; on the contrary 
 // each of these header files contains the same class definition, so they
 // cannot be linked together.
-#if defined TIMEINTEGRATOR_LOWSTORAGERUNGEKUTTA
-#include <time_integrator/LowStorageRungeKuttaIntegrator.h>
-#elif defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
+#if defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
 #include <time_integrator/ExplicitRungeKuttaIntegrator.h>
 #elif defined TIMEINTEGRATOR_ADDITIVERUNGEKUTTA
 #include <time_integrator/AdditiveRungeKuttaIntegrator.h>
@@ -208,9 +203,7 @@ namespace Problem
   using Number = double;
 
   // Next off is the choice of the time integrator scheme:
-#if defined TIMEINTEGRATOR_LOWSTORAGERUNGEKUTTA
-  constexpr TimeIntegrator::LowStorageRungeKuttaScheme rk_scheme = TimeIntegrator::stage_3_order_3;
-#elif defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
+#if defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
   constexpr TimeIntegrator::ExplicitRungeKuttaScheme rk_scheme = TimeIntegrator::stage_3_order_2;
 #elif defined TIMEINTEGRATOR_ADDITIVERUNGEKUTTA
   constexpr TimeIntegrator::AdditiveRungeKuttaScheme rk_scheme = TimeIntegrator::stage_3_order_2;
@@ -644,7 +637,6 @@ namespace Problem
       oceano_operator.evaluate_vector_field(dof_handler_height,
                                             solution_height,
                                             solution_discharge,
-                                            solution_tracer,
                                             x_evaluation_points,
                                             postprocess_velocity,
                                             postprocess_scalar_variables);
@@ -782,7 +774,6 @@ namespace Problem
       oceano_operator.evaluate_vector_field(dof_handler_height,
                                             solution_height,
                                             solution_discharge,
-                                            solution_tracer,
                                             x_evaluation_points,
                                             postprocess_vector_variables,
                                             postprocess_scalar_variables);
@@ -886,13 +877,26 @@ namespace Problem
       {
         data_out.add_data_vector(dof_handler_height,
                                  solution_height,
-                                 vars_names[0],
-                                 {DataComponentInterpretation::component_is_scalar});
+                                 vars_names[0]);
 
         data_out.add_data_vector(dof_handler_discharge,
                                  postprocess_vector_variables,
                                  names_vector,
                                  interpretation_vector);
+
+#ifdef OCEANO_WITH_TRACERS
+        // lrp: not nice the next if statement
+        std::vector<std::string> names_tracer;
+        for (unsigned int t = 0; t < n_tra; ++t)
+          names_tracer.emplace_back(vars_names[1+dim+t]);
+        if (n_tra>1)
+          data_out.add_data_vector(dof_handler_tracer,
+                                   solution_tracer,
+                                   names_tracer);
+        else data_out.add_data_vector(dof_handler_tracer,
+                                     solution_tracer,
+                                     vars_names[1+dim]);
+#endif
 
         for (unsigned int v = 0; v < postprocessor.n_postproc_vars-dim; ++v)
           data_out.add_data_vector(dof_handler_height,
@@ -1147,25 +1151,7 @@ namespace Problem
     const double courant_number = prm.get_double("CFL");
     prm.leave_subsection();
 
-#if defined TIMEINTEGRATOR_LOWSTORAGERUNGEKUTTA
-    const TimeIntegrator::LowStorageRungeKuttaIntegrator integrator(rk_scheme);
-
-    LinearAlgebra::distributed::Vector<Number> rk_register_height_1;
-    LinearAlgebra::distributed::Vector<Number> rk_register_height_2;
-    LinearAlgebra::distributed::Vector<Number> rk_register_discharge_1;
-    LinearAlgebra::distributed::Vector<Number> rk_register_discharge_2;
-    LinearAlgebra::distributed::Vector<Number> rk_register_tracer_1;
-    LinearAlgebra::distributed::Vector<Number> rk_register_tracer_2;
-
-    integrator.reinit(solution_height, solution_discharge, solution_tracer,
-                      rk_register_height_1,
-                      rk_register_discharge_1,
-                      rk_register_tracer_1,
-                      rk_register_height_2,
-                      rk_register_discharge_2,
-                      rk_register_tracer_2);
-
-#elif defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
+#if defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
     const TimeIntegrator::ExplicitRungeKuttaIntegrator integrator(rk_scheme);
 
     LinearAlgebra::distributed::Vector<Number> rk_register_height_1;

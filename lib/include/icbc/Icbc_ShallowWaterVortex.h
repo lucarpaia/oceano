@@ -172,8 +172,10 @@ namespace ICBC
       return depth;
     else if (component == 1)
       return depth * u;
-    else
+    else if (component == 2)
       return depth * v;
+    else
+      return 1.;
   }
 
 
@@ -198,12 +200,8 @@ namespace ICBC
   public:
     Ic(IO::ParameterHandler &prm)
       : ExactSolution<dim, n_vars>(0.,prm)
-  //    , prm(prm)
     {}
     ~Ic(){};
-
-  //private:
-  //  ParameterHandler &prm;
   };
 
 

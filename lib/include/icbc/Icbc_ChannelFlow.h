@@ -43,14 +43,14 @@ namespace ICBC
   // prove if the friction terms are coded in order to satisfy the steady states.
   // We consider a 100 m long channel, with a constant discharge as in
   // (Rosatti&Bonaventura,2011). For a subcritical flow we can
-  // impose only one characteristic variable or a phyisical one. Based on physical
+  // impose only one characteristic variable or a physical one. Based on physical
   // arguments we impose the discharge at the inflow and the water height at the
   // outflow.
   //
   // We have added a discontinuous bathymetry with a jump. The regular
   // solution does not hold anymore but we can compute the weak solution from
   // the jump relationships. If you want to test a constant flow over a jump
-  // undefine the following preprocessor
+  // undefine the following preprocessor.
 #undef  ICBC_CHANNELFLOW_BATHYMETRYDISCONTINUOUS
 
   using namespace dealii;
@@ -81,7 +81,9 @@ namespace ICBC
   // and discharge variables. We check that the test runs in two-dimensions
   // which is consistent with the dimension of the file (otherwise it would raise
   // an error difficult to detect). The free-surface is computed by a bilinear
-  // interpolation of the data read from file.
+  // interpolation of the data read from file. If tracers are added they are
+  // taken constant to check the tracer consistency with the continuity when
+  // a non-polynomial bathymetry is present.
   template <int dim, int n_vars>  
   class ExactSolution : public Function<dim>
   {
@@ -122,12 +124,15 @@ namespace ICBC
                                            const unsigned int component) const
   {
     Assert(dim == 2, ExcNotImplemented());
+
     if (component == 0)
       return data.value(x);
     else if (component == 1)
       return q0;
-    else
+    else if (component == 2)
       return 0.;
+    else
+      return 1.;
   }
 
 
@@ -170,18 +175,19 @@ namespace ICBC
   };
 
   template <int dim, int n_vars>
-  double Ic<dim, n_vars>::value(const Point<dim>  &/*x*/,
+  double Ic<dim, n_vars>::value(const Point<dim>  &x,
                                 const unsigned int component) const
   {
     Assert(dim == 2, ExcNotImplemented());
-    Assert(n_vars < 4, ExcNotImplemented());
 
     if (component == 0)
-        return 0.;
+      return 0.;
     else if (component == 1)
-        return q0;
+      return q0;
+    else if (component == 2)
+      return 0.;
     else
-        return 0.;
+      return 1.;
   }
 
 

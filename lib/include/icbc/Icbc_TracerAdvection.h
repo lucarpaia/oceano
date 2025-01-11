@@ -44,7 +44,7 @@ namespace ICBC
   // follows. We choose a channel $[0,1]\times[0,2]$ with a depth of 1.
   // The initial concentration is a cosine bell with an
   // amplitude of 1 and a radius of one fourth of the channel width.
-  constexpr double hoo     = 1.0;
+  constexpr double hoo     = 0.5;
   constexpr double uoo     = 1.0;
   // the depth at the center:  
   constexpr double cmax    = 1.0;
@@ -59,7 +59,9 @@ namespace ICBC
   // to define initial and boundary conditions. Apart for the template for the
   // dimension which is in common with the base `Function` class, we have added
   // the number of variables. We return either the water depth, the momentum or
-  // the concentration, depending on which component is requested.
+  // the concentration, depending on which component is requested. If multiple
+  // concentrations are advected, different initial conditions are assigned to
+  // the each concentration species.
   template <int dim, int n_vars>  
   class ExactSolution : public Function<dim>
   {
@@ -91,15 +93,16 @@ namespace ICBC
     const double conc =
       radius < radius0 ? cmax * std::cos(rho_half) : 0.0;
 
-
     if (component == 0)
       return 0.;
     else if (component == 1)
       return hoo * uoo;
-    else  if (component == 2)
+    else if (component == 2)
       return 0.;
+    else if (component == 3)
+      return conc;
     else
-      return hoo * conc;
+      return conc * 2.0;
   }
 
 
@@ -191,9 +194,12 @@ namespace ICBC
 
   template <int dim>
   double ProblemData<dim>::value(const Point<dim> & /*x*/,
-                                 const unsigned int /*component*/) const
+                                 const unsigned int component) const
   {
-    return hoo;
+    if (component == 0)
+      return hoo;
+    else
+      return 0.;
   }
 
 } // namespace ICBC

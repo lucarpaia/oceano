@@ -208,8 +208,10 @@ namespace ICBC
 
     if (component == 0 || component == 1)
       return boundary_data.value(t);
-    else
+    else if (component == 2)
       return 0.;
+    else
+      return 2.; // lrp: to assign bc from file
   }
 
 

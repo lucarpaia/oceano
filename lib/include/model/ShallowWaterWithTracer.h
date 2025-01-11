@@ -93,28 +93,17 @@ namespace Model
       void
       set_vars_name();
 
-    template <int n_tra, typename Number>
-    inline DEAL_II_ALWAYS_INLINE //
-      Tensor<1, n_tra, Number>
-      tracer(const Number                    height,
-             const Tensor<1, n_tra, Number> &tracer,
-             const Number                    bathymetry) const;
-
     template <int dim, int n_tra, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, n_tra, Tensor<1, dim, Number>>
-      tracerflux(const Number                    height,
-                 const Tensor<1, dim, Number>   &discharge,
-                 const Tensor<1, n_tra, Number> &tracer,
-                 const Number                    bathymetry) const;
+      tracerflux(const Tensor<1, dim, Number>   &discharge,
+                 const Tensor<1, n_tra, Number> &tracer) const;
 
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Number>
-      tracerflux(const Number                  height,
-                 const Tensor<1, dim, Number> &discharge,
-                 const Number                  tracer,
-                 const Number                  bathymetry) const;
+      tracerflux(const Tensor<1, dim, Number> &discharge,
+                 const Number                  tracer) const;
   };
 
 
@@ -142,46 +131,25 @@ namespace Model
     vars_name.push_back("free_surface");
     for (unsigned int d = 0; d < dim; ++d)
       vars_name.push_back("hu");
+    for (unsigned int t = 0; t < n_tra; ++t)
+        vars_name.push_back("t_"+std::to_string(t+1));
+
     for (unsigned int d = 0; d < dim; ++d)
       postproc_vars_name.push_back("velocity");
     postproc_vars_name.push_back("depth");
-
-    for (unsigned int t = 0; t < n_tra; ++t)
-        vars_name.push_back("ht_"+std::to_string(t+1));
-    for (unsigned int t = 0; t < n_tra; ++t)
-        postproc_vars_name.push_back("tracer_"+std::to_string(t+1));
-  }
-
-  template <int n_tra, typename Number>
-  inline DEAL_II_ALWAYS_INLINE //
-    Tensor<1, n_tra, Number>
-    ShallowWaterWithTracer::tracer(
-      const Number                    height,
-      const Tensor<1, n_tra, Number> &tracer,
-      const Number                    bathymetry) const
-  {
-    const Number inverse_depth
-      = Number(1.) / (height + bathymetry);
-
-    return tracer * inverse_depth;
   }
  
   template <int dim, int n_tra, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, n_tra, Tensor<1, dim, Number>>
     ShallowWaterWithTracer::tracerflux(
-      const Number                    height,
       const Tensor<1, dim, Number>   &discharge,
-      const Tensor<1, n_tra, Number> &tracer,
-      const Number                    bathymetry) const
+      const Tensor<1, n_tra, Number> &tracer) const
   {
-    const Tensor<1, dim, Number> v =
-      velocity<dim>(height, discharge, bathymetry);
- 
     Tensor<1, n_tra, Tensor<1, dim, Number>> flux;
     for (unsigned int d = 0; d < dim; ++d)
       for (unsigned int e = 0; e < n_tra; ++e)
-        flux[e][d] = tracer[e] * v[d];
+        flux[e][d] = tracer[e] * discharge[d];
 
     return flux;
   }
@@ -190,15 +158,10 @@ namespace Model
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
     ShallowWaterWithTracer::tracerflux(
-      const Number                  height,
       const Tensor<1, dim, Number> &discharge,
-      const Number                  tracer,
-      const Number                  bathymetry) const
+      const Number                  tracer) const
   {
-    const Tensor<1, dim, Number> v =
-      velocity<dim>(height, discharge, bathymetry);
-
-    return tracer * v;
+    return tracer * discharge;
   }
 } // namespace Model
 #endif //SHALLOWWATERWITHTRACER_HPP

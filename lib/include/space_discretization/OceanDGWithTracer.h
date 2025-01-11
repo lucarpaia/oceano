@@ -112,22 +112,14 @@ namespace SpaceDiscretization
                 const DoFHandler<dim> &dof_handler_discharge,
                 const DoFHandler<dim> &dof_handler_tracer);
 
-#if defined TIMEINTEGRATOR_LOWSTORAGERUNGEKUTTA
-    void
-    perform_stage_tracers(
-      const                                                          Number factor_solution,
-      const                                                          Number factor_ai,
-      const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
-      LinearAlgebra::distributed::Vector<Number>                    &vec_ki_tracer,
-      LinearAlgebra::distributed::Vector<Number>                    &solution_tracer,
-      LinearAlgebra::distributed::Vector<Number>                    &next_ri_tracer) const;
-
-#elif defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA || defined TIMEINTEGRATOR_ADDITIVERUNGEKUTTA
+#if defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA || defined TIMEINTEGRATOR_ADDITIVERUNGEKUTTA
     void
     perform_stage_tracers(
       const unsigned int                                             cur_stage,
       const Number                                                  *factor_residual,
       const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
+      const LinearAlgebra::distributed::Vector<Number>              &solution_height,
+      const LinearAlgebra::distributed::Vector<Number>              &next_ri_height,
       std::vector<LinearAlgebra::distributed::Vector<Number>>       &vec_ki_tracer,
       LinearAlgebra::distributed::Vector<Number>                    &solution_tracer,
       LinearAlgebra::distributed::Vector<Number>                    &next_ri_tracer) const;
@@ -139,15 +131,6 @@ namespace SpaceDiscretization
     std::array<double, n_tra> compute_errors_tracers(
       const Function<dim> &                             function,
       const LinearAlgebra::distributed::Vector<Number> &solution_tracer) const;
-
-    void evaluate_vector_field(
-      const DoFHandler<dim>                                   &dof_handler,
-      const LinearAlgebra::distributed::Vector<Number>        &solution_height,
-      const LinearAlgebra::distributed::Vector<Number>        &solution_discharge,
-      const LinearAlgebra::distributed::Vector<Number>        &solution_tracer,
-      std::map<unsigned int, Point<dim>>                      &evaluation_points,
-      LinearAlgebra::distributed::Vector<Number>              &computed_vector_quantities,
-      std::vector<LinearAlgebra::distributed::Vector<Number>> &computed_scalar_quantities) const;
 
     using OceanoOperator<dim, n_tra, degree, n_points_1d>::bc;
 
@@ -161,13 +144,19 @@ namespace SpaceDiscretization
 
     using OceanoOperator<dim, n_tra, degree, n_points_1d>::timer;
 
-    void local_apply_inverse_mass_matrix_tracer(
-      const MatrixFree<dim, Number> &                   data,
-      LinearAlgebra::distributed::Vector<Number> &      dst,
-      const LinearAlgebra::distributed::Vector<Number> &src,
-      const std::pair<unsigned int, unsigned int> &     cell_range) const;
+    void local_apply_inverse_modified_mass_matrix_tracer(
+      const MatrixFree<dim, Number>                                 &data,
+      LinearAlgebra::distributed::Vector<Number>                    &dst,
+      const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
+      const std::pair<unsigned int, unsigned int>                   &cell_range) const;
 
     void local_apply_cell_tracer(
+      const MatrixFree<dim, Number>                                 &data,
+      LinearAlgebra::distributed::Vector<Number>                    &dst,
+      const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
+      const std::pair<unsigned int, unsigned int>                   &cell_range) const;
+
+    void local_apply_cell_mass_tracer(
       const MatrixFree<dim, Number>                                 &data,
       LinearAlgebra::distributed::Vector<Number>                    &dst,
       const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
@@ -324,14 +313,11 @@ namespace SpaceDiscretization
     const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
     const std::pair<unsigned int, unsigned int>                   &cell_range) const
   {
-    FEEvaluation<dim, degree, n_points_1d, 1, Number> phi_height(data,0);
     FEEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge(data,1);
     FEEvaluation<dim, degree, n_points_1d, n_tra, Number> phi_tracer(data,2);
 
     for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
       {
-        phi_height.reinit(cell);
-        phi_height.gather_evaluate(src[0], EvaluationFlags::values);
         phi_discharge.reinit(cell);
         phi_discharge.gather_evaluate(src[1], EvaluationFlags::values);
         phi_tracer.reinit(cell);
@@ -339,18 +325,47 @@ namespace SpaceDiscretization
 
         for (unsigned int q = 0; q < phi_tracer.n_q_points; ++q)
           {
-            const auto z_q = phi_height.get_value(q);
             const auto q_q = phi_discharge.get_value(q);
+            const auto t_q = phi_tracer.get_value(q);
+
+            phi_tracer.submit_gradient(model.tracerflux(q_q, t_q), q);
+          }
+
+        phi_tracer.integrate_scatter(EvaluationFlags::gradients,
+                                       dst);
+      }
+  }
+
+  // The next function concerns the computation of the mass-matrix term on
+  // the right-hand-side, the one computed at $t^n$:
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperatorWithTracer<dim, n_tra, degree, n_points_1d>::local_apply_cell_mass_tracer(
+    const MatrixFree<dim, Number> &,
+    LinearAlgebra::distributed::Vector<Number>                    &dst,
+    const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
+    const std::pair<unsigned int, unsigned int>                   &cell_range) const
+  {
+    FEEvaluation<dim, degree, degree + 1, 1, Number> phi_height(data,0,1);
+    FEEvaluation<dim, degree, degree + 1, n_tra, Number> phi_tracer(data,2,1);
+
+    for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
+      {
+        phi_tracer.reinit(cell);
+        phi_tracer.gather_evaluate(src[0], EvaluationFlags::values);
+        phi_height.reinit(cell);
+        phi_height.gather_evaluate(src[1], EvaluationFlags::values);
+
+        for (unsigned int q = 0; q < phi_tracer.n_q_points; ++q)
+          {
+            const auto z_q = phi_height.get_value(q);
             const auto t_q = phi_tracer.get_value(q);
             const VectorizedArray<Number> data_q =
               evaluate_function<dim, Number>(
                 *bc->problem_data, phi_tracer.quadrature_point(q), 0);
-
-            phi_tracer.submit_gradient(
-              model.tracerflux(z_q, q_q, t_q, data_q), q);
+            phi_tracer.submit_value((z_q+data_q)*t_q, q);
           }
 
-        phi_tracer.integrate_scatter(EvaluationFlags::gradients,
+        phi_tracer.integrate_scatter(EvaluationFlags::values,
                                        dst);
       }
   }
@@ -710,50 +725,51 @@ namespace SpaceDiscretization
   }
 
   // The next function implements the inverse mass matrix operation. The
-  // algorithms and rationale have been discussed extensively in the
-  // introduction, so we here limit ourselves to the technicalities of the
-  // MatrixFreeOperators::CellwiseInverseMassMatrix class. It does similar
-  // operations as the forward evaluation of the mass matrix, except with a
-  // different interpolation matrix, representing the inverse $S^{-1}$
-  // factors. These represent a change of basis from the specified basis (in
-  // this case, the Lagrange basis in the points of the Gauss--Lobatto
-  // quadrature formula) to the Lagrange basis in the points of the Gauss
-  // quadrature formula. In the latter basis, we can apply the inverse of the
-  // point-wise `JxW` factor, i.e., the quadrature weight times the
-  // determinant of the Jacobian of the mapping from reference to real
-  // coordinates. Once this is done, the basis is changed back to the nodal
-  // Gauss-Lobatto basis again. All of these operations are done by the
-  // `apply()` function below. What we need to provide is the local fields to
-  // operate on (which we extract from the global vector by an FEEvaluation
-  // object) and write the results back to the destination vector of the mass
-  // matrix operation.
-  //
-  // One thing to note is that we added two integer arguments (that are
-  // optional) to the constructor of FEEvaluation, the first being 0
-  // (selecting among the DoFHandler in multi-DoFHandler systems; here, we
-  // only have one) and the second being 1 to make the quadrature formula
-  // selection. As we use the quadrature formula 0 for the over-integration of
-  // nonlinear terms, we use the formula 1 with the default $p+1$ (or
-  // `degree+1` in terms of the variable name) points for the mass
-  // matrix. This leads to square contributions to the mass matrix and ensures
-  // exact integration, as explained in the introduction.
+  // algorithms and rationale have been discussed extensively for the
+  // hydrodyanamics. We just comment on the particular form of such a mass-matrix.
+  // Haveìing condensed the water depth into the mass-matrix, the integrand is no more
+  // a polynomial. For consistency we use the $r+1$-accurate quadrature formula used
+  // elsewhere that integrate exactly polynomials of degree 2r+1 (thus, the standard
+  // mass-matrix but not a polynomial of degree 3r, that would results for a constant
+  // water depth or for a polynomial bathymetry). For coastal and oceanic applications,
+  // with a free-surface almost constant on a cell, intuition suggests that the aliasing
+  // error, coming from under-integration, should stay small.
   template <int dim, int n_tra, int degree, int n_points_1d>
-  void OceanoOperatorWithTracer<dim, n_tra, degree, n_points_1d>::local_apply_inverse_mass_matrix_tracer(
+  void OceanoOperatorWithTracer<dim, n_tra, degree, n_points_1d>::local_apply_inverse_modified_mass_matrix_tracer(
     const MatrixFree<dim, Number> &,
-    LinearAlgebra::distributed::Vector<Number> &      dst,
-    const LinearAlgebra::distributed::Vector<Number> &src,
-    const std::pair<unsigned int, unsigned int> &     cell_range) const
+    LinearAlgebra::distributed::Vector<Number>                    &dst,
+    const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
+    const std::pair<unsigned int, unsigned int>                   &cell_range) const
   {
     FEEvaluation<dim, degree, degree + 1, n_tra, Number> phi_tracer(data, 2, 1);
+    FEEvaluation<dim, degree, degree + 1, 1, Number> phi_height_ri(data, 0, 1);
     MatrixFreeOperators::CellwiseInverseMassMatrix<dim, degree, n_tra, Number>
       inverse(phi_tracer);
 
     for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
       {
         phi_tracer.reinit(cell);
-        phi_tracer.read_dof_values(src);
+        phi_tracer.read_dof_values(src[0]);
 
-        inverse.apply(phi_tracer.begin_dof_values(), phi_tracer.begin_dof_values());
+        phi_height_ri.reinit(cell);
+        phi_height_ri.gather_evaluate(src[1], EvaluationFlags::values);
+
+	AlignedVector<VectorizedArray<Number>> inverse_jxw(phi_tracer.n_q_points);
+	inverse.fill_inverse_JxW_values(inverse_jxw);
+
+        for (unsigned int q = 0; q < phi_tracer.n_q_points; ++q)
+          {
+            const VectorizedArray<Number> data_q =
+              evaluate_function<dim, Number>(
+                *bc->problem_data, phi_tracer.quadrature_point(q), 0);
+            const auto z_q = phi_height_ri.get_value(q);
+
+            inverse_jxw[q] *= 1. / (z_q+data_q);
+          }
+
+        inverse.apply(inverse_jxw, dim, phi_tracer.begin_dof_values(),
+          phi_tracer.begin_dof_values());
+//        inverse.apply(phi_discharge.begin_dof_values(), phi_discharge.begin_dof_values());
 
         phi_tracer.set_dof_values(dst);
       }
@@ -834,86 +850,25 @@ namespace SpaceDiscretization
   // time with default vector updates on a 40-core machine, the percentage is
   // around 35% with the more optimized variant. In other words, this is a
   // speedup of around a third.
-#if defined TIMEINTEGRATOR_LOWSTORAGERUNGEKUTTA
-  template <int dim, int n_tra, int degree, int n_points_1d>
-  void OceanoOperatorWithTracer<dim, n_tra, degree, n_points_1d>::perform_stage_tracers(
-    const Number                                                   factor_solution,
-    const Number                                                   factor_ai,
-    const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
-    LinearAlgebra::distributed::Vector<Number>                    &vec_ki_tracer,
-    LinearAlgebra::distributed::Vector<Number>                    &solution_tracer,
-    LinearAlgebra::distributed::Vector<Number>                    &next_ri_tracer) const  
-  {
-    {
-      TimerOutput::Scope t(timer, "rk_stage tracer - integrals L_h");
-
-      data.loop(&OceanoOperatorWithTracer::local_apply_cell_tracer,
-                &OceanoOperatorWithTracer::local_apply_face_tracer,
-                &OceanoOperatorWithTracer::local_apply_boundary_face_tracer,
-                this,
-                vec_ki_tracer,
-                current_ri,
-                true,
-                MatrixFree<dim, Number>::DataAccessOnFaces::values,
-                MatrixFree<dim, Number>::DataAccessOnFaces::values);
-    }
-
-
-    {
-      TimerOutput::Scope t(timer, "rk_stage tracer - inv mass + vec upd");
-      data.cell_loop(
-        &OceanoOperatorWithTracer::local_apply_inverse_mass_matrix_tracer,
-        this,
-        next_ri_tracer,
-        vec_ki_tracer,
-        std::function<void(const unsigned int, const unsigned int)>(),
-        [&](const unsigned int start_range, const unsigned int end_range) {
-          const Number ai = factor_ai;
-          const Number bi = factor_solution;
-          if (ai == Number())
-            {
-              /* DEAL_II_OPENMP_SIMD_PRAGMA */
-              for (unsigned int i = start_range; i < end_range; ++i)
-                {
-                  const Number k_i          = next_ri_tracer.local_element(i);
-                  const Number sol_i        = solution_tracer.local_element(i);
-                  solution_tracer.local_element(i) = sol_i + bi * k_i;
-                }
-            }
-          else
-            {
-              /* DEAL_II_OPENMP_SIMD_PRAGMA */
-              for (unsigned int i = start_range; i < end_range; ++i)
-                {
-                  const Number k_i          = next_ri_tracer.local_element(i);
-                  const Number sol_i        = solution_tracer.local_element(i);
-                  solution_tracer.local_element(i) = sol_i + bi * k_i;
-                  next_ri_tracer.local_element(i)  = sol_i + ai * k_i;
-                }
-            }
-        },
-        2);
-    }    
-  }
-
-#elif defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA || defined TIMEINTEGRATOR_ADDITIVERUNGEKUTTA
+#if defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA || defined TIMEINTEGRATOR_ADDITIVERUNGEKUTTA
   template <int dim, int n_tra, int degree, int n_points_1d>
   void OceanoOperatorWithTracer<dim, n_tra, degree, n_points_1d>::perform_stage_tracers(
     const unsigned int                                             current_stage,
     const Number                                                  *factor_residual,
     const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
+    const LinearAlgebra::distributed::Vector<Number>              &solution_height,
+    const LinearAlgebra::distributed::Vector<Number>              &next_ri_height,
     std::vector<LinearAlgebra::distributed::Vector<Number>>       &vec_ki_tracer,
     LinearAlgebra::distributed::Vector<Number>                    &solution_tracer,
     LinearAlgebra::distributed::Vector<Number>                    &next_ri_tracer) const
   {
     {
       TimerOutput::Scope t(timer, "rk_stage tracer - integrals L_h");
-
       data.loop(&OceanoOperatorWithTracer::local_apply_cell_tracer,
                 &OceanoOperatorWithTracer::local_apply_face_tracer,
                 &OceanoOperatorWithTracer::local_apply_boundary_face_tracer,
                 this,
-                vec_ki_tracer.front(),
+                vec_ki_tracer[current_stage+1],
                 current_ri,
                 true,
                 MatrixFree<dim, Number>::DataAccessOnFaces::values,
@@ -925,47 +880,45 @@ namespace SpaceDiscretization
       unsigned int n_stages = vec_ki_tracer.size()-1; //lrp: may be optimized passing as argument
       TimerOutput::Scope t(timer, "rk_stage tracer - inv mass + vec upd");
       data.cell_loop(
-        &OceanoOperatorWithTracer::local_apply_inverse_mass_matrix_tracer,
+        &OceanoOperatorWithTracer::local_apply_cell_mass_tracer,
         this,
-        vec_ki_tracer[current_stage+1],
         vec_ki_tracer.front(),
-        std::function<void(const unsigned int, const unsigned int)>(),
+        {solution_tracer, solution_height},
         [&](const unsigned int start_range, const unsigned int end_range) {
-          if (current_stage == n_stages-1)
+          /* DEAL_II_OPENMP_SIMD_PRAGMA */
+          for (unsigned int i = start_range; i < end_range; ++i)
             {
-              /* DEAL_II_OPENMP_SIMD_PRAGMA */
-              for (unsigned int i = start_range; i < end_range; ++i)
-                {
-                  Number k_i           = vec_ki_tracer[1].local_element(i);
-                  const Number sol_i   = solution_tracer.local_element(i);
-                  solution_tracer.local_element(i)  = sol_i + factor_residual[0]  * k_i;
-		  for (unsigned int j = 1; j < current_stage+1; ++j)
-		    {
-                      k_i = vec_ki_tracer[j+1].local_element(i);
-                      solution_tracer.local_element(i) += factor_residual[j]  * k_i;
-                    }
-                }
+              Number k_i           = vec_ki_tracer[1].local_element(i);
+              vec_ki_tracer.front().local_element(i)  = factor_residual[0]  * k_i;
+              for (unsigned int j = 1; j < current_stage+1; ++j)
+		{
+		  k_i              = vec_ki_tracer[j+1].local_element(i);
+		  vec_ki_tracer.front().local_element(i) += factor_residual[j]  * k_i;
+		}
             }
-          else
-            {
-              /* DEAL_II_OPENMP_SIMD_PRAGMA */
-              for (unsigned int i = start_range; i < end_range; ++i)
-                {
-                  Number k_i            = vec_ki_tracer[1].local_element(i);
-                  const Number sol_i    = solution_tracer.local_element(i);
-                  next_ri_tracer.local_element(i) = sol_i + factor_residual[0]  * k_i;
-		  for (unsigned int j = 1; j < current_stage+1; ++j)
-		    {
-                      k_i = vec_ki_tracer[j+1].local_element(i);
-                      next_ri_tracer.local_element(i) += factor_residual[j]  * k_i;
-                    }
-                }
-            }
-        },
+	},
+        std::function<void(const unsigned int, const unsigned int)>(),
         2);
+      if (current_stage == n_stages-1)
+        {
+          data.cell_loop(
+            &OceanoOperatorWithTracer::local_apply_inverse_modified_mass_matrix_tracer,
+            this,
+            solution_tracer,
+            {vec_ki_tracer.front(), next_ri_height},
+            true);
+        }
+      else
+        {
+          data.cell_loop(
+            &OceanoOperatorWithTracer::local_apply_inverse_modified_mass_matrix_tracer,
+            this,
+            next_ri_tracer,
+            {vec_ki_tracer.front(), next_ri_height},
+            true);
+        }
     }
   }
-
 #endif
 
   // Having discussed the implementation of the functions that deal with
@@ -1115,97 +1068,6 @@ namespace SpaceDiscretization
       errors[d] = std::sqrt(errors_squared[d]);
 
     return errors;
-  }
-
-  // For the main evaluation of the field variables, we first check that the
-  // lengths of the arrays equal the expected values (namely the length of the
-  // postprocessed variable vector equal the solution vector).
-  // Then we loop over all evaluation points and
-  // fill the respective information. First we fill the primal solution
-  // variables, the so called prognostic variables. Then we compute derived variables,
-  // the velocity $\mathbf u$ or the depth $h$. These variables are defined in
-  // the model class and they can change from model to model.
-  // For now these variables can depend only on the solution and on given data. For the
-  // implementation of output variables depending on given data see the deal.ii documentation:
-  // https://www.dealii.org/current/doxygen/deal.II/classDataPostprocessorVector.html
-  // In general the output can also depend on the solution gradient (think for example to the
-  // vorticity) but this part has been commented for now, see `do_schlieren_plot`.
-  // For the postprocessed variables, a well defined order must be followed: first the
-  // velocity vector, then all the scalars.
-  //
-  // The loop over the evaluation points seems not vectorized.
-  // However the usual way to recover data is with
-  // the `evaluate_function` that operates on vectorized data. With a few tricks the
-  // the `evaluate_function` has been adapted to a non-vectorized loop.
-  template <int dim, int n_tra, int degree, int n_points_1d>
-  void OceanoOperatorWithTracer<dim, n_tra, degree, n_points_1d>::evaluate_vector_field(
-    const DoFHandler<dim>                                   &dof_handler,
-    const LinearAlgebra::distributed::Vector<Number>        &solution_height,
-    const LinearAlgebra::distributed::Vector<Number>        &solution_discharge,
-    const LinearAlgebra::distributed::Vector<Number>        &solution_tracer,
-    std::map<unsigned int, Point<dim>>                      &evaluation_points,
-    LinearAlgebra::distributed::Vector<Number>              &computed_vector_quantities,
-    std::vector<LinearAlgebra::distributed::Vector<Number>> &computed_scalar_quantities) const
-  {
-    const std::vector<std::string> postproc_names = model.postproc_vars_name;
-
-    Assert(computed_vector_quantities.locally_owned_size() == solution_height.locally_owned_size()*dim,
-           ExcInternalError());
-    Assert(computed_scalar_quantities.size() == postproc_names.size()-dim ||
-           computed_scalar_quantities.empty(),
-           ExcInternalError());
-    Assert(solution_discharge.locally_owned_size() == solution_height.locally_owned_size()*dim,
-           ExcInternalError());
-
-    IndexSet myset = dof_handler.locally_owned_dofs();
-    IndexSet::ElementIterator index = myset.begin();
-    for (index=myset.begin(); index!=myset.end(); ++index)
-      {
-        const auto height = solution_height(*index);
-        Tensor<1, dim> discharge;
-        for (unsigned int d = 0; d < dim; ++d)
-          discharge[d] = solution_discharge(*index*dim+d);
-        Tensor<1, n_tra> tracer;
-        for (unsigned int t = 0; t < n_tra; ++t)
-          tracer[t] = solution_tracer(*index*n_tra+t);
-
-        Point<dim,VectorizedArray<Number>> x_evaluation_points;
-        for (unsigned int d = 0; d < dim; ++d)
-          x_evaluation_points[d] = evaluation_points[*index][d];
-
-        const auto data = evaluate_function<dim, Number>(
-            *bc->problem_data, x_evaluation_points, 0);
-
-        const auto velocity = model.velocity(height, discharge, data[0]);
-
-        for (unsigned int d = 0; d < dim; ++d)
-          computed_vector_quantities(*index*dim+d) = velocity[d];
-
-        if (!computed_scalar_quantities.empty())
-          {
-            for (unsigned int v = 0; v < postproc_names.size()-dim-n_tra; ++v)
-              {
-                if (postproc_names[v+dim] == "pressure")
-                  computed_scalar_quantities[v](*index) =
-                    model.pressure(height, data[0]);
-                else if (postproc_names[v+dim] == "depth")
-                  computed_scalar_quantities[v](*index) = height + data[0];
-                else if (postproc_names[v+dim] == "speed_of_sound")
-                  computed_scalar_quantities[v](*index) =
-                    std::sqrt(model.square_wavespeed(height, data[0]));
-                else
-                  {
-                    std::cout << "Postprocessing variable " << postproc_names[dim+v]
-                              << " does not exist. Consider to code it in your model"
-                              << std::endl;
-                    Assert(false, ExcNotImplemented());
-                  }
-              }
-            const auto tra = model.tracer(height, tracer, data[0]);
-            for (unsigned int t = 0; t < n_tra; ++t)
-              computed_scalar_quantities[postproc_names.size()-dim-n_tra+t](*index) = tra[t];
-          }
-      }
   }
 
 } // namespace SpaceDiscretization

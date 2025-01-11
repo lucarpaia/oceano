@@ -168,20 +168,7 @@ namespace SpaceDiscretization
                const LinearAlgebra::distributed::Vector<Number> &src,
                LinearAlgebra::distributed::Vector<Number> &      dst) const;
 
-#if defined TIMEINTEGRATOR_LOWSTORAGERUNGEKUTTA
-    void
-    perform_stage_hydro(
-      const                                                          Number cur_time,
-      const                                                          Number factor_solution,
-      const                                                          Number factor_ai,
-      const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
-      LinearAlgebra::distributed::Vector<Number>                    &vec_ki_height,
-      LinearAlgebra::distributed::Vector<Number>                    &vec_ki_discharge,
-      LinearAlgebra::distributed::Vector<Number>                    &solution_height,
-      LinearAlgebra::distributed::Vector<Number>                    &solution_discharge,
-      LinearAlgebra::distributed::Vector<Number>                    &next_ri_height,
-      LinearAlgebra::distributed::Vector<Number>                    &next_ri_discharge) const;
-#elif defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
+#if defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
     void
     perform_stage_hydro(
       const unsigned int                                             cur_stage,
@@ -227,7 +214,6 @@ namespace SpaceDiscretization
       const DoFHandler<dim>                                   &dof_handler_height,
       const LinearAlgebra::distributed::Vector<Number>        &solution_height,
       const LinearAlgebra::distributed::Vector<Number>        &solution_discharge,
-      const LinearAlgebra::distributed::Vector<Number>        &solution_tracer,
       std::map<unsigned int, Point<dim>>                      &evaluation_points,
       LinearAlgebra::distributed::Vector<Number>              &computed_vector_quantities,
       std::vector<LinearAlgebra::distributed::Vector<Number>> &computed_scalar_quantities) const;
@@ -1402,124 +1388,8 @@ namespace SpaceDiscretization
   // time with default vector updates on a 40-core machine, the percentage is
   // around 35% with the more optimized variant. In other words, this is a
   // speedup of around a third.
-#if defined TIMEINTEGRATOR_LOWSTORAGERUNGEKUTTA
-  template <int dim, int n_tra, int degree, int n_points_1d>
-  void OceanoOperator<dim, n_tra, degree, n_points_1d>::perform_stage_hydro(
-    const Number                                                   current_time,
-    const Number                                                   factor_solution,
-    const Number                                                   factor_ai,
-    const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
-    LinearAlgebra::distributed::Vector<Number>                    &vec_ki_height,
-    LinearAlgebra::distributed::Vector<Number>                    &vec_ki_discharge,
-    LinearAlgebra::distributed::Vector<Number>                    &solution_height,
-    LinearAlgebra::distributed::Vector<Number>                    &solution_discharge,
-    LinearAlgebra::distributed::Vector<Number>                    &next_ri_height,
-    LinearAlgebra::distributed::Vector<Number>                    &next_ri_discharge) const  
-  {
-    {
-      TimerOutput::Scope t(timer, "rk_stage hydro - integrals L_h");
-
-      for (auto &i : bc->supercritical_inflow_boundaries)
-        i.second->set_time(current_time);
-      for (auto &i : bc->height_inflow_boundaries)
-        i.second->set_time(current_time);
-      for (auto &i : bc->discharge_inflow_boundaries)
-        i.second->set_time(current_time);
-
-      data.loop(&OceanoOperator::local_apply_cell_height,
-                &OceanoOperator::local_apply_face_height,
-                &OceanoOperator::local_apply_boundary_face_height,
-                this,
-                vec_ki_height,
-                current_ri,
-                true,
-                MatrixFree<dim, Number>::DataAccessOnFaces::values,
-                MatrixFree<dim, Number>::DataAccessOnFaces::values);
-
-      data.loop(&OceanoOperator::local_apply_cell_discharge,
-                &OceanoOperator::local_apply_face_discharge,
-                &OceanoOperator::local_apply_boundary_face_discharge,
-                this,
-                vec_ki_discharge,
-                current_ri,
-                true,
-                MatrixFree<dim, Number>::DataAccessOnFaces::values,
-                MatrixFree<dim, Number>::DataAccessOnFaces::values);
-    }
-
-
-    {
-      TimerOutput::Scope t(timer, "rk_stage hydro - inv mass + vec upd");
-      data.cell_loop(
-        &OceanoOperator::local_apply_inverse_mass_matrix_height,
-        this,
-        next_ri_height,
-        vec_ki_height,
-        std::function<void(const unsigned int, const unsigned int)>(),
-        [&](const unsigned int start_range, const unsigned int end_range) {
-          const Number ai = factor_ai;
-          const Number bi = factor_solution;
-          if (ai == Number())
-            {
-              /* DEAL_II_OPENMP_SIMD_PRAGMA */
-              for (unsigned int i = start_range; i < end_range; ++i)
-                {
-                  const Number k_i          = next_ri_height.local_element(i);
-                  const Number sol_i        = solution_height.local_element(i);
-                  solution_height.local_element(i) = sol_i + bi * k_i;
-                }
-            }
-          else
-            {
-              /* DEAL_II_OPENMP_SIMD_PRAGMA */
-              for (unsigned int i = start_range; i < end_range; ++i)
-                {
-                  const Number k_i          = next_ri_height.local_element(i);
-                  const Number sol_i        = solution_height.local_element(i);
-                  solution_height.local_element(i) = sol_i + bi * k_i;
-                  next_ri_height.local_element(i)  = sol_i + ai * k_i;
-                }
-            }
-        },
-        0);
-
-
-      data.cell_loop(
-        &OceanoOperator::local_apply_inverse_mass_matrix_discharge,
-        this,
-        next_ri_discharge,
-        vec_ki_discharge,
-        std::function<void(const unsigned int, const unsigned int)>(),
-        [&](const unsigned int start_range, const unsigned int end_range) {
-          const Number ai = factor_ai;
-          const Number bi = factor_solution;
-          if (ai == Number())
-            {
-              /* DEAL_II_OPENMP_SIMD_PRAGMA */
-              for (unsigned int i = start_range; i < end_range; ++i)
-                {
-                  const Number k_i          = next_ri_discharge.local_element(i);
-                  const Number sol_i        = solution_discharge.local_element(i);
-                  solution_discharge.local_element(i) = sol_i + bi * k_i;
-                }
-            }
-          else
-            {
-              /* DEAL_II_OPENMP_SIMD_PRAGMA */
-              for (unsigned int i = start_range; i < end_range; ++i)
-                {
-                  const Number k_i          = next_ri_discharge.local_element(i);
-                  const Number sol_i        = solution_discharge.local_element(i);
-                  solution_discharge.local_element(i) = sol_i + bi * k_i;
-                  next_ri_discharge.local_element(i)  = sol_i + ai * k_i;
-                }
-            }
-        },
-        1);
-    }    
-  }
-
-  // We apply the same concepts to the explicit Runge-Kutta method written
+  //
+  // We code here the explicit Runge-Kutta method written
   // in the standard Butcher tableau form. This kind of method are generals then
   // the low storage ones, although less optimized. We update one single vector at
   // at every stage (`next_ri` for internal stages and `solution` for the last stage)
@@ -1530,7 +1400,7 @@ namespace SpaceDiscretization
   // finished on a part of the vector. The second `std::function` is in fact called
   // after the loop last touches an entry. A different code path is again used for
   // the last stage when we do not need to update the `next_ri` vector.
-#elif defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
+#if defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
   template <int dim, int n_tra, int degree, int n_points_1d>
   void OceanoOperator<dim, n_tra, degree, n_points_1d>::perform_stage_hydro(
     const unsigned int                                             current_stage,
@@ -2204,7 +2074,6 @@ namespace SpaceDiscretization
     const DoFHandler<dim>                                   &dof_handler,
     const LinearAlgebra::distributed::Vector<Number>        &solution_height,
     const LinearAlgebra::distributed::Vector<Number>        &solution_discharge,
-    const LinearAlgebra::distributed::Vector<Number>        &/*solution_tracer*/,
     std::map<unsigned int, Point<dim>>                      &evaluation_points,
     LinearAlgebra::distributed::Vector<Number>              &computed_vector_quantities,
     std::vector<LinearAlgebra::distributed::Vector<Number>> &computed_scalar_quantities) const

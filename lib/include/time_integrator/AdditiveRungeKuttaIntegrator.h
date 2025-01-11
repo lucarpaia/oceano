@@ -234,6 +234,7 @@ namespace TimeIntegrator
 
     pde_operator.factor_matrix = dtildei[0] * time_step;
 
+    std::vector<VectorType> vec_ri = {solution_height, solution_discharge};
     pde_operator.perform_stage_hydro(0,
                                      current_time,
                                      (0 == ci.size() - 1 ?
@@ -242,7 +243,7 @@ namespace TimeIntegrator
                                      (0 == ci.size() - 1 ?
                                        &b_i[0] :
                                        &a_tilde_i[0][0]),
-                                     {solution_height, solution_discharge},
+                                     vec_ri,
                                      vec_ki_height,
                                      vec_ki_discharge,
                                      solution_height,
@@ -250,11 +251,15 @@ namespace TimeIntegrator
                                      vec_ri_height,
                                      vec_ri_discharge);
 #ifdef OCEANO_WITH_TRACERS
+    const VectorType vec_rn_height = solution_height;
+    vec_ri.push_back(solution_tracer);
     pde_operator.perform_stage_tracers(0,
                                        (0 == ci.size() - 1 ?
                                          &b_i[0] :
                                          &a_i[0][0]),
-                                       {solution_height, solution_discharge, solution_tracer},
+                                       vec_ri,
+                                       solution_height,
+                                       vec_ri_height,
                                        vec_ki_tracer,
                                        solution_tracer,
                                        vec_ri_tracer);
@@ -265,6 +270,7 @@ namespace TimeIntegrator
         const double c_i = ci[stage];
         pde_operator.factor_matrix = dtildei[stage] * time_step;
 
+        vec_ri = {vec_ri_height, vec_ri_discharge};
         pde_operator.perform_stage_hydro(stage,
                                          current_time + c_i * time_step,
                                          (stage == ci.size() - 1 ?
@@ -273,7 +279,7 @@ namespace TimeIntegrator
                                          (stage == ci.size() - 1 ?
                                            &b_i[0] :
                                            &a_tilde_i[stage][0]),
-                                         {vec_ri_height, vec_ri_discharge},
+                                         vec_ri,
                                          vec_ki_height,
                                          vec_ki_discharge,
                                          solution_height,
@@ -281,14 +287,19 @@ namespace TimeIntegrator
                                          vec_ri_height,
                                          vec_ri_discharge);
 #ifdef OCEANO_WITH_TRACERS
+        vec_ri.push_back(vec_ri_tracer);
         pde_operator.perform_stage_tracers(stage,
                                            (stage == ci.size() - 1 ?
                                              &b_i[0] :
                                              &a_i[stage][0]),
-                                          {vec_ri_height, vec_ri_discharge, vec_ri_tracer},
-                                          vec_ki_tracer,
-                                          solution_tracer,
-                                          vec_ri_tracer);
+                                           vec_ri,
+                                           vec_rn_height,
+                                           (stage == ci.size() - 1 ?
+                                             solution_height :
+                                             vec_ri_height),
+                                           vec_ki_tracer,
+                                           solution_tracer,
+                                           vec_ri_tracer);
 #endif
       }
   }
