@@ -271,7 +271,7 @@ namespace ICBC
 #if defined ICBC_CHANNELFLOW_BATHYMETRYDISCONTINUOUS
     return xc < -1e-6 ? d0 : d0 - b0;
 #else
-    double zb = d0 + 0.001*x[0];
+    double zb = d0-0.1 + 0.001*x[0];
     double cosx = std::cos(M_PI*xc/(2.*c0));
     zb =  fabs(xc) < c0 ? zb - b0 *cosx*cosx*cosx*cosx : zb;
     return zb;
