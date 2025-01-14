@@ -268,7 +268,7 @@ namespace ICBC
     const double L = 100.;
     const double xc = x[0] - 0.5*L;
 
-#if defined ICBC_LAKEATREST_BATHYMETRYDISCONTINUOUS
+#if defined ICBC_CHANNELFLOW_BATHYMETRYDISCONTINUOUS
     return xc < -1e-6 ? d0 : d0 - b0;
 #else
     double zb = d0 + 0.001*x[0];
@@ -290,5 +290,4 @@ namespace ICBC
       return 0.0;
   }
 } // namespace ICBC
-
 #endif //ICBC_CHANNELFLOW_HPP
