@@ -39,9 +39,9 @@
 // now we have coded general explicit schemes that belong to the family of Runge-Kutta scheme.
 // Apart from standard scheme we have also coded low-storage schemes privileges the rapidity
 // of accessing the memory.
-#define TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
+#undef  TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
 #undef  TIMEINTEGRATOR_LOWSTORAGERUNGEKUTTA
-#undef  TIMEINTEGRATOR_ADDITIVERUNGEKUTTA
+#define TIMEINTEGRATOR_ADDITIVERUNGEKUTTA
 // The numerical flux (Riemann solver) at the faces between cells. For this
 // program, we have implemented a modified variant of the Lax--Friedrichs
 // flux and the Harten--Lax--van Leer (HLL) flux:
@@ -56,9 +56,9 @@
 #undef  ICBC_IMPULSIVEWAVE
 #undef  ICBC_SHALLOWWATERVORTEX
 #undef  ICBC_STOMMELGYRE
-#define ICBC_LAKEATREST
+#undef  ICBC_LAKEATREST
 #undef  ICBC_TRACERADVECTION
-#undef  ICBC_CHANNELFLOW
+#define ICBC_CHANNELFLOW
 // We have two models: a non-hydrostatic Euler model for perfect gas which was the
 // original model coded in the deal.II example and the shallow water model. The Euler model
 // is only used for debugging, to check consistency with the original deal.II example and
@@ -191,8 +191,8 @@ namespace Problem
   // also specify a number of points in the Gaussian quadrature formula we
   // want to use for the nonlinear terms in the shallow water equations.
   constexpr unsigned int dimension            = 2;
-  constexpr unsigned int fe_degree            = 1;
-  constexpr unsigned int n_q_points_1d        = fe_degree + 2;
+  constexpr unsigned int fe_degree            = 3;
+  constexpr unsigned int n_q_points_1d        = floor(1.5*fe_degree) + 1;
 #if defined MODEL_EULER
   constexpr unsigned int n_tracers            = 1;
 #elif defined MODEL_SHALLOWWATER
@@ -344,8 +344,8 @@ namespace Problem
     , postproc_vars_name(postproc_vars_name)
   {
     prm.enter_subsection("Output parameters");
-    do_error = prm.get_double("Output_error");
-    output_tick = prm.get_double("Output_tick");
+    do_error = prm.get_bool("Output_error");
+    output_tick = prm.get_double("Solution_tick");
     output_filename = prm.get("Output_filename");
     prm.leave_subsection();
 

@@ -207,14 +207,14 @@ namespace IO
                         Patterns::Anything(),
                         "Name of the output file (without extension)");
 
-      prm.declare_entry("Output_tick",
+      prm.declare_entry("Solution_tick",
                         "10000000000.",
                         Patterns::Double(0),
                         "Time interval we write the outputs");
 
       prm.declare_entry("Output_error",
-                        "0",
-                        Patterns::Integer(0),
+                        "false",
+                        Patterns::Bool(),
                         "Flag to append also the error field to the output file");
 
       // Since different output formats may require different parameters for

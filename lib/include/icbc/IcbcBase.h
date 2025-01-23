@@ -106,15 +106,15 @@ namespace ICBC
 
     void set_height_inflow_boundary(
       const types::boundary_id       boundary_id,
-      std::unique_ptr<Function<dim>> inflow_energy);
+      std::unique_ptr<Function<dim>> inflow_function);
 
     void set_discharge_inflow_boundary(
       const types::boundary_id       boundary_id,
-      std::unique_ptr<Function<dim>> inflow_energy);
+      std::unique_ptr<Function<dim>> inflow_function);
 
     void set_absorbing_outflow_boundary(
       const types::boundary_id       boundary_id,
-      std::unique_ptr<Function<dim>> outflow_energy);
+      std::unique_ptr<Function<dim>> outflow_function);
 
     void set_wall_boundary(const types::boundary_id boundary_id);
 
@@ -236,7 +236,7 @@ namespace ICBC
     AssertThrow(inflow_function->n_components == n_vars,
                 ExcMessage("Expected function with n_vars components"));
 
-    height_inflow_boundaries[boundary_id] = std::move(inflow_function);
+    discharge_inflow_boundaries[boundary_id] = std::move(inflow_function);
   }
 
 

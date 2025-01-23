@@ -164,11 +164,13 @@ namespace NumericalFlux
       const Number                      data_m,
       const Number                      data_p) const
   {
-    const auto lambda_m = model.square_speed_estimate<dim>(z_m, q_m, data_m);
-    const auto lambda_p = model.square_speed_estimate<dim>(z_p, q_p, data_p);
+    const auto v_m = model.velocity<dim>(z_m, q_m, data_m);
+    const auto v_p = model.velocity<dim>(z_p, q_p, data_p);
+    const auto lambda_m = v_m.norm() + std::sqrt(model.square_wavespeed(z_m, data_m));
+    const auto lambda_p = v_p.norm() + std::sqrt(model.square_wavespeed(z_p, data_p));
 
     const auto lambda =
-      0.5 * std::sqrt(std::max(lambda_p, lambda_m));
+      0.5 * std::max(lambda_p, lambda_m);
 
     return 0.5 * (q_m * normal + q_p * normal) +
            0.5 * lambda * (z_m - z_p);
@@ -186,14 +188,17 @@ namespace NumericalFlux
       const Number                   data_m,
       const Number                   data_p) const
   {
-    const auto lambda_m = model.square_speed_estimate<dim>(z_m, q_m, data_m);
-    const auto lambda_p = model.square_speed_estimate<dim>(z_p, q_p, data_p);
+    const auto v_m = model.velocity<dim>(z_m, q_m, data_m);
+    const auto v_p = model.velocity<dim>(z_p, q_p, data_p);
+
+    const auto lambda_m = v_m.norm() + std::sqrt(model.square_wavespeed(z_m, data_m));
+    const auto lambda_p = v_p.norm() + std::sqrt(model.square_wavespeed(z_p, data_p));
+
+    const auto lambda =
+      0.5 * std::max(lambda_p, lambda_m);
 
     const auto flux_m = model.advectiveflux<dim>(z_m, q_m, data_m);
     const auto flux_p = model.advectiveflux<dim>(z_p, q_p, data_p);
-
-    const auto lambda =
-      0.5 * std::sqrt(std::max(lambda_p, lambda_m));
 
     return 0.5 * (flux_m * normal + flux_p * normal) +
            0.5 * lambda * (q_m - q_p);
@@ -214,14 +219,17 @@ namespace NumericalFlux
       const Number                    data_m,
       const Number                    data_p) const
   {
-    const auto lambda_m = model.square_speed_estimate<dim>(z_m, q_m, data_m);
-    const auto lambda_p = model.square_speed_estimate<dim>(z_p, q_p, data_p);
+    const auto v_m = model.velocity<dim>(z_m, q_m, data_m);
+    const auto v_p = model.velocity<dim>(z_p, q_p, data_p);
+
+    const auto lambda_m = v_m.norm() + std::sqrt(model.square_wavespeed(z_m, data_m));
+    const auto lambda_p = v_p.norm() + std::sqrt(model.square_wavespeed(z_p, data_p));
+
+    const auto lambda =
+      0.5 * std::max(lambda_p, lambda_m);
 
     const auto flux_m = model.tracerflux<dim, n_tra>(z_m, q_m, t_m, data_m);
     const auto flux_p = model.tracerflux<dim, n_tra>(z_p, q_p, t_p, data_p);
-
-    const auto lambda =
-      0.5 * std::sqrt(std::max(lambda_p, lambda_m));
 
     Tensor<1, n_tra, Number> numflux;
     for (unsigned int t = 0; t < n_tra; ++t)
@@ -245,14 +253,17 @@ namespace NumericalFlux
       const Number                   data_m,
       const Number                   data_p) const
   {
-    const auto lambda_m = model.square_speed_estimate<dim>(z_m, q_m, data_m);
-    const auto lambda_p = model.square_speed_estimate<dim>(z_p, q_p, data_p);
+    const auto v_m = model.velocity<dim>(z_m, q_m, data_m);
+    const auto v_p = model.velocity<dim>(z_p, q_p, data_p);
+
+    const auto lambda_m = v_m.norm() + std::sqrt(model.square_wavespeed(z_m, data_m));
+    const auto lambda_p = v_p.norm() + std::sqrt(model.square_wavespeed(z_p, data_p));
+    
+    const auto lambda =
+      0.5 * std::max(lambda_p, lambda_m);
 
     const auto flux_m = model.tracerflux(z_m, q_m, t_m, data_m);
     const auto flux_p = model.tracerflux(z_p, q_p, t_p, data_p);
-
-    const auto lambda =
-      0.5 * std::sqrt(std::max(lambda_p, lambda_m));
 
     return 0.5 * (flux_m * normal + flux_p * normal) +
            0.5 * lambda * (t_m - t_p);

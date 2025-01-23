@@ -1019,7 +1019,7 @@ namespace SpaceDiscretization
                 q_p =
                   evaluate_function<dim, Number>(
                     *bc->discharge_inflow_boundaries.find(boundary_id)->second,
-                    phi_height.quadrature_point(q), 1) * normal;
+                    phi_height.quadrature_point(q), 1) * -normal;
               }
 #if defined MODEL_SHALLOWWATER
             else if (bc->absorbing_outflow_boundaries.find(boundary_id) !=
@@ -1136,7 +1136,7 @@ namespace SpaceDiscretization
                 q_p =
                   evaluate_function<dim, Number>(
                     *bc->discharge_inflow_boundaries.find(boundary_id)->second,
-                    phi_height.quadrature_point(q), 1) * normal;
+                    phi_height.quadrature_point(q), 1) * -normal;
               }
 #if defined MODEL_SHALLOWWATER
             else if (bc->absorbing_outflow_boundaries.find(boundary_id) !=
@@ -1361,7 +1361,9 @@ namespace SpaceDiscretization
 
       for (auto &i : bc->supercritical_inflow_boundaries)
         i.second->set_time(current_time);
-      for (auto &i : bc->supercritical_outflow_boundaries)
+      for (auto &i : bc->height_inflow_boundaries)
+        i.second->set_time(current_time);
+      for (auto &i : bc->discharge_inflow_boundaries)
         i.second->set_time(current_time);
 
       data.loop(&OceanoOperator::local_apply_cell,
@@ -1444,7 +1446,9 @@ namespace SpaceDiscretization
 
       for (auto &i : bc->supercritical_inflow_boundaries)
         i.second->set_time(current_time);
-      for (auto &i : bc->supercritical_outflow_boundaries)
+      for (auto &i : bc->height_inflow_boundaries)
+        i.second->set_time(current_time);
+      for (auto &i : bc->discharge_inflow_boundaries)
         i.second->set_time(current_time);
 
       data.loop(&OceanoOperator::local_apply_cell_height,
@@ -1570,7 +1574,9 @@ namespace SpaceDiscretization
 
       for (auto &i : bc->supercritical_inflow_boundaries)
         i.second->set_time(current_time);
-      for (auto &i : bc->supercritical_outflow_boundaries)
+      for (auto &i : bc->height_inflow_boundaries)
+        i.second->set_time(current_time);
+      for (auto &i : bc->discharge_inflow_boundaries)
         i.second->set_time(current_time);
 
       data.loop(&OceanoOperator::local_apply_cell_height,
@@ -1728,7 +1734,9 @@ namespace SpaceDiscretization
 
       for (auto &i : bc->supercritical_inflow_boundaries)
         i.second->set_time(current_time);
-      for (auto &i : bc->supercritical_outflow_boundaries)
+      for (auto &i : bc->height_inflow_boundaries)
+        i.second->set_time(current_time);
+      for (auto &i : bc->discharge_inflow_boundaries)
         i.second->set_time(current_time);
 
       data.loop(&OceanoOperator::local_apply_cell_height,
@@ -1867,8 +1875,8 @@ namespace SpaceDiscretization
                                                              + factor_tilde_residual[0] * kim_i;
                   for (unsigned int j = 1; j < current_stage+1; ++j)
 		    {
-		      kex_i              = vec_ki_discharge[j+1].local_element(i);
-	              kim_i              = vec_ki_discharge[j+2].local_element(i);
+		      kex_i              = vec_ki_discharge[2*j+1].local_element(i);
+	              kim_i              = vec_ki_discharge[2*j+2].local_element(i);
 		      vec_ki_discharge.front().local_element(i) += factor_residual[j]        * kex_i
 		                                                 + factor_tilde_residual[j]  * kim_i;
 		    }
@@ -1881,7 +1889,7 @@ namespace SpaceDiscretization
             &OceanoOperator::local_apply_inverse_modified_mass_matrix_discharge,
             this,
             next_ri_discharge,
-            {vec_ki_discharge.front(), current_ri[0], current_ri[1]},
+            {vec_ki_discharge.front(), current_ri[0], current_ri[1], current_ri[2]},
             true);
         }
     }

@@ -143,8 +143,13 @@ namespace IO
       {
         try
           {
-            double xi, yi, datai;
-            in >> xi >> yi >> datai;
+            double xi, datai;
+            in >> xi;
+            for (unsigned int d = 0; d < dim-1; ++d)
+              {
+                in >> xi;
+              }
+            in >> datai;
             read_data.push_back(datai);
           }
         catch (...)
