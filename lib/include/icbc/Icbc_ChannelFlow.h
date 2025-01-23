@@ -51,18 +51,33 @@ namespace ICBC
   // solution does not hold anymore but we can compute the weak solution from
   // the jump relationships. If you want to test a constant flow over a jump
   // undefine the following preprocessor.
-#undef  ICBC_CHANNELFLOW_BATHYMETRYDISCONTINUOUS
+#undef  ICBC_CHANNELFLOW_MANNINGSUPERVISCOUS
+#define ICBC_CHANNELFLOW_BATHYMETRYIRREGULAR
 
   using namespace dealii;
 
   // We define global parameters that help in the definition of the initial
   // and boundary conditions. For this test we just need the discharge and
   // and the Manning coefficient:
+#if defined ICBC_CHANNELFLOW_MANNINGSUPERVISCOUS
+  constexpr double b0      = 4.5;
+  constexpr double c0      = 20.;
+  constexpr double d0      = 5.;
+  constexpr double q0      = 5.;
+  constexpr double n0      = 1.0;
+#elif defined ICBC_CHANNELFLOW_BATHYMETRYIRREGULAR
+  constexpr double b0      = 3.0;
+  constexpr double c0      = 1.;
+  constexpr double d0      = 5.;
+  constexpr double q0      = 5.;
+  constexpr double n0      = 0.065;
+#else
   constexpr double b0      = 2.;
   constexpr double c0      = 20.;
   constexpr double d0      = 5.;
   constexpr double q0      = 5.;
   constexpr double n0      = 0.065;
+#endif
 
   // @sect3{Equation data}
 
@@ -266,15 +281,22 @@ namespace ICBC
     const Point<dim> & x) const
   {
     const double L = 100.;
-    const double xc = x[0] - 0.5*L;
 
-#if defined ICBC_CHANNELFLOW_BATHYMETRYDISCONTINUOUS
-    return xc < -1e-6 ? d0 : d0 - b0;
-#else
     double zb = d0-0.1 + 0.001*x[0];
+#if defined ICBC_CHANNELFLOW_BATHYMETRYIRREGULAR
+    const double x1 = x[0] - 0.4 *L;
+    const double x2 = x[0] - 0.5 *L;
+    const double x3 = x[0] - 0.55*L;
+    const double x4 = x[0] - 0.6 *L;
+    double tanhx1 = std::tanh(c0*x1);
+    double tanhx2 = std::tanh(c0*x2);
+    double tanhx3 = std::tanh(c0*x3);
+    double tanhx4 = std::tanh(c0*x4);
+    return zb - b0 * 0.5 * (tanhx1-tanhx2) - b0 * 0.25 * (tanhx3-tanhx4);
+#else
+    const double xc = x[0] - 0.5*L;
     double cosx = std::cos(M_PI*xc/(2.*c0));
-    zb =  fabs(xc) < c0 ? zb - b0 *cosx*cosx*cosx*cosx : zb;
-    return zb;
+    return fabs(xc) < c0 ? zb - b0 *cosx*cosx*cosx*cosx : zb;
 #endif
   }
 
