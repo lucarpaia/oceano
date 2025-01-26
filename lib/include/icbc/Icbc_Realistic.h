@@ -211,7 +211,7 @@ namespace ICBC
     else if (component == 2)
       return 0.;
     else
-      return 2.; // lrp: to assign bc from file
+      return 0.; // lrp: to assign bc from file
   }
 
 
