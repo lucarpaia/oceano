@@ -289,10 +289,11 @@ namespace ICBC
     const double x2 = x[0] - 0.5 *L;
     const double x3 = x[0] - 0.55*L;
     const double x4 = x[0] - 0.6 *L;
-    double tanhx1 = std::tanh(c0*x1);
-    double tanhx2 = std::tanh(c0*x2);
-    double tanhx3 = std::tanh(c0*x3);
-    double tanhx4 = std::tanh(c0*x4);
+    const double inv_c0 = 1./c0;
+    double tanhx1 = std::tanh(x1*inv_c0);
+    double tanhx2 = std::tanh(x2*inv_c0);
+    double tanhx3 = std::tanh(x3*inv_c0);
+    double tanhx4 = std::tanh(x4*inv_c0);
     return zb - b0 * 0.5 * (tanhx1-tanhx2) - b0 * 0.25 * (tanhx3-tanhx4);
 #else
     const double xc = x[0] - 0.5*L;
