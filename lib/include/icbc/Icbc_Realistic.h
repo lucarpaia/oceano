@@ -175,29 +175,52 @@ namespace ICBC
   class BoundaryData : public Function<dim>
   {
   public:
-    BoundaryData(const double time,
-                 std::string boundary_filename);
+    BoundaryData(const double                   time,
+                 const std::vector<std::string> boundary_filenames);
     ~BoundaryData(){};
 
     virtual double value(const Point<dim> & p,
                          const unsigned int component = 0) const override;
 
   private:
-    IO::TxtDataReader<1> boundary_data_reader;
-    const Functions::InterpolatedUniformGridData<1> boundary_data;
+    std::array<std::pair<std::string,int>, n_vars> bc_type;
+    std::vector<Functions::InterpolatedUniformGridData<1>> bc_data;
+    std::vector<Functions::ConstantFunction<1>> bc_constant;
   };
 
   template <int dim, int n_vars>
-  BoundaryData<dim, n_vars>::BoundaryData(const double          time,
-                                          std::string           boundary_filename)
+  BoundaryData<dim, n_vars>::BoundaryData(const double                   time,
+                                          const std::vector<std::string> boundary_filenames)
     : Function<dim>(n_vars, time)
-    , boundary_data_reader(boundary_filename)
-    , boundary_data(
-        boundary_data_reader.endpoints,
-        boundary_data_reader.n_intervals,
-        Table<1, double>(boundary_data_reader.n_intervals.front()+1,
-                         boundary_data_reader.get_data(boundary_filename).begin()))
-  {}
+  {
+    unsigned int count_constant = 0;
+    unsigned int count_data = 0;
+    for (unsigned int v = 0; v < n_vars; ++v)
+      {
+        if (!boundary_filenames[v].empty())
+          {
+            try
+              {
+                const double v0 = std::stod(boundary_filenames[v]);
+                bc_constant.push_back(Functions::ConstantFunction<1>(v0));
+                bc_type[v] = {"constant", count_constant};
+                count_constant++;
+              }
+            catch (...)
+              {
+                IO::TxtDataReader<1> bc_data_reader(boundary_filenames[v]);
+                bc_data.push_back(
+                Functions::InterpolatedUniformGridData<1>(
+                  bc_data_reader.endpoints,
+                  bc_data_reader.n_intervals,
+                  Table<1, double>(bc_data_reader.n_intervals.front()+1,
+                                   bc_data_reader.get_data(bc_data_reader.filename).begin())) );
+                bc_type[v] = {"data", count_data};
+                count_data++;
+              }
+          }
+      }
+  }
 
   template <int dim, int n_vars>
   double BoundaryData<dim, n_vars>::value(const Point<dim>  &/*x*/,
@@ -206,12 +229,11 @@ namespace ICBC
     Point<1> t;
     t[0] = this->get_time();
 
-    if (component == 0 || component == 1)
-      return boundary_data.value(t);
-    else if (component == 2)
-      return 0.;
+    std::pair<std::string,int> type_and_count = bc_type[component];
+    if (type_and_count.first == "constant")
+      return bc_constant[type_and_count.second].value(t);
     else
-      return 0.; // lrp: to assign bc from file
+      return bc_data[type_and_count.second].value(t);
   }
 
 
@@ -369,7 +391,8 @@ namespace ICBC
   template <int dim, int n_vars>
   void BcRealistic<dim, n_vars>::set_boundary_conditions()
   {
-    std::map<types::boundary_id, std::pair<std::string,std::string>> boundaryId;
+    std::map<types::boundary_id,
+             std::pair<std::string, std::vector<std::string>>> boundaryId;
     std::vector<std::string> info;
     bool found_boundary = false;
 
@@ -385,11 +408,30 @@ namespace ICBC
            {
              found_boundary = true;
            }
+
          boost::split(info, boundary_info, boost::is_any_of(":"));
          if (info.size() == 2)
-           boundaryId[std::stoi(info[0])] = {info[1],"no_file_needed"};
-         else if (info.size() == 3)
-           boundaryId[std::stoi(info[0])] = {info[1],info[2]};
+           {
+             boundaryId[std::stoi(info[0])] = {info[1], {"no_file_needed"}};
+             AssertThrow(info[1] == "wall",
+               ExcMessage("In the parameter file you have not specified the boundary data.\n"
+                          "Add:\n"
+                          "set Boundary_x = "+info[0]+":"+info[1]+":filename.txt.gz\n"));
+           }
+         else if (info.size() == n_vars+2)
+           {
+             std::vector<std::string> boundary_filenames;
+             for (unsigned int v = 0; v < n_vars; ++v)
+               boundary_filenames.push_back(info[2+v]);
+             boundaryId[std::stoi(info[0])] = {info[1], boundary_filenames};
+           }
+         else
+           {
+             AssertThrow(info.size() == n_vars+2,
+               ExcMessage("In the parameter file you have not specified the boundary correctly.\n"
+                          "Please check that:\n"
+                          "set Boundary_x = "+info[0]+":"+info[1]+":filename_1.txt.gz:...:filename_nvar.txt.gz\n"));
+           }
       }
     prm.leave_subsection();
     AssertThrow(found_boundary == true,
@@ -399,20 +441,20 @@ namespace ICBC
                  "Fill this entry for each boundary id"));
 
     for (auto &i : boundaryId)
-      { 
-        std::pair<std::string,std::string> type_and_filename;
-        type_and_filename = i.second;
-        if ( type_and_filename.first == "wall")
+      {
+        std::pair<std::string, std::vector<std::string>> type_and_filenames;
+        type_and_filenames = i.second;
+        if ( type_and_filenames.first == "wall")
           this->set_wall_boundary(i.first);
-        else if (type_and_filename.first == "height_inflow")
+        else if (type_and_filenames.first == "height_inflow")
           this->set_height_inflow_boundary(
-            i.first, std::make_unique<BoundaryData<dim, n_vars>>(0, type_and_filename.second));
-        else if (type_and_filename.first == "discharge_inflow")
+            i.first, std::make_unique<BoundaryData<dim, n_vars>>(0, type_and_filenames.second));
+        else if (type_and_filenames.first == "discharge_inflow")
           this->set_discharge_inflow_boundary(
-            i.first, std::make_unique<BoundaryData<dim, n_vars>>(0, type_and_filename.second));
-        else if (type_and_filename.first == "absorbing_outflow")
+            i.first, std::make_unique<BoundaryData<dim, n_vars>>(0, type_and_filenames.second));
+        else if (type_and_filenames.first == "absorbing_outflow")
           this->set_absorbing_outflow_boundary(
-            i.first, std::make_unique<BoundaryData<dim, n_vars>>(0, type_and_filename.second));
+            i.first, std::make_unique<BoundaryData<dim, n_vars>>(0, type_and_filenames.second));
       }
   }
 } // namespace ICBC
