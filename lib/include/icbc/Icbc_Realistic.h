@@ -316,14 +316,14 @@ namespace ICBC
     for (unsigned int v = 0; v < n_vars; ++v)
       {
         std::string filename = prm.get(ic_vars_name[v]+"_filename");
-        if (filename == "There is no entry "+ic_vars_name[v]+"_filename in the parameter file")
-          {
-            const double v0 = prm.get_double(ic_vars_name[v]+"_value");
+        try
+         {
+            const double v0 = std::stod(filename);
             ic_constant.push_back(Functions::ConstantFunction<dim>(v0));
             ic_type[v] = {"constant", count_constant};
             count_constant++;
           }
-        else
+        catch (...)
           {
             IO::TxtDataReader<dim> ic_data_reader(filename);
             ic_data.push_back(

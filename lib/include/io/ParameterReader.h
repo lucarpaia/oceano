@@ -203,8 +203,8 @@ namespace IO
     // To better handle large dataseta, data are inputted via txt compressed
     // file (e.g. ".txt.gz"). The next subsection fills the different data file
     // names.
-    // For the initial data, the default behaviour (no file given) is a warning
-    // message that automatically switches to a constant data initial condition.
+    // For the initial data, the default behaviour (no file given) switches to
+    // a constant data initial condition.
     prm.enter_subsection("Input data files");
     {
       prm.declare_entry("Bathymetry_filename",
@@ -220,57 +220,42 @@ namespace IO
                         "in structured format (with extension txt.gz)");
 
       prm.declare_entry("Initial_freesurface_filename",
-                        "There is no entry Initial_freesurface_filename in the parameter file",
+                        "0.",
                         Patterns::Anything(),
                         "Name of the file with the initial free-surface"
-                        "in structured format (with extension txt.gz)");
+                        "in structured format (with extension txt.gz)."
+                        "A constant double value is also accepted.");
 
       prm.declare_entry("Initial_discharge_x_filename",
-                        "There is no entry Initial_discharge_x_filename in the parameter file",
+                        "0.",
                         Patterns::Anything(),
                         "Name of the file with the initial discharge (x-component)"
-                        "in structured format (with extension txt.gz)");
+                        "in structured format (with extension txt.gz)."
+                        "A constant double value is also accepted.");
 
       prm.declare_entry("Initial_discharge_y_filename",
-                        "There is no entry Initial_discharge_y_filename in the parameter file",
+                        "0.",
                         Patterns::Anything(),
                         "Name of the file with the initial discharge (y-component)"
-                        "in structured format (with extension txt.gz)");
+                        "in structured format (with extension txt.gz)."
+                        "A constant double value is also accepted.");
 
       for (unsigned int count = 1; count < 20; ++count)
         prm.declare_entry("Initial_tracer_"+std::to_string(count)+"_filename",
-                          "There is no entry Initial_tracer_"
+                          "1."
                           +std::to_string(count)+"_filename in the parameter file",
                           Patterns::Anything(),
                           "Name of the file with the initial tracer"
-                          "in structured format (with extension txt.gz)");
-
-      prm.declare_entry("Initial_freesurface_value",
-                        "0",
-                        Patterns::Double(0),
-                        "Constant value for the initial free-surface");
-
-      prm.declare_entry("Initial_discharge_x_value",
-                        "0",
-                        Patterns::Double(0),
-                        "Constant value for the initial discharge (x-component)");
-
-      prm.declare_entry("Initial_discharge_y_value",
-                        "0",
-                        Patterns::Double(0),
-                        "Constant value for the initial discharge (y-component)");
-
-      for (unsigned int count = 1; count < 20; ++count)
-        prm.declare_entry("Initial_tracer_"+std::to_string(count)+"_value",
-                          "1",
-                          Patterns::Double(0),
-                         "Constant value for the initial tracer");
+                          "in structured format (with extension txt.gz)."
+                          "A constant double value is also accepted.");
     }
     prm.leave_subsection();
 
     // Boundary condition may be supplied via the following list. For each
     // entry you write the boundary id of the gmsh file, the boundary condition
-    // type and a filename in structured format containing the boundary data
+    // type and a filename in structured format containing the boundary data.
+    // Alternatively to a boundary file, a double value for a constant boundary
+    // data can be also given.
     prm.enter_subsection("Boundary conditions");
     {
       for (unsigned int count = 1; count < 20; ++count)

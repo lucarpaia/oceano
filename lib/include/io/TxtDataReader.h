@@ -106,17 +106,17 @@ namespace IO
   // library does not provide a very useful exception when the input file
   // does not exist, is not readable, or does not contain the correct
   // number of data lines, we catch all exceptions it may produce and
-  // create our own one. To this end, in the <code>catch</code>
-  // clause, we let the program run into an <code>AssertThrow(false, ...)</code>
-  // statement. Since the condition is always false, this always triggers an
-  // exception. In other words, this is equivalent to writing
-  // <code>throw ExcMessage("...")</code> but it also fills certain fields
-  // in the exception object that will later be printed on the screen
-  // identifying the function, file and line where the exception happened.
+  // create our own one. We separete two exceptions: the first is raised
+  // with an <code>AssertThrow<code> if the file does not exist or is not readable.
+  // The second exeption is raised in the <code>catch</code> clause, if
+  // the file can be accessed but it is not in the correct format.
   template <int dim>
   std::vector<double>
     TxtDataReader<dim>::get_data(const std::string filename)
   {
+    std::ifstream f(filename);
+    AssertThrow(f.fail() == false, ExcIO());
+
     std::vector<double> read_data;
  
     boost::iostreams::filtering_istream in;
