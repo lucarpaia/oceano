@@ -39,12 +39,6 @@ namespace ICBC
 
   using namespace dealii;
 
-  // We define global parameters that help in the definition of the
-  // initial and boundary conditions. For this test we just need the
-  // initial water level that is always zero, all other info are read from
-  // file:
-  constexpr double z0      = 0.0;
-
   // @sect3{Equation data}
   
   // Next we implement a few classes that are useful to represent functions
