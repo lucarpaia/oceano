@@ -197,7 +197,7 @@ namespace Problem
   constexpr unsigned int fe_degree            = 1;
   constexpr unsigned int n_q_points_1d        = floor(1.5*fe_degree) + 1;
 #if defined MODEL_SHALLOWWATERWITHTRACER
-  constexpr unsigned int n_tracers            = 2;
+  constexpr unsigned int n_tracers            = 1;
 #endif
 
   using Number = double;
@@ -554,7 +554,7 @@ namespace Problem
     const std::string file_msh = prm.get("Mesh_filename");
     const unsigned int n_global_refinements = prm.get_integer("Number_of_refinements");
     prm.leave_subsection();
-         
+
     std::ifstream f(current_working_directory+slash+file_msh);
     pcout << "Reading mesh file: " << file_msh << std::endl;
     gridin.read_msh(f);
