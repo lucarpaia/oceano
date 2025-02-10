@@ -241,7 +241,7 @@ namespace ICBC
   // The class `ExactSolution` defines a reference functions that can be used
   // for diagnostic, for example to measure the errors with respect ot another
   // model. For the realistic test we do not have a reference solution, so we use
-  // a simple water at rest state.
+  // a simple water at rest state with constant tracer as a background state.
   template <int dim, int n_vars>  
   class ExactSolution : public Function<dim>
   {
@@ -259,8 +259,8 @@ namespace ICBC
   double ExactSolution<dim, n_vars>::value(const Point<dim> & /*x*/,
                                            const unsigned int component) const
   {
-    if (component == 0)
-      return z0;
+    if (component > dim)
+      return 1.;
     else
       return 0.;
   }

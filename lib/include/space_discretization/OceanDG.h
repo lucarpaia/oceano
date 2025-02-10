@@ -1887,7 +1887,7 @@ namespace SpaceDiscretization
         Tensor<1, 1+dim, VectorizedArray<Number>> error;
         for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
           {
-            error[0] = evaluate_function<dim, Number>(
+            error[0] = evaluate_function<dim, Number>(  //lrp: if there is no ref solution why evaluate a function?
                               function, 
               		      phi_height.quadrature_point(q),
               		      0) - 
