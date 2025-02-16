@@ -321,14 +321,17 @@ namespace SpaceDiscretization
         phi_discharge.reinit(cell);
         phi_discharge.gather_evaluate(src[1], EvaluationFlags::values);
         phi_tracer.reinit(cell);
-        phi_tracer.gather_evaluate(src[2], EvaluationFlags::values);
+        phi_tracer.gather_evaluate(src[2],
+          EvaluationFlags::values | EvaluationFlags::gradients);
 
         for (unsigned int q = 0; q < phi_tracer.n_q_points; ++q)
           {
             const auto q_q = phi_discharge.get_value(q);
             const auto t_q = phi_tracer.get_value(q);
+            const auto dt_q = phi_tracer.get_gradient(q);
 
-            phi_tracer.submit_gradient(model.tracerflux(q_q, t_q), q);
+            phi_tracer.submit_gradient(
+              model.tracerflux2(q_q, t_q, dt_q), q);
           }
 
         phi_tracer.integrate_scatter(EvaluationFlags::gradients,

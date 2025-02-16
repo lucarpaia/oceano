@@ -62,8 +62,8 @@
 // is only used for debugging, to check consistency with the original deal.II example and
 // it's not working in the present version.
 // Additionally we can add tracers to the shallow water model.
-#define MODEL_SHALLOWWATER
-#undef  MODEL_SHALLOWWATERWITHTRACER
+#undef  MODEL_SHALLOWWATER
+#define MODEL_SHALLOWWATERWITHTRACER
 #undef  MODEL_EULER
 // Next come the physics. With the following cpp keys one can switch between the different
 // formulations of a given term in the right-hand side of the shallow water equations.
@@ -78,6 +78,8 @@
 // For the wind stress either
 #define PHYSICS_WINDSTRESSGENERAL
 #undef  PHYSICS_WINDSTRESSQUADRATIC
+// The following key is for the eddy diffusion coefficient.
+#define PHYSICS_DIFFUSIONCOEFFICIENTCONSTANT
 // We end with a tuner class for the AMR:
 #undef  AMR_HEIGHTGRADIENT
 #undef  AMR_VORTICITY
