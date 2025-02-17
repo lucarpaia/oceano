@@ -447,6 +447,8 @@ namespace SpaceDiscretization
     FEFaceEvaluation<dim, degree, n_points_1d, n_tra, Number> phi_tracer_p(data,
                                                                       false, 2);
 
+    const auto C_t       = 1.0*(degree + 1)*(degree + 1); // Penalization constant
+
     for (unsigned int face = face_range.first; face < face_range.second; ++face)
       {
         phi_height_p.reinit(face);
@@ -462,6 +464,9 @@ namespace SpaceDiscretization
         phi_discharge_m.gather_evaluate(src[1], EvaluationFlags::values);
         phi_tracer_m.reinit(face);
         phi_tracer_m.gather_evaluate(src[2], EvaluationFlags::values);
+
+        const auto coef_jump = C_t*0.5*(std::abs((phi_tracer_m.get_normal_vector(0) * phi_tracer_m.inverse_jacobian(0))[dim - 1]) +
+                                        std::abs((phi_tracer_p.get_normal_vector(0) * phi_tracer_p.inverse_jacobian(0))[dim - 1])); // Jump constant for IP
 
         for (unsigned int q = 0; q < phi_tracer_m.n_q_points; ++q)
           {
@@ -479,6 +484,9 @@ namespace SpaceDiscretization
                                                phi_discharge_p.get_value(q),
                                                phi_tracer_m.get_value(q),
                                                phi_tracer_p.get_value(q),
+                                               phi_tracer_m.get_gradient(q),
+                                               phi_tracer_p.get_grandient(q),
+                                               coef_jump,
                                                phi_tracer_m.normal_vector(q),
                                                data_m,
                                                data_p);
@@ -566,6 +574,8 @@ namespace SpaceDiscretization
 
     const unsigned int n_vars = dim+1;
 
+    const auto C_t       = 1.0*(degree + 1)*(degree + 1); // Penalization constant
+
     for (unsigned int face = face_range.first; face < face_range.second; ++face)
       {
         phi_height.reinit(face);
@@ -574,6 +584,8 @@ namespace SpaceDiscretization
         phi_discharge.gather_evaluate(src[1], EvaluationFlags::values);
         phi_tracer.reinit(face);
         phi_tracer.gather_evaluate(src[2], EvaluationFlags::values);
+
+        const auto coef_jump = C_t*(std::abs(phi_tracer.get_normal_vector(0) * phi_tracer.inverse_jacobian(0))[dim - 1]); // Jump constant for IP
 
         for (unsigned int q = 0; q < phi_tracer.n_q_points; ++q)
           {
@@ -717,8 +729,10 @@ namespace SpaceDiscretization
                                      "you set a boundary condition for "
                                      "this part of the domain boundary?"));
 
+            const auto& grad_t_m = phi_tracer.get_gradient(q);
+            const auto& grad_t_p = grad_t_m;
             auto flux = num_flux.numerical_tracflux_weak(
-                z_m, z_p, q_m, q_p, t_m, t_p, normal, data_m, data_m);
+                z_m, z_p, q_m, q_p, t_m, t_p, grad_t_m, grad_t_p, coef_jump, normal, data_m, data_m);
 
             phi_tracer.submit_value(-flux, q);
           }
@@ -985,7 +999,7 @@ namespace SpaceDiscretization
       {
         phi_tracer.reinit(cell);
         phi_tracer.gather_evaluate(solution_tracer, EvaluationFlags::values);
-        for (unsigned int q = 0; q < phi_tracer.n_q_points; ++q) 
+        for (unsigned int q = 0; q < phi_tracer.n_q_points; ++q)
           {
             phi_tracer.submit_dof_value(evaluate_function_tracer<dim, Number, n_tra>(
                                                     function,
@@ -1023,7 +1037,7 @@ namespace SpaceDiscretization
   // number of lanes with valid data. It equals VectorizedArray::size() on
   // most cells, but can be less on the last cell batch if the number of cells
   // has a remainder compared to the SIMD width.
-  // 
+  //
   // Pay also attention to the implementation of the error formula. The error has
   // dimension `n_vars-(dim-1)` because we compute only one error for all the
   // momentum components. Also, the formula implies that the variables are stored
@@ -1049,7 +1063,7 @@ namespace SpaceDiscretization
         for (unsigned int q = 0; q < phi_tracer.n_q_points; ++q)
           {
             const auto error = evaluate_function_tracer<dim, Number, n_tra>(
-            		         function, 
+            		         function,
                                  phi_tracer.quadrature_point(q),
                                  phi_tracer.get_value(q))
               		     - phi_tracer.get_value(q);

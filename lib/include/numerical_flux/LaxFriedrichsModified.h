@@ -20,7 +20,7 @@
 #ifndef LAXFRIEDRICHSMODIFIED_HPP
 #define LAXFRIEDRICHSMODIFIED_HPP
 
-// The following files include the oceano libraries 
+// The following files include the oceano libraries
 #include <numerical_flux/NumericalFluxBase.h>
 
 /**
@@ -31,9 +31,9 @@ namespace NumericalFlux
 {
 
   using namespace dealii;
-  
-  
-  
+
+
+
   // For the model class we do not use an implementation file. This
   // is because of the fact the all the function called are templated
   // or inlined. Both templated and inlined functions are hard to be separated
@@ -91,6 +91,25 @@ namespace NumericalFlux
                               const Tensor<1, dim, Number>   &q_p,
                               const Tensor<1, n_tra, Number> &t_m,
                               const Tensor<1, n_tra, Number> &t_p,
+                              const Tensor<1, n_tra, Tensor<1, dim, Number>> &grad_t_m,
+                              const Tensor<1, n_tra, Tensor<1, dim, Number>> &grad_t_p,
+                              const auto &coef_jump,
+                              const Tensor<1, dim, Number>   &normal,
+                              const Number                    data_m,
+                              const Number                    data_p) const;
+
+    template <int dim, int n_tra, typename Number>
+    inline DEAL_II_ALWAYS_INLINE //
+      Tensor<1, n_tra, Number>
+      numerical_tracflux_weak(const Number                    z_m,
+                              const Number                    z_p,
+                              const Tensor<1, dim, Number>   &q_m,
+                              const Tensor<1, dim, Number>   &q_p,
+                              const Tensor<1, n_tra, Number> &t_m,
+                              const Tensor<1, n_tra, Number> &t_p,
+                              const Tensor<2, dim, Number>   &grad_t_m,
+                              const Tensor<2, dim, Number>   &grad_t_p,
+                              const auto &coef_jump,
                               const Tensor<1, dim, Number>   &normal,
                               const Number                    data_m,
                               const Number                    data_p) const;
@@ -104,6 +123,9 @@ namespace NumericalFlux
                               const Tensor<1, dim, Number> &q_p,
                               const Number                  t_m,
                               const Number                  t_p,
+                              const Tensor<1, dim, Number> &grad_t_m,
+                              const Tensor<1, dim, Number> &grad_t_p,
+                              const auto &coef_jump,
                               const Tensor<1, dim, Number> &normal,
                               const Number                  data_m,
                               const Number                  data_p) const;
@@ -198,6 +220,9 @@ namespace NumericalFlux
       const Tensor<1, dim, Number>   &q_p,
       const Tensor<1, n_tra, Number> &t_m,
       const Tensor<1, n_tra, Number> &t_p,
+      const Tensor<1, n_tra, Tensor<1, dim, Number>> &grad_t_m,
+      const Tensor<1, n_tra, Tensor<1, dim, Number>> &grad_t_p,
+      const auto &coef_jump,
       const Tensor<1, dim, Number>   &normal,
       const Number                    data_m,
       const Number                    data_p) const
@@ -211,13 +236,52 @@ namespace NumericalFlux
     const auto lambda =
       0.5 * std::max(lambda_p, lambda_m);
 
-    const auto flux_m = model.tracerflux<dim, n_tra>(q_m, t_m);
-    const auto flux_p = model.tracerflux<dim, n_tra>(q_p, t_p);
+    const auto flux_m = model.tracerflux2<dim, n_tra>(q_m, t_m, grad_t_m);
+    const auto flux_p = model.tracerflux2<dim, n_tra>(q_p, t_p, grad_t_p);
 
     Tensor<1, n_tra, Number> numflux;
     for (unsigned int t = 0; t < n_tra; ++t)
-      numflux[t] = 0.5 * (flux_m[t] * normal + flux_p[t] * normal) +
-           0.5 * lambda * ((z_m+data_m)*t_m[t] - (z_p+data_p)*t_p[t]);
+      numflux[t] = 0.5 * (flux_m.first[t] * normal + flux_p.first[t] * normal) +
+           0.5 * lambda * ((z_m+data_m)*t_m[t] - (z_p+data_p)*t_p[t]) -
+           coef_jump*flux_m.second*(t_m - t_p);
+
+     return numflux;
+  }
+
+  template <int dim, int n_tra, typename Number>
+  inline DEAL_II_ALWAYS_INLINE //
+    Tensor<1, n_tra, Number>
+    LaxFriedrichsModified::numerical_tracflux_weak(
+      const Number                    z_m,
+      const Number                    z_p,
+      const Tensor<1, dim, Number>   &q_m,
+      const Tensor<1, dim, Number>   &q_p,
+      const Tensor<1, n_tra, Number> &t_m,
+      const Tensor<1, n_tra, Number> &t_p,
+      const Tensor<2, dim, Number> &grad_t_m,
+      const Tensor<2, dim, Number> &grad_t_p,
+      const auto &coef_jump,
+      const Tensor<1, dim, Number>   &normal,
+      const Number                    data_m,
+      const Number                    data_p) const
+  {
+    const auto v_m = model.velocity<dim>(z_m, q_m, data_m);
+    const auto v_p = model.velocity<dim>(z_p, q_p, data_p);
+
+    const auto lambda_m = v_m.norm() + std::sqrt(model.square_wavespeed(z_m, data_m));
+    const auto lambda_p = v_p.norm() + std::sqrt(model.square_wavespeed(z_p, data_p));
+
+    const auto lambda =
+      0.5 * std::max(lambda_p, lambda_m);
+
+    const auto flux_m = model.tracerflux2<dim, n_tra>(q_m, t_m, grad_t_m);
+    const auto flux_p = model.tracerflux2<dim, n_tra>(q_p, t_p, grad_t_p);
+
+    Tensor<1, n_tra, Number> numflux;
+    for (unsigned int t = 0; t < n_tra; ++t)
+      numflux[t] = 0.5 * (flux_m.first[t] * normal + flux_p.first[t] * normal) +
+           0.5 * lambda * ((z_m+data_m)*t_m[t] - (z_p+data_p)*t_p[t]) -
+           coef_jump*flux_m.second*(t_m - t_p);
 
      return numflux;
   }
@@ -232,6 +296,9 @@ namespace NumericalFlux
       const Tensor<1, dim, Number>  &q_p,
       const Number                   t_m,
       const Number                   t_p,
+      const Tensor<1, dim, Number> &grad_t_m,
+      const Tensor<1, dim, Number> &grad_t_p,
+      const auto &coef_jump,
       const Tensor<1, dim, Number>  &normal,
       const Number                   data_m,
       const Number                   data_p) const
@@ -245,11 +312,12 @@ namespace NumericalFlux
     const auto lambda =
       0.5 * std::max(lambda_p, lambda_m);
 
-    const auto flux_m = model.tracerflux(q_m, t_m);
-    const auto flux_p = model.tracerflux(q_p, t_p);
+    const auto flux_m = model.tracerflux2(q_m, t_m, grad_t_m);
+    const auto flux_p = model.tracerflux2(q_p, t_p, grad_t_p);
 
-    return 0.5 * (flux_m * normal + flux_p * normal) +
-           0.5 * lambda * ((z_m+data_m)*t_m - (z_p+data_p)*t_p);
+    return 0.5 * (flux_m.first * normal + flux_p.first * normal) +
+           0.5 * lambda * ((z_m+data_m)*t_m - (z_p+data_p)*t_p) -
+           coef_jump*flux_m.second*(t_m - t_p);
   }
 #endif
 } // namespace NumericalFlux

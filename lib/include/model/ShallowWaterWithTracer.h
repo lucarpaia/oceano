@@ -77,21 +77,21 @@ namespace Model
 
     template <int dim, int n_tra, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
-      Tensor<1, n_tra, Tensor<1, dim, Number>>
+      std::pair<Tensor<1, n_tra, Tensor<1, dim, Number>>, Number>
       tracerflux2(const Tensor<1, dim, Number>                  &discharge,
                  const Tensor<1, n_tra, Number>                 &tracer,
                  const Tensor<1, n_tra, Tensor<1, dim, Number>> &gradient_tracer) const;
 
     template <int dim, int n_tra, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
-      Tensor<1, n_tra, Tensor<1, dim, Number>>
+      std::pair<Tensor<1, n_tra, Tensor<1, dim, Number>>, Number>
       tracerflux2(const Tensor<1, dim, Number>  &discharge,
                  const Tensor<1, n_tra, Number> &tracer,
                  const Tensor<2, dim, Number>   &gradient_tracer) const;
 
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
-      Tensor<1, dim, Number>
+      std::pair<Tensor<1, dim, Number>, Number>
       tracerflux2(const Tensor<1, dim, Number> &discharge,
                  const Number                  tracer,
                  const Tensor<1, dim, Number> &gradient_tracer) const;
@@ -102,12 +102,12 @@ namespace Model
   // For the model class we do not use an implementation file. This
   // is because of the fact the all the function called are templated
   // or inlined. Both templated and inlined functions are hard to be separated
-  // between declaration and implementation. We keep them in the header file. 
-  
+  // between declaration and implementation. We keep them in the header file.
+
   // The constructor of the model class takes as arguments the parameters handler
   // class in order to read the test-case/user dependent parameters. These
-  // parameters are stored as class members. In this way they are defined/read 
-  // from file in one place and then used whenever needed  with `model.param`, 
+  // parameters are stored as class members. In this way they are defined/read
+  // from file in one place and then used whenever needed  with `model.param`,
   // instead of being read/defined multiple times.
   ShallowWaterWithTracer::ShallowWaterWithTracer(
     IO::ParameterHandler &prm)
@@ -130,7 +130,7 @@ namespace Model
       postproc_vars_name.push_back("velocity");
     postproc_vars_name.push_back("depth");
   }
- 
+
   template <int dim, int n_tra, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, n_tra, Tensor<1, dim, Number>>
@@ -158,7 +158,7 @@ namespace Model
 
   template <int dim, int n_tra, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
-    Tensor<1, n_tra, Tensor<1, dim, Number>>
+    std::pair<Tensor<1, n_tra, Tensor<1, dim, Number>>, Number>
     ShallowWaterWithTracer::tracerflux2(
       const Tensor<1, dim, Number>                   &discharge,
       const Tensor<1, n_tra, Number>                 &tracer,
@@ -170,12 +170,12 @@ namespace Model
         flux[e][d] = tracer[e] * discharge[d]
           - diffusion_coefficient.value<dim, Number>() * gradient_tracer[e][d];
 
-    return flux;
+    return std::make_pair(flux, diffusion_coefficient.value<dim, Number>());
   }
 
   template <int dim, int n_tra, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
-    Tensor<1, n_tra, Tensor<1, dim, Number>>
+    std::pair<Tensor<1, n_tra, Tensor<1, dim, Number>>, Number>
     ShallowWaterWithTracer::tracerflux2(
       const Tensor<1, dim, Number>   &discharge,
       const Tensor<1, n_tra, Number> &tracer,
@@ -187,19 +187,20 @@ namespace Model
         flux[e][d] = tracer[e] * discharge[d]
           - diffusion_coefficient.value<dim, Number>() * gradient_tracer[e][d];
 
-    return flux;
+    return std::make_pair(flux, diffusion_coefficient.value<dim, Number>());
   }
 
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
-    Tensor<1, dim, Number>
+    std::pair<Tensor<1, dim, Number>, Number>
     ShallowWaterWithTracer::tracerflux2(
       const Tensor<1, dim, Number> &discharge,
       const Number                  tracer,
       const Tensor<1, dim, Number> &gradient_tracer) const
   {
-    return tracer * discharge
-      - diffusion_coefficient.value<dim, Number>() * gradient_tracer;
+    return sd::make_pair(tracer * discharge -
+                         diffusion_coefficient.value<dim, Number>() * gradient_tracer,
+                         diffusion_coefficient.value<dim, Number>());
   }
 } // namespace Model
 #endif //SHALLOWWATERWITHTRACER_HPP
