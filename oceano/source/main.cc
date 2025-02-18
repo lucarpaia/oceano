@@ -78,6 +78,8 @@
 // For the wind stress either
 #define PHYSICS_WINDSTRESSGENERAL
 #undef  PHYSICS_WINDSTRESSQUADRATIC
+// The following key is for the eddy diffusion coefficient.
+#define PHYSICS_DIFFUSIONCOEFFICIENTCONSTANT
 // We end with a tuner class for the AMR:
 #undef  AMR_HEIGHTGRADIENT
 #undef  AMR_VORTICITY

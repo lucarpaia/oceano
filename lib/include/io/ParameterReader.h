@@ -156,11 +156,10 @@ namespace IO
     prm.leave_subsection();
 
     // The next subsection is devoted to the physical parameters appearing 
-    // in the equation. These are the gravitational acceleration $g$, the air
-    // and water density, $\rho_{air}$ and $\rho_0$.
-    // They need to lie in the half-open interval $[0,\infty)$
+    // in the equation.
+    // Most of them lies in the half-open interval $[0,\infty)$,
     // represented by calling the `Patterns::Double` class with only the 
-    // left end-point as argument
+    // left end-point as argument.
     prm.enter_subsection("Physical constants");
     {
       prm.declare_entry("g", "9.81", Patterns::Double(0), "Gravity");
@@ -195,6 +194,11 @@ namespace IO
                         Patterns::Double(0),
                         "Bottom friction coefficient or Manning number"
                         "depending on the bottom friction formulation");
+
+      prm.declare_entry("horizontal_diffusivity",
+                        "0.",
+                        Patterns::Double(0),
+                        "Horizontal diffusion coefficient");
     }
     prm.leave_subsection();
 

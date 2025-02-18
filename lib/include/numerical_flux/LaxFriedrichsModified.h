@@ -85,15 +85,17 @@ namespace NumericalFlux
     template <int dim, int n_tra, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, n_tra, Number>
-      numerical_tracflux_weak(const Number                    z_m,
-                              const Number                    z_p,
-                              const Tensor<1, dim, Number>   &q_m,
-                              const Tensor<1, dim, Number>   &q_p,
-                              const Tensor<1, n_tra, Number> &t_m,
-                              const Tensor<1, n_tra, Number> &t_p,
-                              const Tensor<1, dim, Number>   &normal,
-                              const Number                    data_m,
-                              const Number                    data_p) const;
+      numerical_tracflux_weak(const Number                                    z_m,
+                              const Number                                    z_p,
+                              const Tensor<1, dim, Number>                   &q_m,
+                              const Tensor<1, dim, Number>                   &q_p,
+                              const Tensor<1, n_tra, Number>                 &t_m,
+                              const Tensor<1, n_tra, Number>                 &t_p,
+                              const Tensor<1, n_tra, Tensor<1, dim, Number>> &dt_m,
+                              const Tensor<1, n_tra, Tensor<1, dim, Number>> &dt_p,
+                              const Tensor<1, dim, Number>                   &normal,
+                              const Number                                    data_m,
+                              const Number                                    data_p) const;
 
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
@@ -104,6 +106,8 @@ namespace NumericalFlux
                               const Tensor<1, dim, Number> &q_p,
                               const Number                  t_m,
                               const Number                  t_p,
+                              const Tensor<1, dim, Number> &dt_m,
+                              const Tensor<1, dim, Number> &dt_p,
                               const Tensor<1, dim, Number> &normal,
                               const Number                  data_m,
                               const Number                  data_p) const;
@@ -192,15 +196,17 @@ namespace NumericalFlux
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, n_tra, Number>
     LaxFriedrichsModified::numerical_tracflux_weak(
-      const Number                    z_m,
-      const Number                    z_p,
-      const Tensor<1, dim, Number>   &q_m,
-      const Tensor<1, dim, Number>   &q_p,
-      const Tensor<1, n_tra, Number> &t_m,
-      const Tensor<1, n_tra, Number> &t_p,
-      const Tensor<1, dim, Number>   &normal,
-      const Number                    data_m,
-      const Number                    data_p) const
+      const Number                                    z_m,
+      const Number                                    z_p,
+      const Tensor<1, dim, Number>                   &q_m,
+      const Tensor<1, dim, Number>                   &q_p,
+      const Tensor<1, n_tra, Number>                 &t_m,
+      const Tensor<1, n_tra, Number>                 &t_p,
+      const Tensor<1, n_tra, Tensor<1, dim, Number>> &dt_m,
+      const Tensor<1, n_tra, Tensor<1, dim, Number>> &dt_p,
+      const Tensor<1, dim, Number>                   &normal,
+      const Number                                    data_m,
+      const Number                                    data_p) const
   {
     const auto v_m = model.velocity<dim>(z_m, q_m, data_m);
     const auto v_p = model.velocity<dim>(z_p, q_p, data_p);
@@ -211,8 +217,8 @@ namespace NumericalFlux
     const auto lambda =
       0.5 * std::max(lambda_p, lambda_m);
 
-    const auto flux_m = model.tracerflux<dim, n_tra>(q_m, t_m);
-    const auto flux_p = model.tracerflux<dim, n_tra>(q_p, t_p);
+    const auto flux_m = model.tracerflux<dim, n_tra>(q_m, t_m, dt_m);
+    const auto flux_p = model.tracerflux<dim, n_tra>(q_p, t_p, dt_p);
 
     Tensor<1, n_tra, Number> numflux;
     for (unsigned int t = 0; t < n_tra; ++t)
@@ -232,6 +238,8 @@ namespace NumericalFlux
       const Tensor<1, dim, Number>  &q_p,
       const Number                   t_m,
       const Number                   t_p,
+      const Tensor<1, dim, Number>  &dt_m,
+      const Tensor<1, dim, Number>  &dt_p,
       const Tensor<1, dim, Number>  &normal,
       const Number                   data_m,
       const Number                   data_p) const
@@ -245,8 +253,8 @@ namespace NumericalFlux
     const auto lambda =
       0.5 * std::max(lambda_p, lambda_m);
 
-    const auto flux_m = model.tracerflux(q_m, t_m);
-    const auto flux_p = model.tracerflux(q_p, t_p);
+    const auto flux_m = model.tracerflux(q_m, t_m, dt_m);
+    const auto flux_p = model.tracerflux(q_p, t_p, dt_p);
 
     return 0.5 * (flux_m * normal + flux_p * normal) +
            0.5 * lambda * ((z_m+data_m)*t_m - (z_p+data_p)*t_p);
