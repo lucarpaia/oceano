@@ -175,7 +175,7 @@ namespace ICBC
     else if (component == 2)
       return depth * v;
     else
-      return 1.;
+      return x[1] < 0.5 ? 1 : 0.9;
   }
 
 
