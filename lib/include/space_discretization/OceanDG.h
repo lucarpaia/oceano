@@ -860,48 +860,30 @@ namespace SpaceDiscretization
   // conditions we want.
   //
   // For wall boundaries, we need to impose a no-normal-flux condition on the
-  // momentum variable, whereas we use a Neumann condition for the density and
-  // energy with $\rho^+ = \rho^-$ and $E^+ = E^-$. To achieve the no-normal
-  // flux condition, we set the exterior values to the interior values and
-  // subtract two times the velocity in wall-normal direction, i.e., in the
-  // direction of the normal vector.
+  // momentum variable, whereas we use a Neumann condition for the water height.
+  // To achieve the no-normal flux condition, we set the exterior values to the
+  // interior values and subtract two times the velocity in wall-normal direction,
+  // i.e., in the direction of the normal vector.
   //
-  // For inflow boundaries, we simply set the given Dirichlet data
-  // $\mathbf{w}_\mathrm{D}$ as a boundary value. An alternative would have been
-  // to use $\mathbf{w}^+ = -\mathbf{w}^- + 2 \mathbf{w}_\mathrm{D}$, the
-  // so-called mirror principle.
+  // For supercritical inflow boundaries, we simply set the given Dirichlet data
+  // $\mathbf{w}_\mathrm{D}$ as a boundary value.
   //
-  // The imposition of outflow is essentially a Neumann condition, i.e.,
-  // setting $\mathbf{w}^+ = \mathbf{w}^-$. For the case of supercritical outflow,
-  // we still need to impose a value for the energy, which we derive from the
-  // respective function. A special step is needed for the case of
-  // <i>backflow</i>, i.e., the case where there is a momentum flux into the
-  // domain on the Neumann portion. According to the literature (a fact that can
-  // be derived by appropriate energy arguments), we must switch to another
-  // variant of the flux on inflow parts, see Gravemeier, Comerford,
-  // Yoshihara, Ismail, Wall, "A novel formulation for Neumann inflow
-  // conditions in biomechanics", Int. J. Numer. Meth. Biomed. Eng., vol. 28
-  // (2012). Here, the momentum term needs to be added once again, which
-  // corresponds to removing the flux contribution on the momentum
-  // variables. We do this in a post-processing step, and only for the case
-  // when we both are at an outflow boundary and the dot product between the
-  // normal vector and the momentum (or, equivalently, velocity) is
-  // negative. As we work on data of several quadrature points at once for
-  // SIMD vectorizations, we here need to explicitly loop over the array
-  // entries of the SIMD array.
-  //
+  // The imposition of a supercritical outflow is essentially a Neumann condition,
+  // i.e., setting $\mathbf{w}^+ = \mathbf{w}^-$.
   // The next boundary conditions are very important in coastal ocean and
   // hydraulic simulation for which the flow conditions are essentially
-  // subcritical. The outflow condition seen sofar assumes that all the eigenvalues
-  // are outgoing which cannot be true in the subcritical regime.
-  // In subcritical regime we are sure only that one eigenvalue
-  // is always ingoing, than it is quite safe to specify only
-  // one boundary condition and the choice depends on the problem. It could be
-  // the normal discharge (relevant for river inflows) or the water level height
-  // (relevant for an open boundary with tide). Please note that in some
-  // application it can be better to set also the tangential flow but we do not
+  // subcritical. For hyperbolic problems we know, from IBV theorem, that we can
+  // impose a number of boundary conditions equal to the number of eigenvalues
+  // ingoing into the computational domain. For two-dimensional shallow water
+  // subcritical flows, this number is two or three depending on the flow direction.
+  // The simple strategy choosen here is to impose always one boundary condition.
+  // The choice of the variable to impose depends on the problem: we have
+  // implemented a prescribed flow height which is useful for open boundaries
+  // with tides and a prescribed discharge which is more
+  // useful for river applications. Please note that in some
+  // applications it can be better to set also the tangential flow but we do not
   // treat this case here. Concerning the implementation, we use
-  // the evaluate function by component to get the normal discharge.
+  // the evaluate function by component to get the discharge normal to the boundary.
   // Later it is projected along the boundary normal to get x and y
   // discharge components to be used in the Riemann solver.
   //

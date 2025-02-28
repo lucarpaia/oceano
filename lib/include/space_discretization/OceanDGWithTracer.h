@@ -492,67 +492,21 @@ namespace SpaceDiscretization
       }
   }
 
-  // For faces located at the boundary, we need to impose the appropriate
-  // boundary conditions. In this tutorial program, we implement four cases as
-  // mentioned above. The discontinuous Galerkin
-  // method imposes boundary conditions not as constraints, but only
-  // weakly. Thus, the various conditions are imposed by finding an appropriate
-  // <i>exterior</i> quantity $\mathbf{w}^+$ that is then handed to the
-  // numerical flux function also used for the interior faces. In essence,
-  // we "pretend" a state on the outside of the domain in such a way that
-  // if that were reality, the solution of the PDE would satisfy the boundary
-  // conditions we want.
+  // The boundary conditions for tracers are discussed here. They are of course
+  // related to the hydrodynamics. Supercritical flows are easy to implement since
+  // the tracers always enter or leave the domain.
   //
-  // For wall boundaries, we need to impose a no-normal-flux condition on the
-  // momentum variable, whereas we use a Neumann condition for the density and
-  // energy with $\rho^+ = \rho^-$ and $E^+ = E^-$. To achieve the no-normal
-  // flux condition, we set the exterior values to the interior values and
-  // subtract two times the velocity in wall-normal direction, i.e., in the
-  // direction of the normal vector.
+  // More complicated is the case of subcritical flows.
+  // Here the tracers can enter from some portion of the boundary and leave
+  // the domain from some other part and this can be time-varing. All case have to
+  // be covered and on SIMD vectorization, the 'if' statement does not work. As we work on
+  // data of several quadrature points at once for SIMD vectorizations, we here need to
+  // explicitly loop over the array entries of the SIMD array.
   //
-  // For inflow boundaries, we simply set the given Dirichlet data
-  // $\mathbf{w}_\mathrm{D}$ as a boundary value. An alternative would have been
-  // to use $\mathbf{w}^+ = -\mathbf{w}^- + 2 \mathbf{w}_\mathrm{D}$, the
-  // so-called mirror principle.
-  //
-  // The imposition of outflow is essentially a Neumann condition, i.e.,
-  // setting $\mathbf{w}^+ = \mathbf{w}^-$. For the case of supercritical outflow,
-  // we still need to impose a value for the energy, which we derive from the
-  // respective function. A special step is needed for the case of
-  // <i>backflow</i>, i.e., the case where there is a momentum flux into the
-  // domain on the Neumann portion. According to the literature (a fact that can
-  // be derived by appropriate energy arguments), we must switch to another
-  // variant of the flux on inflow parts, see Gravemeier, Comerford,
-  // Yoshihara, Ismail, Wall, "A novel formulation for Neumann inflow
-  // conditions in biomechanics", Int. J. Numer. Meth. Biomed. Eng., vol. 28
-  // (2012). Here, the momentum term needs to be added once again, which
-  // corresponds to removing the flux contribution on the momentum
-  // variables. We do this in a post-processing step, and only for the case
-  // when we both are at an outflow boundary and the dot product between the
-  // normal vector and the momentum (or, equivalently, velocity) is
-  // negative.
-  //
-  // The fourth boundary conditions is very important in coastal ocean and
-  // hydraulic simulation since the flow conditions are essentially
-  // subcritical. The above outflow condition assume that all the eigenvalues
-  // are outgoing which cannot be true in the subcritical regime.
-  // We have implemented another outflow imposition where we recover the
-  // information coming from the ingoing eigenvalue. We compute a
-  // boundary state from a far-field state (typically a flow at rest) from
-  // the theory of characteristics, that is by equating at the boundary location,
-  // the outgoing Riemann invariant with the ingoing one.
-  // As we work on data of several quadrature points at once for
-  // SIMD vectorizations, we here need to explicitly loop over the array
-  // entries of the SIMD array.
-  //
-  // In the implementation below, we check for the various types
-  // of boundaries at the level of quadrature points. Of course, we could also
-  // have moved the decision out of the quadrature point loop and treat entire
-  // faces as of the same kind, which avoids some map/set lookups in the inner
-  // loop over quadrature points. However, the loss of efficiency is hardly
-  // noticeable, so we opt for the simpler code here. Also note that the final
-  // `else` clause will catch the case when some part of the boundary was not
-  // assigned any boundary condition via `OceanoOperator::set_..._boundary(...)`.
+  // A last option which could be interesting is a Neumann boundary condition for the tracer with
+  // an in-going flow. This could be helpful in case where we just want that nothing enters.
+  // We have realized this condition with a simple if statment: if a value of -999 is read
+  // the code switches to imposing the interior value.
   template <int dim, int n_tra, int degree, int n_points_1d>
   void OceanoOperatorWithTracer<dim, n_tra, degree, n_points_1d>::local_apply_boundary_face_tracer(
     const MatrixFree<dim, Number> &,
@@ -600,7 +554,6 @@ namespace SpaceDiscretization
               {
                 z_p = z_m;
                 q_p = q_m - 2. * rho_u_dot_n * normal;
-                t_p = t_m;
               }
             else if (bc->supercritical_inflow_boundaries.find(boundary_id) !=
                      bc->supercritical_inflow_boundaries.end())
@@ -621,7 +574,6 @@ namespace SpaceDiscretization
               {
                 z_p = z_m;
                 q_p = q_m;
-                t_p = t_m;
               }
             else if (bc->height_inflow_boundaries.find(boundary_id) !=
                      bc->height_inflow_boundaries.end())
@@ -649,13 +601,13 @@ namespace SpaceDiscretization
                         *bc->height_inflow_boundaries.find(boundary_id)->second,
                         phi_tracer.quadrature_point(q),
                         phi_tracer.get_value(q));
-                else if (at_outflow == VectorizedArray<Number>::size())
-                  t_p = t_m;
-                else
+                else if (at_outflow != VectorizedArray<Number>::size())
                   t_p = evaluate_function_tracer<dim, Number, n_tra>(
                         *bc->height_inflow_boundaries.find(boundary_id)->second,
                         phi_tracer.quadrature_point(q),
                         phi_tracer.get_value(q)) * (1.-mask_outflow) + mask_outflow*t_m;
+
+                if (t_p[0] == -999) t_p = t_m;
 
               }
             else if (bc->discharge_inflow_boundaries.find(boundary_id) !=
@@ -684,9 +636,7 @@ namespace SpaceDiscretization
                         *bc->discharge_inflow_boundaries.find(boundary_id)->second,
                         phi_tracer.quadrature_point(q),
                         phi_tracer.get_value(q));
-                else if (at_outflow == VectorizedArray<Number>::size())
-                  t_p = t_m;
-                else
+                else if (at_outflow != VectorizedArray<Number>::size())
                   t_p = evaluate_function_tracer<dim, Number, n_tra>(
                         *bc->discharge_inflow_boundaries.find(boundary_id)->second,
                         phi_tracer.quadrature_point(q),
