@@ -166,18 +166,18 @@ namespace ICBC
   };
 
   template <int dim, int n_vars>
-  double Ic<dim, n_vars>::value(const Point<dim>  &/*x*/,
+  double Ic<dim, n_vars>::value(const Point<dim>  &x,
                                 const unsigned int component) const
   {
     Assert(dim == 2, ExcNotImplemented());
-    Assert(n_vars == 3, ExcNotImplemented());
+    Assert(n_vars <= 4, ExcNotImplemented());
 
     if (component == 0)
       return D;
-    else if (component == 1)
+    else if (component == 1 || component == 2)
       return 0.;
     else
-      return 0.;
+      return 30. - 0.000025 * x[1];
   }
 
 
