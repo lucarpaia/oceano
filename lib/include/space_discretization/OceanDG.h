@@ -537,7 +537,8 @@ namespace SpaceDiscretization
         phi_height.gather_evaluate(src[0], EvaluationFlags::values
                               | EvaluationFlags::gradients);
         phi_discharge.reinit(cell);
-        phi_discharge.gather_evaluate(src[1], EvaluationFlags::values | EvaluationFlags::gradients);
+        phi_discharge.gather_evaluate(src[1], EvaluationFlags::values
+                              | EvaluationFlags::gradients);
 
         for (unsigned int q = 0; q < phi_discharge.n_q_points; ++q)
           {
@@ -580,11 +581,13 @@ namespace SpaceDiscretization
         phi_height.gather_evaluate(src[0], EvaluationFlags::values
                               | EvaluationFlags::gradients);
         phi_discharge.reinit(cell);
-        phi_discharge.gather_evaluate(src[1], EvaluationFlags::values);
+        phi_discharge.gather_evaluate(src[1], EvaluationFlags::values
+                              | EvaluationFlags::gradients);
 
         for (unsigned int q = 0; q < phi_discharge.n_q_points; ++q)
           {
             const auto q_q = phi_discharge.get_value(q);
+            const auto dq_q = phi_discharge.get_gradient(q);
             const auto z_q = phi_height.get_value(q);
             const auto dz_q = phi_height.get_gradient(q);
 
@@ -593,7 +596,7 @@ namespace SpaceDiscretization
                 *bc->problem_data, phi_discharge.quadrature_point(q));
 
             phi_discharge.submit_gradient(
-              model.advectiveflux<dim>(z_q, q_q, data_q[0]), q);
+              model.advectiveflux2<dim>(z_q, q_q, dq_q, data_q[0]), q);
 
             phi_discharge.submit_value(
               model.source_nonstiff<dim>(z_q, q_q, dz_q, data_q),
@@ -797,12 +800,14 @@ namespace SpaceDiscretization
         phi_height_p.reinit(face);
         phi_height_p.gather_evaluate(src[0], EvaluationFlags::values);
         phi_discharge_p.reinit(face);
-        phi_discharge_p.gather_evaluate(src[1], EvaluationFlags::values);
+        phi_discharge_p.gather_evaluate(src[1], EvaluationFlags::values
+                                | EvaluationFlags::gradients);
 
         phi_height_m.reinit(face);
         phi_height_m.gather_evaluate(src[0], EvaluationFlags::values);
         phi_discharge_m.reinit(face);
-        phi_discharge_m.gather_evaluate(src[1], EvaluationFlags::values);
+        phi_discharge_m.gather_evaluate(src[1], EvaluationFlags::values
+                                | EvaluationFlags::gradients);
 
         for (unsigned int q = 0; q < phi_discharge_m.n_q_points; ++q)
           {
@@ -822,6 +827,8 @@ namespace SpaceDiscretization
                                                    z_p,
                                                    phi_discharge_m.get_value(q),
                                                    phi_discharge_p.get_value(q),
+                                                   phi_discharge_m.get_gradient(q),
+                                                   phi_discharge_p.get_gradient(q),
                                                    normal,
                                                    data_m,
                                                    data_p);
@@ -1029,12 +1036,15 @@ namespace SpaceDiscretization
         phi_height.reinit(face);        
         phi_height.gather_evaluate(src[0], EvaluationFlags::values);
         phi_discharge.reinit(face);
-        phi_discharge.gather_evaluate(src[1], EvaluationFlags::values);
+        phi_discharge.gather_evaluate(src[1], EvaluationFlags::values
+                              | EvaluationFlags::gradients);
 
         for (unsigned int q = 0; q < phi_discharge.n_q_points; ++q)
           {
             const auto z_m    = phi_height.get_value(q);
             const auto q_m    = phi_discharge.get_value(q);
+            const auto dq_m   = phi_discharge.get_gradient(q);
+
             const auto normal = phi_discharge.normal_vector(q);
             const VectorizedArray<Number> data_m =
               evaluate_function<dim, Number>(
@@ -1115,7 +1125,8 @@ namespace SpaceDiscretization
                                      "this part of the domain boundary?"));
 
             auto flux =
-              num_flux.numerical_advflux_weak<dim>(z_m, z_p, q_m, q_p, normal, data_m, data_m);
+              num_flux.numerical_advflux_weak<dim>(
+                z_m, z_p, q_m, q_p, dq_m, dq_m, normal, data_m, data_m);
 
             auto pressure_numerical_fluxes =
               num_flux.numerical_presflux_strong<dim>(z_m, z_p, normal, data_m, data_m);

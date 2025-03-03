@@ -74,13 +74,15 @@ namespace NumericalFlux
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Number>
-      numerical_advflux_weak(const Number                  z_m,
-                             const Number                  z_p,
-                             const Tensor<1, dim, Number> &q_m,
-                             const Tensor<1, dim, Number> &q_p,
-                             const Tensor<1, dim, Number> &normal,
-                             const Number                  data_m,
-                             const Number                  data_p) const;
+      numerical_advflux_weak(const Number                    z_m,
+                             const Number                    z_p,
+                             const Tensor<1, dim, Number>   &q_m,
+                             const Tensor<1, dim, Number>   &q_p,
+                             const Tensor<dim, dim, Number> &dq_m,
+                             const Tensor<dim, dim, Number> &dq_p,
+                             const Tensor<1, dim, Number>   &normal,
+                             const Number                    data_m,
+                             const Number                    data_p) const;
 
     template <int dim, int n_tra, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
@@ -167,13 +169,15 @@ namespace NumericalFlux
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
     LaxFriedrichsModified::numerical_advflux_weak(
-      const Number                   z_m,
-      const Number                   z_p,
-      const Tensor<1, dim, Number>  &q_m,
-      const Tensor<1, dim, Number>  &q_p,
-      const Tensor<1, dim, Number>  &normal,
-      const Number                   data_m,
-      const Number                   data_p) const
+      const Number                     z_m,
+      const Number                     z_p,
+      const Tensor<1, dim, Number>    &q_m,
+      const Tensor<1, dim, Number>    &q_p,
+      const Tensor<dim, dim, Number>  &dq_m,
+      const Tensor<dim, dim, Number>  &dq_p,
+      const Tensor<1, dim, Number>    &normal,
+      const Number                     data_m,
+      const Number                     data_p) const
   {
     const auto v_m = model.velocity<dim>(z_m, q_m, data_m);
     const auto v_p = model.velocity<dim>(z_p, q_p, data_p);
@@ -184,8 +188,8 @@ namespace NumericalFlux
     const auto lambda =
       0.5 * std::max(lambda_p, lambda_m);
 
-    const auto flux_m = model.advectiveflux<dim>(z_m, q_m, data_m);
-    const auto flux_p = model.advectiveflux<dim>(z_p, q_p, data_p);
+    const auto flux_m = model.advectiveflux2<dim>(z_m, q_m, dq_m, data_m);
+    const auto flux_p = model.advectiveflux2<dim>(z_p, q_p, dq_p, data_p);
 
     return 0.5 * (flux_m * normal + flux_p * normal) +
            0.5 * lambda * (q_m - q_p);
