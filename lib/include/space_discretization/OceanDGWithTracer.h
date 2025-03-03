@@ -313,11 +313,14 @@ namespace SpaceDiscretization
     const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
     const std::pair<unsigned int, unsigned int>                   &cell_range) const
   {
+    FEEvaluation<dim, degree, n_points_1d, 1, Number> phi_height(data,0);
     FEEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge(data,1);
     FEEvaluation<dim, degree, n_points_1d, n_tra, Number> phi_tracer(data,2);
 
     for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
       {
+        phi_height.reinit(cell);
+        phi_height.gather_evaluate(src[0], EvaluationFlags::values);
         phi_discharge.reinit(cell);
         phi_discharge.gather_evaluate(src[1], EvaluationFlags::values);
         phi_tracer.reinit(cell);
@@ -325,11 +328,15 @@ namespace SpaceDiscretization
 
         for (unsigned int q = 0; q < phi_tracer.n_q_points; ++q)
           {
+            const auto z_q = phi_height.get_value(q);
             const auto q_q = phi_discharge.get_value(q);
             const auto t_q = phi_tracer.get_value(q);
             const auto dt_q = phi_tracer.get_gradient(q);
+            const VectorizedArray<Number> data_q =
+              evaluate_function<dim, Number>(
+                *bc->problem_data, phi_tracer.quadrature_point(q), 0);
 
-            phi_tracer.submit_gradient(model.tracerflux(q_q, t_q, dt_q), q);
+            phi_tracer.submit_gradient(model.tracerflux(q_q, t_q, (z_q+data_q)*dt_q), q);
           }
 
         phi_tracer.integrate_scatter(EvaluationFlags::gradients,
@@ -547,7 +554,6 @@ namespace SpaceDiscretization
             Tensor<1, dim, VectorizedArray<Number>> q_p;
             Tensor<1, n_vars, VectorizedArray<Number>> w_p;
             auto t_p = t_m;
-            auto dt_p = dt_m;
 
             const auto boundary_id = data.get_boundary_id(face);
             if (bc->wall_boundaries.find(boundary_id) != bc->wall_boundaries.end())
@@ -672,7 +678,7 @@ namespace SpaceDiscretization
                                      "this part of the domain boundary?"));
 
             auto flux = num_flux.numerical_tracflux_weak(
-                z_m, z_p, q_m, q_p, t_m, t_p, dt_m, dt_p, normal, data_m, data_m);
+                z_m, z_p, q_m, q_p, t_m, t_p, dt_m, dt_m, normal, data_m, data_m);
 
             phi_tracer.submit_value(-flux, q);
           }
