@@ -199,6 +199,11 @@ namespace IO
                         "0.",
                         Patterns::Double(0),
                         "Horizontal diffusion coefficient");
+
+      prm.declare_entry("horizontal_viscosity",
+                        "0.",
+                        Patterns::Double(0),
+                        "Horizontal viscosity coefficient");
     }
     prm.leave_subsection();
 
