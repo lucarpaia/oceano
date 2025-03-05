@@ -44,31 +44,35 @@ namespace Physics
     DiffusionCoefficientBase(IO::ParameterHandler &prm);
     ~DiffusionCoefficientBase(){};
 
-    double nu;
+    double c_m;
 
     // The next function is the one that actually computes the diffusion coefficient.
     // It is overloaded by the same function defined in the derived classes.
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Number
-      value() const;
+      value(const Tensor<dim, dim, Number> &gradient_discharge,
+            const Number                    area) const;
   };
   
   // Not surprisingly the constructor of the base class takes as arguments 
   // only the parameters handler class in order to read the physical constants
-  // from the prm file.
+  // from the prm file. Note that $C_M$ will have different meaning depending
+  // on the diffusivity formulation.
   DiffusionCoefficientBase::DiffusionCoefficientBase(
     IO::ParameterHandler &prm)
   {
     prm.enter_subsection("Physical constants");
-    nu = prm.get_double("horizontal_diffusivity");
+    c_m = prm.get_double("horizontal_diffusivity");
     prm.leave_subsection();
   }
 
 
 
+#if defined PHYSICS_DIFFUSIONCOEFFICIENTCONSTANT
   // The first formulation of the diffusion coefficient is a constant
-  // one, the value being read from the configuration file.
+  // one named $C_M$, the value being read from the configuration file.
+  // The proper choice of $C_M$ can be determined by a sensitivity study.
   class DiffusionCoefficientConstant : public DiffusionCoefficientBase
   {
   public:
@@ -78,7 +82,8 @@ namespace Physics
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Number
-      value() const;
+      value(const Tensor<dim, dim, Number> &gradient_discharge,
+            const Number                    area) const;
   };
 
   DiffusionCoefficientConstant::DiffusionCoefficientConstant(
@@ -89,9 +94,73 @@ namespace Physics
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Number
-    DiffusionCoefficientConstant::value() const
+    DiffusionCoefficientConstant::value(
+      const Tensor<dim, dim, Number> &/*gradient_discharge*/,
+      const Number                    /*area*/) const
   {
-    return nu;
+    return c_m;
   }
+
+
+
+#elif defined PHYSICS_DIFFUSIONCOEFFICIENTSMAGORINSKY
+  // Alternatively a turbulent closure based on the mixed length was
+  // proposed by Smagorinsky. The horizontal eddy viscosity is
+  // composed, based on dimensional argument, with a length scale
+  // which is taken proportional to the grid scale thanks to
+  // a coefficient $C_S$ and with a characteristic strain rate of the
+  // resolved flow $\mathcal{S}$. Rewriting the length scale in terms
+  // of grid area, we get the following formula:
+  // \[
+  // \nu = C_M |K| \mathcal{S}
+  // \]
+  // with $C_M=C_S^2/Pr$ scaled by the the Prandtl $Pr$ to have the
+  // correct dimension. The parameter $C_M$ is read from the
+  // configuration file. If you take $C_S=0.5$ and a Prandtl number
+  // of $Pr=10$ then we can select the parameter as $C_M=0.025$.
+  // The strain rate is defined in the book (Turbulent Flows, Pope):
+  // \[
+  // \mathcal{S} = \sqrt(2*S_{ij}*S_{ij}),
+  // \quad S_{ij} = \frac{1}{2}\left( \frac{\partial u_i}{\partial x_j}
+  //              + \frac{\partial u_j}{\partial x_i}  \right)
+  // \]
+  // with these definitions, after some calculation, we get the same
+  // formula coded in the coastal ocean model SHYFEM (Umgiesser,2004).
+  class DiffusionCoefficientSmagorinsky : public DiffusionCoefficientBase
+  {
+  public:
+    DiffusionCoefficientSmagorinsky(IO::ParameterHandler &prm);
+    ~DiffusionCoefficientSmagorinsky(){};
+
+    template <int dim, typename Number>
+    inline DEAL_II_ALWAYS_INLINE //
+      Number
+      value(const Tensor<dim, dim, Number> &gradient_discharge,
+            const Number                    area) const;
+  };
+
+  DiffusionCoefficientSmagorinsky::DiffusionCoefficientSmagorinsky(
+    IO::ParameterHandler &param)
+    : DiffusionCoefficientBase(param)
+  {}
+
+  template <int dim, typename Number>
+  inline DEAL_II_ALWAYS_INLINE //
+    Number
+    DiffusionCoefficientSmagorinsky::value(
+      const Tensor<dim, dim, Number> &gradient_discharge,
+      const Number                    area) const
+  {
+    Number strain_rate = gradient_discharge[0][0]*gradient_discharge[0][0];
+    for (unsigned int d = 1; d < dim; ++d)
+      {
+        Number shear = gradient_discharge[0][d] + gradient_discharge[d][0];
+        strain_rate += gradient_discharge[d][d]*gradient_discharge[d][d] + 0.5*shear*shear;
+      }
+
+    return c_m * area * std::sqrt(2.*strain_rate);
+  }
+#endif
+
 } // namespace Physics
 #endif //DIFFUSIONCOEFFICIENT_HPP

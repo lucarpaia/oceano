@@ -53,6 +53,8 @@ namespace Model
 
 #if defined PHYSICS_DIFFUSIONCOEFFICIENTCONSTANT
     Physics::DiffusionCoefficientConstant diffusion_coefficient;
+#elif defined PHYSICS_DIFFUSIONCOEFFICIENTSMAGORINSKY
+    Physics::DiffusionCoefficientSmagorinsky diffusion_coefficient;
 #else
     Assert(false, ExcNotImplemented());
     return 0.;
@@ -68,21 +70,27 @@ namespace Model
       Tensor<1, n_tra, Tensor<1, dim, Number>>
       tracerflux(const Tensor<1, dim, Number>                   &discharge,
                  const Tensor<1, n_tra, Number>                 &tracer,
-                 const Tensor<1, n_tra, Tensor<1, dim, Number>> &gradient_tracer) const;
+                 const Tensor<dim, dim, Number>                 &gradient_discharge,
+                 const Tensor<1, n_tra, Tensor<1, dim, Number>> &gradient_tracer,
+                 const Number                                    area) const;
 
     template <int dim, int n_tra, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, n_tra, Tensor<1, dim, Number>>
       tracerflux(const Tensor<1, dim, Number>   &discharge,
                  const Tensor<1, n_tra, Number> &tracer,
-                 const Tensor<2, dim, Number>   &gradient_tracer) const;
+                 const Tensor<dim, dim, Number> &gradient_discharge,
+                 const Tensor<2, dim, Number>   &gradient_tracer,
+                 const Number                    area) const;
 
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Number>
-      tracerflux(const Tensor<1, dim, Number> &discharge,
-                 const Number                  tracer,
-                 const Tensor<1, dim, Number> &gradient_tracer) const;
+      tracerflux(const Tensor<1, dim, Number>   &discharge,
+                 const Number                    tracer,
+                 const Tensor<dim, dim, Number> &gradient_discharge,
+                 const Tensor<1, dim, Number>   &gradient_tracer,
+                 const Number                    area) const;
   };
 
 
@@ -125,13 +133,16 @@ namespace Model
     ShallowWaterWithTracer::tracerflux(
       const Tensor<1, dim, Number>                   &discharge,
       const Tensor<1, n_tra, Number>                 &tracer,
-      const Tensor<1, n_tra, Tensor<1, dim, Number>> &gradient_tracer) const
+      const Tensor<dim, dim, Number>                 &gradient_discharge,
+      const Tensor<1, n_tra, Tensor<1, dim, Number>> &gradient_tracer,
+      const Number                                    area) const
   {
     Tensor<1, n_tra, Tensor<1, dim, Number>> flux;
     for (unsigned int d = 0; d < dim; ++d)
       for (unsigned int e = 0; e < n_tra; ++e)
         flux[e][d] = tracer[e] * discharge[d]
-          - diffusion_coefficient.value<dim, Number>() * gradient_tracer[e][d];
+          - diffusion_coefficient.value<dim, Number>(gradient_discharge, area)
+            * gradient_tracer[e][d];
 
     return flux;
   }
@@ -142,13 +153,16 @@ namespace Model
     ShallowWaterWithTracer::tracerflux(
       const Tensor<1, dim, Number>   &discharge,
       const Tensor<1, n_tra, Number> &tracer,
-      const Tensor<2, dim, Number>   &gradient_tracer) const
+      const Tensor<dim, dim, Number> &gradient_discharge,
+      const Tensor<2, dim, Number>   &gradient_tracer,
+      const Number                    area) const
   {
     Tensor<1, n_tra, Tensor<1, dim, Number>> flux;
     for (unsigned int d = 0; d < dim; ++d)
       for (unsigned int e = 0; e < n_tra; ++e)
         flux[e][d] = tracer[e] * discharge[d]
-          - diffusion_coefficient.value<dim, Number>() * gradient_tracer[e][d];
+          - diffusion_coefficient.value<dim, Number>(gradient_discharge, area)
+            * gradient_tracer[e][d];
 
     return flux;
   }
@@ -157,12 +171,15 @@ namespace Model
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
     ShallowWaterWithTracer::tracerflux(
-      const Tensor<1, dim, Number> &discharge,
-      const Number                  tracer,
-      const Tensor<1, dim, Number> &gradient_tracer) const
+      const Tensor<1, dim, Number>   &discharge,
+      const Number                    tracer,
+      const Tensor<dim, dim, Number> &gradient_discharge,
+      const Tensor<1, dim, Number>   &gradient_tracer,
+      const Number                    area) const
   {
     return tracer * discharge
-      - diffusion_coefficient.value<dim, Number>() * gradient_tracer;
+      - diffusion_coefficient.value<dim, Number>(gradient_discharge, area)
+        * gradient_tracer;
   }
 } // namespace Model
 #endif //SHALLOWWATERWITHTRACER_HPP

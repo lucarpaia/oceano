@@ -322,21 +322,27 @@ namespace SpaceDiscretization
         phi_height.reinit(cell);
         phi_height.gather_evaluate(src[0], EvaluationFlags::values);
         phi_discharge.reinit(cell);
-        phi_discharge.gather_evaluate(src[1], EvaluationFlags::values);
+        phi_discharge.gather_evaluate(src[1], EvaluationFlags::values | EvaluationFlags::gradients);
         phi_tracer.reinit(cell);
         phi_tracer.gather_evaluate(src[2], EvaluationFlags::values | EvaluationFlags::gradients);
+
+        VectorizedArray<Number> area_cell;
+        for (unsigned int v = 0; v < data.n_active_entries_per_cell_batch(cell); ++v)
+          area_cell[v] = data.get_cell_iterator(cell,v)->measure();
 
         for (unsigned int q = 0; q < phi_tracer.n_q_points; ++q)
           {
             const auto z_q = phi_height.get_value(q);
             const auto q_q = phi_discharge.get_value(q);
+            const auto dq_q = phi_discharge.get_gradient(q);
             const auto t_q = phi_tracer.get_value(q);
             const auto dt_q = phi_tracer.get_gradient(q);
             const VectorizedArray<Number> data_q =
               evaluate_function<dim, Number>(
                 *bc->problem_data, phi_tracer.quadrature_point(q), 0);
 
-            phi_tracer.submit_gradient(model.tracerflux(q_q, t_q, (z_q+data_q)*dt_q), q);
+            phi_tracer.submit_gradient(
+              model.tracerflux(q_q, t_q, dq_q, (z_q+data_q)*dt_q, area_cell), q);
           }
 
         phi_tracer.integrate_scatter(EvaluationFlags::gradients,
@@ -457,16 +463,20 @@ namespace SpaceDiscretization
         phi_height_p.reinit(face);
         phi_height_p.gather_evaluate(src[0], EvaluationFlags::values);
         phi_discharge_p.reinit(face);
-        phi_discharge_p.gather_evaluate(src[1], EvaluationFlags::values);
+        phi_discharge_p.gather_evaluate(src[1], EvaluationFlags::values | EvaluationFlags::gradients);
         phi_tracer_p.reinit(face);
         phi_tracer_p.gather_evaluate(src[2], EvaluationFlags::values | EvaluationFlags::gradients);
 
         phi_height_m.reinit(face);
         phi_height_m.gather_evaluate(src[0], EvaluationFlags::values);
         phi_discharge_m.reinit(face);
-        phi_discharge_m.gather_evaluate(src[1], EvaluationFlags::values);
+        phi_discharge_m.gather_evaluate(src[1], EvaluationFlags::values | EvaluationFlags::gradients);
         phi_tracer_m.reinit(face);
         phi_tracer_m.gather_evaluate(src[2], EvaluationFlags::values | EvaluationFlags::gradients);
+
+        VectorizedArray<Number> area_cell;
+        for (unsigned int v = 0; v < data.n_active_entries_per_face_batch(face); ++v)
+          area_cell[v] = data.get_face_iterator(face,v,true).first->measure();
 
         for (unsigned int q = 0; q < phi_tracer_m.n_q_points; ++q)
           {
@@ -484,11 +494,14 @@ namespace SpaceDiscretization
                                                phi_discharge_p.get_value(q),
                                                phi_tracer_m.get_value(q),
                                                phi_tracer_p.get_value(q),
+                                               phi_discharge_m.get_gradient(q),
+                                               phi_discharge_p.get_gradient(q),
                                                phi_tracer_m.get_gradient(q),
                                                phi_tracer_p.get_gradient(q),
                                                phi_tracer_m.normal_vector(q),
                                                data_m,
-                                               data_p);
+                                               data_p,
+                                               area_cell);
 
             phi_tracer_m.submit_value(-numerical_flux_p, q);
             phi_tracer_p.submit_value(numerical_flux_p, q);
@@ -532,14 +545,19 @@ namespace SpaceDiscretization
         phi_height.reinit(face);
         phi_height.gather_evaluate(src[0], EvaluationFlags::values);
         phi_discharge.reinit(face);
-        phi_discharge.gather_evaluate(src[1], EvaluationFlags::values);
+        phi_discharge.gather_evaluate(src[1], EvaluationFlags::values | EvaluationFlags::gradients);
         phi_tracer.reinit(face);
         phi_tracer.gather_evaluate(src[2], EvaluationFlags::values | EvaluationFlags::gradients);
+
+        VectorizedArray<Number> area_cell;
+        for (unsigned int v = 0; v < data.n_active_entries_per_face_batch(face); ++v)
+          area_cell[v] = data.get_face_iterator(face,v,true).first->measure();
 
         for (unsigned int q = 0; q < phi_tracer.n_q_points; ++q)
           {
             const auto z_m    = phi_height.get_value(q);
             const auto q_m    = phi_discharge.get_value(q);
+            const auto dq_m   = phi_discharge.get_gradient(q);
             const auto t_m    = phi_tracer.get_value(q);
             const auto dt_m   = phi_tracer.get_gradient(q);
 
@@ -678,7 +696,7 @@ namespace SpaceDiscretization
                                      "this part of the domain boundary?"));
 
             auto flux = num_flux.numerical_tracflux_weak(
-                z_m, z_p, q_m, q_p, t_m, t_p, dt_m, dt_m, normal, data_m, data_m);
+                z_m, z_p, q_m, q_p, t_m, t_p, dq_m, dq_m, dt_m, dt_m, normal, data_m, data_m, area_cell);
 
             phi_tracer.submit_value(-flux, q);
           }
