@@ -70,7 +70,7 @@ namespace Model
       Tensor<1, n_tra, Tensor<1, dim, Number>>
       tracerflux(const Tensor<1, dim, Number>                   &discharge,
                  const Tensor<1, n_tra, Number>                 &tracer,
-                 const Tensor<dim, dim, Number>                 &gradient_discharge,
+                 const Tensor<dim, dim, Number>                 &gradient_velocity,
                  const Tensor<1, n_tra, Tensor<1, dim, Number>> &gradient_tracer,
                  const Number                                    area) const;
 
@@ -79,7 +79,7 @@ namespace Model
       Tensor<1, n_tra, Tensor<1, dim, Number>>
       tracerflux(const Tensor<1, dim, Number>   &discharge,
                  const Tensor<1, n_tra, Number> &tracer,
-                 const Tensor<dim, dim, Number> &gradient_discharge,
+                 const Tensor<dim, dim, Number> &gradient_velocity,
                  const Tensor<2, dim, Number>   &gradient_tracer,
                  const Number                    area) const;
 
@@ -88,7 +88,7 @@ namespace Model
       Tensor<1, dim, Number>
       tracerflux(const Tensor<1, dim, Number>   &discharge,
                  const Number                    tracer,
-                 const Tensor<dim, dim, Number> &gradient_discharge,
+                 const Tensor<dim, dim, Number> &gradient_velocity,
                  const Tensor<1, dim, Number>   &gradient_tracer,
                  const Number                    area) const;
   };
@@ -133,7 +133,7 @@ namespace Model
     ShallowWaterWithTracer::tracerflux(
       const Tensor<1, dim, Number>                   &discharge,
       const Tensor<1, n_tra, Number>                 &tracer,
-      const Tensor<dim, dim, Number>                 &gradient_discharge,
+      const Tensor<dim, dim, Number>                 &gradient_velocity,
       const Tensor<1, n_tra, Tensor<1, dim, Number>> &gradient_tracer,
       const Number                                    area) const
   {
@@ -141,7 +141,7 @@ namespace Model
     for (unsigned int d = 0; d < dim; ++d)
       for (unsigned int e = 0; e < n_tra; ++e)
         flux[e][d] = tracer[e] * discharge[d]
-          - diffusion_coefficient.value<dim, Number>(gradient_discharge, area)
+          - diffusion_coefficient.value<dim, Number>(gradient_velocity, area)
             * gradient_tracer[e][d];
 
     return flux;
@@ -153,7 +153,7 @@ namespace Model
     ShallowWaterWithTracer::tracerflux(
       const Tensor<1, dim, Number>   &discharge,
       const Tensor<1, n_tra, Number> &tracer,
-      const Tensor<dim, dim, Number> &gradient_discharge,
+      const Tensor<dim, dim, Number> &gradient_velocity,
       const Tensor<2, dim, Number>   &gradient_tracer,
       const Number                    area) const
   {
@@ -161,7 +161,7 @@ namespace Model
     for (unsigned int d = 0; d < dim; ++d)
       for (unsigned int e = 0; e < n_tra; ++e)
         flux[e][d] = tracer[e] * discharge[d]
-          - diffusion_coefficient.value<dim, Number>(gradient_discharge, area)
+          - diffusion_coefficient.value<dim, Number>(gradient_velocity, area)
             * gradient_tracer[e][d];
 
     return flux;
@@ -173,12 +173,12 @@ namespace Model
     ShallowWaterWithTracer::tracerflux(
       const Tensor<1, dim, Number>   &discharge,
       const Number                    tracer,
-      const Tensor<dim, dim, Number> &gradient_discharge,
+      const Tensor<dim, dim, Number> &gradient_velocity,
       const Tensor<1, dim, Number>   &gradient_tracer,
       const Number                    area) const
   {
     return tracer * discharge
-      - diffusion_coefficient.value<dim, Number>(gradient_discharge, area)
+      - diffusion_coefficient.value<dim, Number>(gradient_velocity, area)
         * gradient_tracer;
   }
 } // namespace Model

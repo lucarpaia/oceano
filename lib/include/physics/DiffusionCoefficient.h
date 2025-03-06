@@ -117,7 +117,7 @@ namespace Physics
   // with $C_M=C_S^2/Pr$ scaled by the the Prandtl $Pr$ to have the
   // correct dimension. The parameter $C_M$ is read from the
   // configuration file. If you take $C_S=0.5$ and a Prandtl number
-  // of $Pr=10$ then we can select the parameter as $C_M=0.025$.
+  // of $Pr=10$ then we can select the parameter as `c_m=0.025`.
   // The strain rate is defined in the book (Turbulent Flows, Pope):
   // \[
   // \mathcal{S} = \sqrt(2*S_{ij}*S_{ij}),
