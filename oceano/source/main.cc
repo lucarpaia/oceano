@@ -78,8 +78,10 @@
 // For the wind stress either
 #define PHYSICS_WINDSTRESSGENERAL
 #undef  PHYSICS_WINDSTRESSQUADRATIC
-// The following key is for the eddy diffusion coefficient.
-#define PHYSICS_DIFFUSIONCOEFFICIENTCONSTANT
+// The following key is for the eddy diffusion coefficient. You have two alternatives: a
+// constant eddy coefficient or a more sophisticated Smagorinsky turbulent model.
+#undef  PHYSICS_DIFFUSIONCOEFFICIENTCONSTANT
+#define PHYSICS_DIFFUSIONCOEFFICIENTSMAGORINSKY
 // We end with a tuner class for the AMR:
 #undef  AMR_HEIGHTGRADIENT
 #undef  AMR_VORTICITY
@@ -262,15 +264,22 @@ namespace Problem
   class OceanoProblem
   {
   public:
-    OceanoProblem(IO::ParameterHandler          &,
-                 ICBC::BcBase<dim, 1+dim+n_tra> *bc);
+    OceanoProblem(IO::ParameterHandler           &,
+                  ICBC::BcBase<dim, 1+dim+n_tra> *bc);
 
     void run();
 
   private:
     void make_grid();
     void make_dofs();
-    void refine_grid(const Amr::AmrTuner &amr_tuner);
+    void make_ic(
+      const ICBC::Ic<dim, 1+dim+n_tra>            ic,
+      std::map<unsigned int, Point<dim>>         &dof_points,
+      LinearAlgebra::distributed::Vector<Number> &postprocess_velocity);
+    void refine_grid(
+      const Amr::AmrTuner                        &amr_tuner,
+      std::map<unsigned int, Point<dim>>         &dof_points,
+      LinearAlgebra::distributed::Vector<Number> &postprocess_velocity);
 
     LinearAlgebra::distributed::Vector<Number> solution_height;
     LinearAlgebra::distributed::Vector<Number> solution_discharge;
@@ -348,8 +357,10 @@ namespace Problem
 
    private:
     void output_results(
-      Postprocessor      &postprocessor,
-      const unsigned int  result_number);
+      Postprocessor                                    &postprocessor,
+      const unsigned int                                result_number,
+      std::map<unsigned int, Point<dim>>               &dof_points,
+      const LinearAlgebra::distributed::Vector<Number> &postprocess_velocity);
   };
 
 
@@ -527,7 +538,7 @@ namespace Problem
   // friction, wind stress ... Friction force, as other terms coming from
   // boundary conditions, depends on an external and given data, e.g the friction coefficient.
   // More in general these data may be spatially and time varying. Wind forcing or bathymetry
-  // can be other examples. Time and space functions are represented in deal.II with a Function
+  // can be other examples. Time and space functions are represented in deal.ii with a Function
   // class. Here we set a pointer to Functions that defines such external data, both for
   // the boundary conditions and for data associated to it.
   template <int dim, int n_tra>
@@ -577,7 +588,8 @@ namespace Problem
 
 
 
-  // the boundary conditions and for data associated to it.
+  // The degrees of freedom and the solution vector needs to be
+  // initialized.
   template <int dim, int n_tra>
   void OceanoProblem<dim, n_tra>::make_dofs()
   {
@@ -598,17 +610,43 @@ namespace Problem
 
 
 
+  // Given the initial condition class and some other structure,
+  // we initialize the solution vectors and the postprocessed velocity.
+  template <int dim, int n_tra>
+  void OceanoProblem<dim, n_tra>::make_ic(
+    const ICBC::Ic<dim, 1+dim+n_tra>            ic,
+    std::map<unsigned int, Point<dim>>         &dof_points,
+    LinearAlgebra::distributed::Vector<Number> &postprocess_velocity)
+  {
+    oceano_operator.project_hydro(
+      ic, solution_height, solution_discharge);
+#ifdef OCEANO_WITH_TRACERS
+    oceano_operator.project_tracers(
+      ic, solution_tracer);
+#endif
+    oceano_operator.evaluate_velocity_field(
+      dof_handler_height,
+      solution_height,
+      solution_discharge,
+      dof_points,
+      postprocess_velocity);
+  }
+
+
+
   // This function takes care of the adaptive mesh refinement. The tasks this
   // function performs are the classical one of AMR: estimate the error, mark the
   // cells for refinement/coarsening, execute the remeshing and transfer the solution
   // onto the new grid.
   // The preprocessor point out that we have implemented the AMR only with P4est, a tool that
-  // handle mesh refinement on distributed architecture. Without a Deal.ii version compiled
+  // handle mesh refinement on distributed architecture. Without a deal.ii version compiled
   // with P4est mesh refinement is not active and a warning system is raised.
   // We have a look to each task into more details.
   template <int dim, int n_tra>
   void OceanoProblem<dim, n_tra>::refine_grid(
-    const Amr::AmrTuner &amr_tuner)
+    const Amr::AmrTuner                        &amr_tuner,
+    std::map<unsigned int, Point<dim>>         &dof_points,
+    LinearAlgebra::distributed::Vector<Number> &postprocess_velocity)
   {
     {
       TimerOutput::Scope t(timer, "amr - remesh + remap");
@@ -617,32 +655,10 @@ namespace Problem
       // We estimate the error. Since this operation is case-dependent it is left
       // to a specific class and to its member function `estimate_error`.
       // This computes a cellwise error based on all the components of the solution.
-      // Some postprocessing of the variable may be necessary, depending on the error
-      // estimate. We let evaluate_vector_field() do the postprocessing. This operation
-      // is quite costly and we do only if it is needed. Think to move these lines
-      // inside the AmrTuner class and take out the preprocessor.
       // To reduce at the miniumum the calibration of the refinement/coarsen thresholds,
       // we use dimensionless thresholds and we multiply them by the maximum error into
       // the domain.
       Vector<float> estimated_error_per_cell(triangulation.n_active_cells());
-
-      LinearAlgebra::distributed::Vector<Number> postprocess_velocity;
-#if defined AMR_VORTICITY
-      postprocess_velocity.reinit(solution_discharge);
-      std::vector<LinearAlgebra::distributed::Vector<Number>>
-        postprocess_scalar_variables;
-
-      std::map<unsigned int, Point<dim>> x_evaluation_points =
-        DoFTools::map_dofs_to_support_points(mapping,
-                                             dof_handler_height);
-
-      oceano_operator.evaluate_vector_field(dof_handler_height,
-                                            solution_height,
-                                            solution_discharge,
-                                            x_evaluation_points,
-                                            postprocess_velocity,
-                                            postprocess_scalar_variables);
-#endif
 
       std::vector<DoFHandler<dim>*> dof_handlers;
       dof_handlers.push_back(&dof_handler_height);
@@ -743,6 +759,13 @@ namespace Problem
 
       solution_tracer = transfer_tracer;
 #endif
+      postprocess_velocity.reinit(solution_discharge);
+      dof_points = DoFTools::map_dofs_to_support_points(mapping, dof_handler_height);
+      oceano_operator.evaluate_velocity_field(dof_handler_height,
+                                              solution_height,
+                                              solution_discharge,
+                                              dof_points,
+                                              postprocess_velocity);
 #else
     Assert(amr_tuner.max_level_refinement > 0
             || amr_tuner.remesh_tick < 10000000000.,
@@ -759,26 +782,21 @@ namespace Problem
   // We examine the outputs one by one. 
   //
   // At the beginning, we postprocess some variables depending on the model
-  // class request. The call `evaluate_vector_field` do the job here.
+  // class request. The call `evaluate_postprocess_field` do the job here.
   template <int dim, int n_tra>
   void OceanoProblem<dim, n_tra>::output_results(
-    Postprocessor      &postprocessor,
-    const unsigned int  result_number)
+    Postprocessor                                    &postprocessor,
+    const unsigned int                                result_number,
+    std::map<unsigned int, Point<dim>>               &dof_points,
+    const LinearAlgebra::distributed::Vector<Number> &postprocess_velocity)
   {
-      std::map<unsigned int, Point<dim>> x_evaluation_points =
-        DoFTools::map_dofs_to_support_points(mapping,
-                                             dof_handler_height);
-      LinearAlgebra::distributed::Vector<Number> postprocess_vector_variables;
-      postprocess_vector_variables.reinit(solution_discharge);
-      std::vector<LinearAlgebra::distributed::Vector<Number>>
-        postprocess_scalar_variables(postprocessor.n_postproc_vars-dim, solution_height);
-
-      oceano_operator.evaluate_vector_field(dof_handler_height,
-                                            solution_height,
-                                            solution_discharge,
-                                            x_evaluation_points,
-                                            postprocess_vector_variables,
-                                            postprocess_scalar_variables);
+    std::vector<LinearAlgebra::distributed::Vector<Number>>
+      postprocess_scalar_variables(postprocessor.n_postproc_vars-dim, solution_height);
+    oceano_operator.evaluate_postprocess_field(dof_handler_height,
+                                               solution_height,
+                                               solution_discharge,
+                                               dof_points,
+                                               postprocess_scalar_variables);
 
     if (postprocessor.do_solution)
     {
@@ -882,7 +900,7 @@ namespace Problem
                                  vars_names[0]);
 
         data_out.add_data_vector(dof_handler_discharge,
-                                 postprocess_vector_variables,
+                                 postprocess_velocity,
                                  names_vector,
                                  interpretation_vector);
 
@@ -996,7 +1014,7 @@ namespace Problem
           auto history_postproc_vector = VectorTools::point_values<1>(
               postprocessor.cache,
               dof_handler_discharge,
-              postprocess_vector_variables,
+              postprocess_velocity,
               VectorTools::EvaluationFlags::avg, d);
           postprocessor.pointHistory_data[time].push_back( history_postproc_vector );
         }
@@ -1041,16 +1059,14 @@ namespace Problem
   // The OceanoProblem::run() function puts all pieces together. It starts off
   // by calling the function that creates the mesh and sets up data structures,
   // and then initializing the time integrator and the two temporary vectors of
-  // the low-storage integrator. We call these vectors `rk_register_1` and
+  // the Runge--Kutta integrator. We call these vectors `rk_register_1` and
   // `rk_register_2`, and use the first vector to represent the quantity
   // $\mathbf{r}_i$ and the second one for $\mathbf{k}_i$ in the formulas for
   // the Runge--Kutta scheme outlined in the introduction. Before we start the
   // time loop, we compute the time step size by the
   // `OceanoOperator::compute_cell_transport_speed()` function. For reasons of
   // comparison, we compare the result obtained there with the minimal mesh
-  // size and print them to screen. For velocities and speeds of sound close
-  // to unity as in this tutorial program, the predicted effective mesh size
-  // will be close, but they could vary if scaling were different.
+  // size and print them to screen.
   template <int dim, int n_tra>
   void OceanoProblem<dim, n_tra>::run()
   {
@@ -1081,6 +1097,18 @@ namespace Problem
     // for the choice of the error estimate.
     Amr::AmrTuner amr_tuner(prm);
 
+    // We introduce two auxiliary vectors to store the velocity and
+    // the dof position. Velocities are derived from discharges and are
+    // ubiquious (output, grid refinement, eddy viscosity/diffusivity).
+    // We prefer to store them, rather than recompute locally in each code subroutine.
+    // Moreover, having a solution vector also for the velocity, we can exploit
+    // fast access to the projected velocity at the quadrature points thanks to
+    // the capabilities of FEEvaluation.
+    LinearAlgebra::distributed::Vector<Number> postprocess_velocity;
+    postprocess_velocity.reinit(solution_discharge);
+    std::map<unsigned int, Point<dim>> dof_points =
+      DoFTools::map_dofs_to_support_points(mapping, dof_handler_height);
+
     // We set the initial conditions. This is done in a scope to free
     // the memory associated to the data stored in the initial condition class.
     // For initial value problems we may proceed with mesh
@@ -1089,56 +1117,16 @@ namespace Problem
     {
       TimerOutput::Scope t(timer, "compute initial solution");
       ICBC::Ic<dimension, n_variables> ic(prm);
-      oceano_operator.project_hydro(
-        ic, solution_height, solution_discharge);
-#ifdef OCEANO_WITH_TRACERS
-      oceano_operator.project_tracers(
-        ic, solution_tracer);
-#endif
+      make_ic(ic, dof_points, postprocess_velocity);
 
       for (unsigned int lev = 0; lev < amr_tuner.max_level_refinement; ++lev)
         {
-          refine_grid(amr_tuner);
-
-          oceano_operator.project_hydro(
-            ic, solution_height, solution_discharge);
-#ifdef OCEANO_WITH_TRACERS
-          oceano_operator.project_tracers(
-            ic, solution_tracer);
-#endif
+          refine_grid(amr_tuner, dof_points, postprocess_velocity);
+          make_ic(ic, dof_points, postprocess_velocity);
         }
     }
 
-    // In the following, we output some statistics about the problem. Because we
-    // often end up with quite large numbers of cells or degrees of freedom, we
-    // would like to print them with a comma to separate each set of three
-    // digits. This can be done via "locales", although the way this works is
-    // not particularly intuitive. step-32 explains this in slightly more
-    // detail.
-    std::locale s = pcout.get_stream().getloc();
-    pcout.get_stream().imbue(std::locale(""));
-    pcout << "Number of cells after local  refinement: " << std::setw(8)
-          << triangulation.n_global_active_cells() << std::endl;
-    pcout << "Initial number of degrees of freedom: " << dof_handler_height.n_dofs()
-             + dof_handler_discharge.n_dofs() + dof_handler_tracer.n_dofs()
-          << " ( = " << ( 1 + dim + n_tra ) << " [vars] x "
-          << triangulation.n_global_active_cells() << " [cells] x "
-          << Utilities::pow(fe_degree + 1, dim) << " [dofs/cell/var] )"
-          << std::endl;
-    pcout.get_stream().imbue(s);
-
-    // Next off is the Courant number
-    // that scales the time step size in terms of the formula $\Delta t =
-    // \text{CFL}\frac{h}{(\|\mathbf{u} +
-    // c)_\text{max}}$, as well as a selection of a few explicit Runge--Kutta
-    // methods.
-    // The Courant number depends on the number of stages, on the degree of the finite
-    // element approximation as well as on the specific time integrator. The correct choice
-    // of the courant number is left to the user that must specify it in the parameter file.
-    // A possible expression can be $CFL=\frac{1}{p^{1.5}}*n_{stages}$. For TODO (Cockburn and Shu)
-    // $CFL=\frac{1}{2p+1}$.
-    // For the low storage schemes we need only to auxiliary vectors per stage. For
-    // a general Runge--Kutta schemes with Butcher tableau we need also a table
+    // For a general Runge--Kutta schemes with Butcher tableau we need a table
     // to store the updated residual vector at each stage. We blend one of the
     // two auxiliary vectors with this table in a single entity, so at the end
     // `rk_register_2` has size equal to the number of stage plus one. For
@@ -1148,11 +1136,6 @@ namespace Problem
     // However the last stage has common residuals so we can save one residual and
     // the final dimension is just twice the number of stages. Please note that, for now, ARK
     // is used only for the discharge equation.
-    prm.enter_subsection("Time parameters");
-    const double final_time = prm.get_double("Final_time");
-    const double courant_number = prm.get_double("CFL");
-    prm.leave_subsection();
-
 #if defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
     const TimeIntegrator::ExplicitRungeKuttaIntegrator integrator(rk_scheme);
 
@@ -1196,6 +1179,39 @@ namespace Problem
                       rk_register_tracer_2);
 #endif
 
+    // In the following, we output some statistics about the problem. Because we
+    // often end up with quite large numbers of cells or degrees of freedom, we
+    // would like to print them with a comma to separate each set of three
+    // digits. This can be done via "locales", although the way this works is
+    // not particularly intuitive. step-32 explains this in slightly more
+    // detail.
+    std::locale s = pcout.get_stream().getloc();
+    pcout.get_stream().imbue(std::locale(""));
+    pcout << "Number of cells after local  refinement: " << std::setw(8)
+          << triangulation.n_global_active_cells() << std::endl;
+    pcout << "Initial number of degrees of freedom: " << dof_handler_height.n_dofs()
+             + dof_handler_discharge.n_dofs() + dof_handler_tracer.n_dofs()
+          << " ( = " << ( 1 + dim + n_tra ) << " [vars] x "
+          << triangulation.n_global_active_cells() << " [cells] x "
+          << Utilities::pow(fe_degree + 1, dim) << " [dofs/cell/var] )"
+          << std::endl;
+    pcout.get_stream().imbue(s);
+
+    // Next off is the Courant number
+    // that scales the time step size in terms of the formula $\Delta t =
+    // \text{CFL}\frac{h}{(\|\mathbf{u} +
+    // c)_\text{max}}$, as well as a selection of a few explicit Runge--Kutta
+    // methods.
+    // The Courant number depends on the number of stages, on the degree of the finite
+    // element approximation as well as on the specific time integrator. The correct choice
+    // of the courant number is left to the user that must specify it in the parameter file.
+    // A possible expression can be $CFL=\frac{1}{p^{1.5}}*n_{stages}$. For TODO (Cockburn and Shu)
+    // $CFL=\frac{1}{2p+1}$.
+    prm.enter_subsection("Time parameters");
+    const double final_time = prm.get_double("Final_time");
+    const double courant_number = prm.get_double("CFL");
+    prm.leave_subsection();
+
     double min_vertex_distance = std::numeric_limits<double>::max();
     for (const auto &cell : triangulation.active_cell_iterators())
       if (cell->is_locally_owned())
@@ -1221,7 +1237,7 @@ namespace Problem
     // error or norm of the solution.
     Postprocessor postprocessor(prm, oceano_operator.model.postproc_vars_name);
 
-    output_results(postprocessor, 0);
+    output_results(postprocessor, 0, dof_points, postprocess_velocity);
 
     // Now we are ready to start the time loop, which we run until the time
     // has reached the desired end time. Every 5 time steps, we compute a new    
@@ -1259,12 +1275,19 @@ namespace Problem
                                        solution_height,
                                        solution_discharge,
                                        solution_tracer,
+                                       postprocess_velocity,
                                        rk_register_height_1,
                                        rk_register_discharge_1,
                                        rk_register_tracer_1,
                                        rk_register_height_2,
                                        rk_register_discharge_2,
                                        rk_register_tracer_2);
+
+          oceano_operator.evaluate_velocity_field(dof_handler_height,
+                                                  solution_height,
+                                                  solution_discharge,
+                                                  dof_points,
+                                                  postprocess_velocity);
         }
 
         time += time_step;
@@ -1272,15 +1295,15 @@ namespace Problem
         if (static_cast<int>(time / amr_tuner.remesh_tick) !=
               static_cast<int>((time - time_step) / amr_tuner.remesh_tick))
           {
-            refine_grid(amr_tuner);
+            refine_grid(amr_tuner, dof_points, postprocess_velocity);
 
-             integrator.reinit(solution_height, solution_discharge, solution_tracer,
-               rk_register_height_1,
-               rk_register_discharge_1,
-               rk_register_tracer_1,
-               rk_register_height_2,
-               rk_register_discharge_2,
-               rk_register_tracer_2);
+            integrator.reinit(solution_height, solution_discharge, solution_tracer,
+              rk_register_height_1,
+              rk_register_discharge_1,
+              rk_register_tracer_1,
+              rk_register_height_2,
+              rk_register_discharge_2,
+              rk_register_tracer_2);
           }
 
         postprocessor.do_solution =
@@ -1293,7 +1316,9 @@ namespace Problem
         if (postprocessor.do_solution || postprocessor.do_pointHistory)
           output_results(
             postprocessor,
-            static_cast<unsigned int>(std::round(time / postprocessor.solution_tick)));
+            static_cast<unsigned int>(std::round(time / postprocessor.solution_tick)),
+            dof_points,
+            postprocess_velocity);
       }
 
     postprocessor.write_pointHistory_gnuplot();
