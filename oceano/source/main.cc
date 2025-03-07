@@ -794,7 +794,6 @@ namespace Problem
       postprocess_scalar_variables(postprocessor.n_postproc_vars-dim, solution_height);
     oceano_operator.evaluate_postprocess_field(dof_handler_height,
                                                solution_height,
-                                               solution_discharge,
                                                dof_points,
                                                postprocess_scalar_variables);
 

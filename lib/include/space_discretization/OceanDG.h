@@ -220,7 +220,6 @@ namespace SpaceDiscretization
     void evaluate_postprocess_field(
       const DoFHandler<dim>                                   &dof_handler_height,
       const LinearAlgebra::distributed::Vector<Number>        &solution_height,
-      const LinearAlgebra::distributed::Vector<Number>        &solution_discharge,
       std::map<unsigned int, Point<dim>>                      &evaluation_points,
       std::vector<LinearAlgebra::distributed::Vector<Number>> &computed_scalar_quantities) const;
 
@@ -2092,7 +2091,6 @@ namespace SpaceDiscretization
   void OceanoOperator<dim, n_tra, degree, n_points_1d>::evaluate_postprocess_field(
     const DoFHandler<dim>                                   &dof_handler,
     const LinearAlgebra::distributed::Vector<Number>        &solution_height,
-    const LinearAlgebra::distributed::Vector<Number>        &solution_discharge,
     std::map<unsigned int, Point<dim>>                      &evaluation_points,
     std::vector<LinearAlgebra::distributed::Vector<Number>> &computed_scalar_quantities) const
   {
@@ -2100,8 +2098,6 @@ namespace SpaceDiscretization
 
     Assert(computed_scalar_quantities.size() == postproc_names.size()-dim ||
            computed_scalar_quantities.empty(),
-           ExcInternalError());
-    Assert(solution_discharge.locally_owned_size() == solution_height.locally_owned_size()*dim,
            ExcInternalError());
 
     IndexSet myset = dof_handler.locally_owned_dofs();
