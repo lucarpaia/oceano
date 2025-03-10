@@ -896,6 +896,7 @@ namespace SpaceDiscretization
         2);
       if (current_stage == n_stages-1)
         {
+          solution_tracer.zero_out_ghost_values(); //lrp: works only serial this is potentially dangerous in // runs
           data.cell_loop(
             &OceanoOperatorWithTracer::local_apply_inverse_modified_mass_matrix_tracer,
             this,

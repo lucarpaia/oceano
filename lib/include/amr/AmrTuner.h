@@ -253,8 +253,69 @@ namespace Amr
                           MeshWorker::assemble_own_cells);
   }
 
+#elif defined AMR_TRACERGRADIENT
+  // The third error estimator is the the gradient of a tracer (its norm).
+  // This is recommended to improve the resolution near tracer fronts.
+  // The cell_worker computes the finite element gradient
+  // of the tracer for all quadrature points and assign to
+  // each cell the maximum value. In case of multiple tracers, for now,
+  // the adaptation criteria is only driven by the first tracer-
+  // The number of quadrature points is equal to the finite element
+  // degree; for linear polynomials the gradient is constant and one
+  // point it is enough to evaluate it, etc .... Please note that since the
+  // tracers and the free-surface are co-located we can use the same dof
+  // structure.
+  template <int dim, typename Number>
+    void AmrTuner::estimate_error(
+      const std::vector<FESystem<dim>*>                             &fe,
+      const std::vector<DoFHandler<dim>*>                           &dof,
+      const std::vector<LinearAlgebra::distributed::Vector<Number>> &solution,
+      const Function<dim>                                           &/*data*/,
+      Vector<float>                                                 &error_estimate) const
+  {
+    const unsigned int n_q_points_amr_1d        = fe[0]->degree;
+    using Iterator = typename DoFHandler<dim>::active_cell_iterator;
+
+    auto cell_worker = [&](const Iterator   &cell,
+                           ScratchData<dim> &scratch_data,
+                           CopyData&         copy_data) {
+      FEValues<dim>& fe_values = scratch_data.fe_values;
+      fe_values.reinit(cell);
+
+      std::vector<Tensor<1, dim>> gradients(fe_values.n_quadrature_points);
+      fe_values.get_function_gradients(solution[2], gradients);
+
+      copy_data.cell_index = cell->active_cell_index();
+
+      float max_gradient = 0.0;
+      for(unsigned q = 0; q < fe_values.n_quadrature_points; ++q)
+        {
+          float gradient_norm_square =
+            gradients[q][0]*gradients[q][0] + gradients[q][1]*gradients[q][1];
+          max_gradient = std::max(gradient_norm_square, max_gradient);
+        }
+      copy_data.value = std::sqrt(max_gradient);
+    };
+
+    auto copier = [&](const CopyData &copy_data) {
+      if(copy_data.cell_index != numbers::invalid_unsigned_int)
+        error_estimate[copy_data.cell_index] += copy_data.value;
+    };
+
+    const UpdateFlags cell_flags = update_gradients | update_quadrature_points | update_JxW_values;
+    ScratchData<dim> scratch_data(*fe[0], n_q_points_amr_1d, cell_flags);
+    CopyData copy_data;
+    MeshWorker::mesh_loop(dof[0]->begin_active(),
+                          dof[0]->end(),
+                          cell_worker,
+                          copier,
+                          scratch_data,
+                          copy_data,
+                          MeshWorker::assemble_own_cells);
+  }
+
 #elif defined AMR_BATHYMETRY
-  // The third error estimator is more a refinement indicator.
+  // The fourth error estimator is more a refinement indicator.
   // It can be used for static mesh refinement as it uses the
   // bathymetry to increase the resolution in coastal regions, near
   // the shoreline or along channels.

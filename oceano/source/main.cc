@@ -85,6 +85,7 @@
 // We end with a tuner class for the AMR:
 #undef  AMR_HEIGHTGRADIENT
 #undef  AMR_VORTICITY
+#undef  AMR_TRACERGRADIENT
 #undef  AMR_BATHYMETRY
 #define AMR_FROMFILE
 //
@@ -670,7 +671,9 @@ namespace Problem
 
       amr_tuner.estimate_error<dim,Number>(finite_elements,
                                            dof_handlers,
-                                           {solution_height, postprocess_velocity},
+                                           {solution_height,
+                                           postprocess_velocity,
+                                           solution_tracer},
                                            *oceano_operator.bc->problem_data,
                                            estimated_error_per_cell);
 
