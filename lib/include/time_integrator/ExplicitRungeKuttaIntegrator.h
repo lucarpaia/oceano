@@ -99,6 +99,7 @@ namespace TimeIntegrator
                            VectorType              &vec_ri_height,
                            VectorType              &vec_ri_discharge,
                            VectorType              &vec_ri_tracer,
+                           VectorType              &postprocess_velocity,
                            std::vector<VectorType> &vec_ki_height,
                            std::vector<VectorType> &vec_ki_discharge,
                            std::vector<VectorType> &vec_ki_tracer) const;
@@ -215,6 +216,7 @@ namespace TimeIntegrator
     VectorType              &solution_height,
     VectorType              &solution_discharge,
     VectorType              &solution_tracer,
+    VectorType              &postprocess_velocity,
     VectorType              &vec_ri_height,
     VectorType              &vec_ri_discharge,
     VectorType              &vec_ri_tracer,
@@ -227,6 +229,7 @@ namespace TimeIntegrator
 #ifndef OCEANO_WITH_TRACERS
     (void) solution_tracer;
     (void) vec_ri_tracer;
+    (void) postprocess_velocity;
     (void) vec_ki_tracer;
 #endif
 
@@ -252,6 +255,7 @@ namespace TimeIntegrator
 #ifdef OCEANO_WITH_TRACERS
     const VectorType vec_rn_height = solution_height;
     vec_ri.push_back(solution_tracer);
+    vec_ri.push_back(postprocess_velocity);
     pde_operator.perform_stage_tracers(0,
                                        (0 == ci.size() - 1 ?
                                          &b_i[0] :
@@ -283,6 +287,7 @@ namespace TimeIntegrator
                                          vec_ri_discharge);
 #ifdef OCEANO_WITH_TRACERS
         vec_ri.push_back(vec_ri_tracer);
+        vec_ri.push_back(postprocess_velocity);
         pde_operator.perform_stage_tracers(stage,
                                            (stage == ci.size() - 1 ?
                                              &b_i[0] :
