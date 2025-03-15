@@ -117,6 +117,8 @@ namespace Model
 
 #if defined PHYSICS_VISCOSITYCOEFFICIENTCONSTANT
     Physics::ViscosityCoefficientConstant viscosity_coefficient;
+#elif defined PHYSICS_VISCOSITYCOEFFICIENTSMAGORINSKY
+    Physics::ViscosityCoefficientSmagorinsky viscosity_coefficient;
 #else
     Assert(false, ExcNotImplemented());
     return 0.;
@@ -177,7 +179,8 @@ namespace Model
       advective_diffusiveflux(const Number                    height,
                               const Tensor<1, dim, Number>   &discharge,
                               const Tensor<dim, dim, Number> &gradient_velocity,
-                              const Number                    bathymetry) const;
+                              const Number                    bathymetry,
+                              const Number                    area) const;
 
     // Here is the definition of the Shallow Water source function. Thanks to a double
     // integration by parts the pressure appears as a force in the source term and
@@ -334,12 +337,13 @@ namespace Model
       const Number                    height,
       const Tensor<1, dim, Number>   &discharge,
       const Tensor<dim, dim, Number> &gradient_velocity,
-      const Number                    bathymetry) const
+      const Number                    bathymetry,
+      const Number                    area) const
   {
     const Tensor<1, dim, Number> v =
       velocity<dim>(height, discharge, bathymetry);
 
-    const Number nu = viscosity_coefficient.value<dim, Number>();
+    const Number nu = viscosity_coefficient.value<dim, Number>(gradient_velocity, area);
     const Number div = gradient_velocity[0][0] + gradient_velocity[1][1];
 
     Tensor<1, dim, Tensor<1, dim, Number>> flux;

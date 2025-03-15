@@ -82,6 +82,7 @@
 // a constant eddy coefficient or a more sophisticated turbulent model based on the mixing length,
 // proposed by Smagorinsky in 1963. The next is for eddy viscosity:
 #define PHYSICS_VISCOSITYCOEFFICIENTCONSTANT
+#undef  PHYSICS_VISCOSITYCOEFFICIENTSMAGORINSKY
 // and the following is for eddy diffusivity. In a test stage one may use different
 // models for the diffusion and for the viscosity. However, momentum and tracer mixing are
 // of course related and it is recommended to use the same model for both:

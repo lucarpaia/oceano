@@ -546,6 +546,10 @@ namespace SpaceDiscretization
         phi_velocity.reinit(cell);
         phi_velocity.gather_evaluate(src.back(), EvaluationFlags::gradients);
 
+        VectorizedArray<Number> area_cell;
+        for (unsigned int v = 0; v < data.n_active_entries_per_cell_batch(cell); ++v)
+          area_cell[v] = data.get_cell_iterator(cell,v)->measure();
+
         for (unsigned int q = 0; q < phi_discharge.n_q_points; ++q)
           {
             const auto z_q = phi_height.get_value(q);
@@ -559,7 +563,7 @@ namespace SpaceDiscretization
 
             phi_discharge.submit_gradient(
               model.advective_diffusiveflux<dim>(
-                z_q, q_q, (z_q+data_q[0])*du_q, data_q[0]),
+                z_q, q_q, (z_q+data_q[0])*du_q, data_q[0], area_cell),
               q);
 
             phi_discharge.submit_value(
@@ -593,6 +597,10 @@ namespace SpaceDiscretization
         phi_velocity.reinit(cell);
         phi_velocity.gather_evaluate(src.back(), EvaluationFlags::gradients);
 
+        VectorizedArray<Number> area_cell;
+        for (unsigned int v = 0; v < data.n_active_entries_per_cell_batch(cell); ++v)
+          area_cell[v] = data.get_cell_iterator(cell,v)->measure();
+
         for (unsigned int q = 0; q < phi_discharge.n_q_points; ++q)
           {
             const auto z_q = phi_height.get_value(q);
@@ -606,7 +614,7 @@ namespace SpaceDiscretization
 
             phi_discharge.submit_gradient(
               model.advective_diffusiveflux<dim>(
-                z_q, q_q, (z_q+data_q[0])*du_q, data_q[0]),
+                z_q, q_q, (z_q+data_q[0])*du_q, data_q[0], area_cell),
               q);
 
             phi_discharge.submit_value(

@@ -48,14 +48,15 @@ namespace Physics
     ViscosityCoefficientBase(IO::ParameterHandler &prm);
     ~ViscosityCoefficientBase(){};
 
-    double nu;
+    double c_m;
 
     // The next function is the one that actually computes the viscosity coefficient.
     // It is overloaded by the same function defined in the derived classes.
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Number
-      value() const;
+      value(const Tensor<dim, dim, Number> &gradient_velocity,
+            const Number                    area) const;
   };
   
   // Not surprisingly the constructor of the base class takes as arguments 
@@ -65,14 +66,17 @@ namespace Physics
     IO::ParameterHandler &prm)
   {
     prm.enter_subsection("Physical constants");
-    nu = prm.get_double("horizontal_viscosity");
+    c_m = prm.get_double("horizontal_viscosity");
     prm.leave_subsection();
   }
 
 
 
+#if defined PHYSICS_VISCOSITYCOEFFICIENTCONSTANT
   // The first formulation of the viscosity coefficient is a constant
   // one, the value being read from the configuration file.
+  // The proper choice of the coefficient, named here $C_M$ can be
+  // determined by a sensitivity study.
   class ViscosityCoefficientConstant : public ViscosityCoefficientBase
   {
   public:
@@ -82,7 +86,8 @@ namespace Physics
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Number
-      value() const;
+      value(const Tensor<dim, dim, Number> &gradient_velocity,
+            const Number                    area) const;
   };
 
   ViscosityCoefficientConstant::ViscosityCoefficientConstant(
@@ -93,9 +98,73 @@ namespace Physics
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Number
-    ViscosityCoefficientConstant::value() const
+    ViscosityCoefficientConstant::value(
+      const Tensor<dim, dim, Number> &/*gradient_velocity*/,
+      const Number                    /*area*/) const
   {
-    return nu;
+    return c_m;
   }
+
+
+
+#elif defined PHYSICS_VISCOSITYCOEFFICIENTSMAGORINSKY
+  // Alternatively a turbulent closure based on the mixed length was
+  // proposed by Smagorinsky. The horizontal eddy viscosity is
+  // composed, based on dimensional argument, with a length scale
+  // which is taken proportional to the grid scale, thanks to
+  // a coefficient $C_S$ and with a characteristic strain rate of the
+  // resolved flow $\mathcal{S}$. Rewriting the length scale in terms
+  // of grid cell area, we get the following formula:
+  // \[
+  // \nu = C_M |K| \mathcal{S}
+  // \]
+  // with $C_M=C_S^2$. The parameter $C_M$ is read from the
+  // configuration file. If you take $C_S=0.5$ and a Prandtl number
+  // of $Pr=10$ then we can select a value of `c_m=0.025`.
+  // The strain rate is defined in the book (Turbulent Flows, Pope):
+  // \[
+  // \mathcal{S} = \sqrt(2*S_{ij}*S_{ij}),
+  // \quad S_{ij} = \frac{1}{2}\left( \frac{\partial u_i}{\partial x_j}
+  //              + \frac{\partial u_j}{\partial x_i}  \right)
+  // \]
+  // with these definitions, after some calculation, we get the same
+  // formula coded below which is the same one implemented in the coastal
+  // ocean model SHYFEM (Umgiesser,2004).
+  class ViscosityCoefficientSmagorinsky : public ViscosityCoefficientBase
+  {
+  public:
+    ViscosityCoefficientSmagorinsky(IO::ParameterHandler &prm);
+    ~ViscosityCoefficientSmagorinsky(){};
+
+    template <int dim, typename Number>
+    inline DEAL_II_ALWAYS_INLINE //
+      Number
+      value(const Tensor<dim, dim, Number> &gradient_velocity,
+            const Number                    area) const;
+  };
+
+  ViscosityCoefficientSmagorinsky::ViscosityCoefficientSmagorinsky(
+    IO::ParameterHandler &param)
+    : ViscosityCoefficientBase(param)
+  {}
+
+  template <int dim, typename Number>
+  inline DEAL_II_ALWAYS_INLINE //
+    Number
+    ViscosityCoefficientSmagorinsky::value(
+      const Tensor<dim, dim, Number> &gradient_velocity,
+      const Number                    area) const
+  {
+    Number strain_rate = gradient_velocity[0][0]*gradient_velocity[0][0];
+    for (unsigned int d = 1; d < dim; ++d)
+      {
+        Number shear = gradient_velocity[0][d] + gradient_velocity[d][0];
+        strain_rate += gradient_velocity[d][d]*gradient_velocity[d][d] + 0.5*shear*shear;
+      }
+
+    return c_m * area * std::sqrt(2.*strain_rate);
+  }
+#endif
+
 } // namespace Physics
 #endif //VISCOSITYCOEFFICIENT_HPP
