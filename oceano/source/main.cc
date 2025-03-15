@@ -78,16 +78,21 @@
 // For the wind stress either
 #define PHYSICS_WINDSTRESSGENERAL
 #undef  PHYSICS_WINDSTRESSQUADRATIC
-// The following key is for the eddy diffusion coefficient. You have two alternatives: a
-// constant eddy coefficient or a more sophisticated Smagorinsky turbulent model.
-#undef  PHYSICS_DIFFUSIONCOEFFICIENTCONSTANT
-#define PHYSICS_DIFFUSIONCOEFFICIENTSMAGORINSKY
+// The following key is for the eddy diffusion/viscosity coefficient. You have two alternatives:
+// a constant eddy coefficient or a more sophisticated turbulent model based on the mixing length,
+// proposed by Smagorinsky in 1963. The next is for eddy viscosity:
+#define PHYSICS_VISCOSITYCOEFFICIENTCONSTANT
+// and the following is for eddy diffusivity. In a test stage one may use different
+// models for the diffusion and for the viscosity. However, momentum and tracer mixing are
+// of course related and it is recommended to use the same model for both:
+#define PHYSICS_DIFFUSIONCOEFFICIENTCONSTANT
+#undef  PHYSICS_DIFFUSIONCOEFFICIENTSMAGORINSKY
 // We end with a tuner class for the AMR:
 #undef  AMR_HEIGHTGRADIENT
-#undef  AMR_VORTICITY
+#define AMR_VORTICITY
 #undef  AMR_TRACERGRADIENT
 #undef  AMR_BATHYMETRY
-#define AMR_FROMFILE
+#undef  AMR_FROMFILE
 //
 //
 //

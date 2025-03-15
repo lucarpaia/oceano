@@ -23,6 +23,7 @@
 #include <io/ParameterReader.h>
 #include <physics/BottomFriction.h>
 #include <physics/WindStress.h>
+#include <physics/ViscosityCoefficient.h>
 #include <physics/Coriolis.h>
 
 /**
@@ -114,6 +115,13 @@ namespace Model
     return 0.;
 #endif
 
+#if defined PHYSICS_VISCOSITYCOEFFICIENTCONSTANT
+    Physics::ViscosityCoefficientConstant viscosity_coefficient;
+#else
+    Assert(false, ExcNotImplemented());
+    return 0.;
+#endif
+
     Physics::CoriolisBeta coriolis_force;
 
     // The next function computes the model variable names. It is not a
@@ -149,7 +157,8 @@ namespace Model
     // implementation is straight-forward, being simply the discharge;
     // for the advective flux we need to compute the velocity.
     // The hydrostatic pressure is not included in the flux and it is treated with a
-    // a double integration by parts.
+    // a double integration by parts. We also include a flux function with both
+    // advective and diffusive fluxes.
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Number>
@@ -161,6 +170,14 @@ namespace Model
       advectiveflux(const Number                  height,
                     const Tensor<1, dim, Number> &discharge,
                     const Number                  bathymetry) const;
+
+    template <int dim, typename Number>
+    inline DEAL_II_ALWAYS_INLINE //
+      Tensor<1, dim, Tensor<1, dim, Number>>
+      advective_diffusiveflux(const Number                    height,
+                              const Tensor<1, dim, Number>   &discharge,
+                              const Tensor<dim, dim, Number> &gradient_discharge,
+                              const Number                    bathymetry) const;
 
     // Here is the definition of the Shallow Water source function. Thanks to a double
     // integration by parts the pressure appears as a force in the source term and
@@ -240,6 +257,7 @@ namespace Model
     IO::ParameterHandler &prm)
     : bottom_friction(prm)
     , wind_stress(prm)
+    , viscosity_coefficient(prm)
     , coriolis_force()
   {
     prm.enter_subsection("Physical constants");
@@ -305,6 +323,27 @@ namespace Model
     for (unsigned int d = 0; d < dim; ++d)
       for (unsigned int e = 0; e < dim; ++e)
         flux[e][d] = discharge[e] * v[d];
+
+    return flux;
+  }
+
+  template <int dim, typename Number>
+  inline DEAL_II_ALWAYS_INLINE //
+    Tensor<1, dim, Tensor<1, dim, Number>>
+    ShallowWater::advective_diffusiveflux(
+      const Number                    height,
+      const Tensor<1, dim, Number>   &discharge,
+      const Tensor<dim, dim, Number> &gradient_discharge,
+      const Number                    bathymetry) const
+  {
+    const Tensor<1, dim, Number> v =
+      velocity<dim>(height, discharge, bathymetry);
+
+    Tensor<1, dim, Tensor<1, dim, Number>> flux;
+    for (unsigned int d = 0; d < dim; ++d)
+      for (unsigned int e = 0; e < dim; ++e)
+        flux[e][d] = discharge[e] * v[d]
+          - viscosity_coefficient.value<dim, Number>() * gradient_discharge[e][d];
 
     return flux;
   }

@@ -42,6 +42,9 @@ namespace ICBC
   // is the same provided in the last reference for the degree of smoothness $p=2$.
   // Other iterative corrections to improve the vortex smoothness and
   // test higher then third order schemes can be readily implemented.
+  //
+  // Additionally you can add a tracer which is initalized as a linear function
+  // of $y$.
 #undef  ICBC_SHALLOWWATERVORTEX_REGULARITYP1
 #define ICBC_SHALLOWWATERVORTEX_REGULARITYP2
 
@@ -175,7 +178,7 @@ namespace ICBC
     else if (component == 2)
       return depth * v;
     else
-      return x[1] < 0.5 ? 1 : 0.9;
+      return 0.1 * x[1];
   }
 
 

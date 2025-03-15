@@ -195,6 +195,11 @@ namespace IO
                         "Bottom friction coefficient or Manning number"
                         "depending on the bottom friction formulation");
 
+      prm.declare_entry("horizontal_viscosity",
+                        "0.",
+                        Patterns::Double(0),
+                        "Horizontal viscosity coefficient");
+
       prm.declare_entry("horizontal_diffusivity",
                         "0.",
                         Patterns::Double(0),
