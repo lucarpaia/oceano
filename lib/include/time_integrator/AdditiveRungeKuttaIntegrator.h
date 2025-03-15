@@ -218,9 +218,6 @@ namespace TimeIntegrator
     AssertDimension(ci.size(), bi.size());
 
 #ifndef OCEANO_WITH_TRACERS
-    (void) solution_tracer;
-    (void) postprocess_velocity;
-    (void) vec_ri_tracer;
     (void) vec_ki_tracer;
 #endif
 
@@ -237,7 +234,11 @@ namespace TimeIntegrator
 
     pde_operator.factor_matrix = dtildei[0] * time_step;
 
-    std::vector<VectorType> vec_ri = {solution_height, solution_discharge};
+    std::vector<VectorType> vec_ri = {solution_height,
+                                      solution_discharge,
+                                      solution_tracer,
+                                      postprocess_velocity};
+
     pde_operator.perform_stage_hydro(0,
                                      current_time,
                                      (0 == ci.size() - 1 ?
@@ -255,8 +256,6 @@ namespace TimeIntegrator
                                      vec_ri_discharge);
 #ifdef OCEANO_WITH_TRACERS
     const VectorType vec_rn_height = solution_height;
-    vec_ri.push_back(solution_tracer);
-    vec_ri.push_back(postprocess_velocity);
     pde_operator.perform_stage_tracers(0,
                                        (0 == ci.size() - 1 ?
                                          &b_i[0] :
@@ -274,7 +273,11 @@ namespace TimeIntegrator
         const double c_i = ci[stage];
         pde_operator.factor_matrix = dtildei[stage] * time_step;
 
-        vec_ri = {vec_ri_height, vec_ri_discharge};
+        vec_ri = {vec_ri_height,
+                  vec_ri_discharge,
+                  vec_ri_tracer,
+                  postprocess_velocity};
+
         pde_operator.perform_stage_hydro(stage,
                                          current_time + c_i * time_step,
                                          (stage == ci.size() - 1 ?
@@ -291,8 +294,6 @@ namespace TimeIntegrator
                                          vec_ri_height,
                                          vec_ri_discharge);
 #ifdef OCEANO_WITH_TRACERS
-        vec_ri.push_back(vec_ri_tracer);
-        vec_ri.push_back(postprocess_velocity);
         pde_operator.perform_stage_tracers(stage,
                                            (stage == ci.size() - 1 ?
                                              &b_i[0] :

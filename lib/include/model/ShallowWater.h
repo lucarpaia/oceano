@@ -176,7 +176,7 @@ namespace Model
       Tensor<1, dim, Tensor<1, dim, Number>>
       advective_diffusiveflux(const Number                    height,
                               const Tensor<1, dim, Number>   &discharge,
-                              const Tensor<dim, dim, Number> &gradient_discharge,
+                              const Tensor<dim, dim, Number> &gradient_velocity,
                               const Number                    bathymetry) const;
 
     // Here is the definition of the Shallow Water source function. Thanks to a double
@@ -333,17 +333,22 @@ namespace Model
     ShallowWater::advective_diffusiveflux(
       const Number                    height,
       const Tensor<1, dim, Number>   &discharge,
-      const Tensor<dim, dim, Number> &gradient_discharge,
+      const Tensor<dim, dim, Number> &gradient_velocity,
       const Number                    bathymetry) const
   {
     const Tensor<1, dim, Number> v =
       velocity<dim>(height, discharge, bathymetry);
 
+    const Number nu = viscosity_coefficient.value<dim, Number>();
+    const Number div = gradient_velocity[0][0] + gradient_velocity[1][1];
+
     Tensor<1, dim, Tensor<1, dim, Number>> flux;
     for (unsigned int d = 0; d < dim; ++d)
       for (unsigned int e = 0; e < dim; ++e)
         flux[e][d] = discharge[e] * v[d]
-          - viscosity_coefficient.value<dim, Number>() * gradient_discharge[e][d];
+          - nu * (gradient_velocity[e][d] + gradient_velocity[d][e]);
+    for (unsigned int e = 0; e < dim; ++e)
+      flux[e][e] += nu * div;
 
     return flux;
   }

@@ -535,28 +535,32 @@ namespace SpaceDiscretization
   {
     FEEvaluation<dim, degree, n_points_1d, 1, Number> phi_height(data,0);
     FEEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge(data,1);
+    FEEvaluation<dim, degree, n_points_1d, dim, Number> phi_velocity(data,1);
 
     for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
       {
         phi_height.reinit(cell);
-        phi_height.gather_evaluate(src[0], EvaluationFlags::values
-                              | EvaluationFlags::gradients);
+        phi_height.gather_evaluate(src[0], EvaluationFlags::values | EvaluationFlags::gradients);
         phi_discharge.reinit(cell);
-        phi_discharge.gather_evaluate(src[1], EvaluationFlags::values | EvaluationFlags::gradients);
+        phi_discharge.gather_evaluate(src[1], EvaluationFlags::values);
+        phi_velocity.reinit(cell);
+        phi_velocity.gather_evaluate(src.back(), EvaluationFlags::gradients);
 
         for (unsigned int q = 0; q < phi_discharge.n_q_points; ++q)
           {
-            const auto q_q = phi_discharge.get_value(q);
-            const auto dq_q = phi_discharge.get_gradient(q);
             const auto z_q = phi_height.get_value(q);
             const auto dz_q = phi_height.get_gradient(q);
+            const auto q_q = phi_discharge.get_value(q);
+            const auto du_q = phi_velocity.get_gradient(q);
 
             Tensor<1, dim+3, VectorizedArray<Number>> data_q =
               evaluate_function<dim, Number, dim+3>(
                 *bc->problem_data, phi_discharge.quadrature_point(q));
 
             phi_discharge.submit_gradient(
-              model.advective_diffusiveflux<dim>(z_q, q_q, dq_q, data_q[0]), q);
+              model.advective_diffusiveflux<dim>(
+                z_q, q_q, (z_q+data_q[0])*du_q, data_q[0]),
+              q);
 
             phi_discharge.submit_value(
               model.source<dim>(z_q, q_q, dz_q, data_q),
@@ -578,28 +582,32 @@ namespace SpaceDiscretization
   {
     FEEvaluation<dim, degree, n_points_1d, 1, Number> phi_height(data,0);
     FEEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge(data,1);
+    FEEvaluation<dim, degree, n_points_1d, dim, Number> phi_velocity(data,1);
 
     for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
       {
         phi_height.reinit(cell);
-        phi_height.gather_evaluate(src[0], EvaluationFlags::values
-                              | EvaluationFlags::gradients);
+        phi_height.gather_evaluate(src[0], EvaluationFlags::values | EvaluationFlags::gradients);
         phi_discharge.reinit(cell);
-        phi_discharge.gather_evaluate(src[1], EvaluationFlags::values | EvaluationFlags::gradients);
+        phi_discharge.gather_evaluate(src[1], EvaluationFlags::values);
+        phi_velocity.reinit(cell);
+        phi_velocity.gather_evaluate(src.back(), EvaluationFlags::gradients);
 
         for (unsigned int q = 0; q < phi_discharge.n_q_points; ++q)
           {
-            const auto q_q = phi_discharge.get_value(q);
-            const auto dq_q = phi_discharge.get_gradient(q);
             const auto z_q = phi_height.get_value(q);
             const auto dz_q = phi_height.get_gradient(q);
+            const auto q_q = phi_discharge.get_value(q);
+            const auto du_q = phi_velocity.get_gradient(q);
 
             Tensor<1, dim+3, VectorizedArray<Number>> data_q =
               evaluate_function<dim, Number, dim+3>(
                 *bc->problem_data, phi_discharge.quadrature_point(q));
 
             phi_discharge.submit_gradient(
-              model.advective_diffusiveflux<dim>(z_q, q_q, dq_q, data_q[0]), q);
+              model.advective_diffusiveflux<dim>(
+                z_q, q_q, (z_q+data_q[0])*du_q, data_q[0]),
+              q);
 
             phi_discharge.submit_value(
               model.source_nonstiff<dim>(z_q, q_q, dz_q, data_q),
