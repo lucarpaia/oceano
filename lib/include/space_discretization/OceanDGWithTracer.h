@@ -199,7 +199,7 @@ namespace SpaceDiscretization
     const AffineConstraints<double>            dummy;
     std::vector<const DoFHandler<dim> *> dof_handlers;
     std::vector<const AffineConstraints<double> *>
-      constraints = {&dummy, &dummy};
+      constraints = {&dummy, &dummy, &dummy};
     const std::vector<Quadrature<1>> quadratures = {QGauss<1>(n_points_1d),
                                                     QGauss<1>(degree + 1)};
 
@@ -218,8 +218,6 @@ namespace SpaceDiscretization
 
     dof_handlers.push_back(&dof_handler_height);
     dof_handlers.push_back(&dof_handler_discharge);
-
-    constraints.push_back(&dummy);
     dof_handlers.push_back(&dof_handler_tracer);
 
     data.reinit(
