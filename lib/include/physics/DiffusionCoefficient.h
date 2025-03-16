@@ -51,7 +51,7 @@ namespace Physics
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Number
-      value(const Tensor<dim, dim, Number> &gradient_discharge,
+      value(const Tensor<dim, dim, Number> &gradient_velocity,
             const Number                    area) const;
   };
   
@@ -82,7 +82,7 @@ namespace Physics
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Number
-      value(const Tensor<dim, dim, Number> &gradient_discharge,
+      value(const Tensor<dim, dim, Number> &gradient_velocity,
             const Number                    area) const;
   };
 
@@ -95,7 +95,7 @@ namespace Physics
   inline DEAL_II_ALWAYS_INLINE //
     Number
     DiffusionCoefficientConstant::value(
-      const Tensor<dim, dim, Number> &/*gradient_discharge*/,
+      const Tensor<dim, dim, Number> &/*gradient_velocity*/,
       const Number                    /*area*/) const
   {
     return c_m;
@@ -135,7 +135,7 @@ namespace Physics
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Number
-      value(const Tensor<dim, dim, Number> &gradient_discharge,
+      value(const Tensor<dim, dim, Number> &gradient_velocity,
             const Number                    area) const;
   };
 
@@ -148,14 +148,14 @@ namespace Physics
   inline DEAL_II_ALWAYS_INLINE //
     Number
     DiffusionCoefficientSmagorinsky::value(
-      const Tensor<dim, dim, Number> &gradient_discharge,
+      const Tensor<dim, dim, Number> &gradient_velocity,
       const Number                    area) const
   {
-    Number strain_rate = gradient_discharge[0][0]*gradient_discharge[0][0];
+    Number strain_rate = gradient_velocity[0][0]*gradient_velocity[0][0];
     for (unsigned int d = 1; d < dim; ++d)
       {
-        Number shear = gradient_discharge[0][d] + gradient_discharge[d][0];
-        strain_rate += gradient_discharge[d][d]*gradient_discharge[d][d] + 0.5*shear*shear;
+        Number shear = gradient_velocity[0][d] + gradient_velocity[d][0];
+        strain_rate += gradient_velocity[d][d]*gradient_velocity[d][d] + 0.5*shear*shear;
       }
 
     return c_m * area * std::sqrt(2.*strain_rate);

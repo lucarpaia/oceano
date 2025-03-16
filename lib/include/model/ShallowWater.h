@@ -164,23 +164,23 @@ namespace Model
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Number>
-      massflux(const Tensor<1, dim, Number> &discharge) const;
+      mass_flux(const Tensor<1, dim, Number> &discharge) const;
 
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Tensor<1, dim, Number>>
-      advectiveflux(const Number                  height,
-                    const Tensor<1, dim, Number> &discharge,
-                    const Number                  bathymetry) const;
+      momentum_adv_flux(const Number                  height,
+                        const Tensor<1, dim, Number> &discharge,
+                        const Number                  bathymetry) const;
 
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Tensor<1, dim, Number>>
-      advective_diffusiveflux(const Number                    height,
-                              const Tensor<1, dim, Number>   &discharge,
-                              const Tensor<dim, dim, Number> &gradient_velocity,
-                              const Number                    bathymetry,
-                              const Number                    area) const;
+      momentum_adv_diff_flux(const Number                    height,
+                             const Tensor<1, dim, Number>   &discharge,
+                             const Tensor<dim, dim, Number> &gradient_velocity,
+                             const Number                    bathymetry,
+                             const Number                    area) const;
 
     // Here is the definition of the Shallow Water source function. Thanks to a double
     // integration by parts the pressure appears as a force in the source term and
@@ -307,7 +307,7 @@ namespace Model
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
-    ShallowWater::massflux(const Tensor<1, dim, Number> &discharge) const
+    ShallowWater::mass_flux(const Tensor<1, dim, Number> &discharge) const
   {
     return discharge;
   }
@@ -315,9 +315,9 @@ namespace Model
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Tensor<1, dim, Number>>
-    ShallowWater::advectiveflux(const Number                  height,
-                                const Tensor<1, dim, Number> &discharge,
-                                const Number                  bathymetry) const
+    ShallowWater::momentum_adv_flux(const Number                  height,
+                                    const Tensor<1, dim, Number> &discharge,
+                                    const Number                  bathymetry) const
   {
     const Tensor<1, dim, Number> v =
       velocity<dim>(height, discharge, bathymetry);
@@ -333,7 +333,7 @@ namespace Model
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Tensor<1, dim, Number>>
-    ShallowWater::advective_diffusiveflux(
+    ShallowWater::momentum_adv_diff_flux(
       const Number                    height,
       const Tensor<1, dim, Number>   &discharge,
       const Tensor<dim, dim, Number> &gradient_velocity,

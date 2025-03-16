@@ -518,7 +518,7 @@ namespace SpaceDiscretization
         for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
           {
             const auto q_q = phi_discharge.get_value(q);
-            phi_height.submit_gradient(model.massflux<dim>(q_q), q);
+            phi_height.submit_gradient(model.mass_flux<dim>(q_q), q);
           }
 
         phi_height.integrate_scatter(EvaluationFlags::gradients,
@@ -562,7 +562,7 @@ namespace SpaceDiscretization
                 *bc->problem_data, phi_discharge.quadrature_point(q));
 
             phi_discharge.submit_gradient(
-              model.advective_diffusiveflux<dim>(
+              model.momentum_adv_diff_flux<dim>(
                 z_q, q_q, (z_q+data_q[0])*du_q, data_q[0], area_cell),
               q);
 
@@ -613,7 +613,7 @@ namespace SpaceDiscretization
                 *bc->problem_data, phi_discharge.quadrature_point(q));
 
             phi_discharge.submit_gradient(
-              model.advective_diffusiveflux<dim>(
+              model.momentum_adv_diff_flux<dim>(
                 z_q, q_q, (z_q+data_q[0])*du_q, data_q[0], area_cell),
               q);
 
