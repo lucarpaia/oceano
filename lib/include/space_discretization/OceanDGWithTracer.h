@@ -316,6 +316,8 @@ namespace SpaceDiscretization
     FEEvaluation<dim, degree, n_points_1d, n_tra, Number> phi_tracer(data,2);
     FEEvaluation<dim, degree, n_points_1d, dim, Number> phi_velocity(data,1);
 
+    const auto inv_degree = 1./degree;
+
     for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
       {
         phi_height.reinit(cell);
@@ -329,7 +331,7 @@ namespace SpaceDiscretization
 
         VectorizedArray<Number> area_cell;
         for (unsigned int v = 0; v < data.n_active_entries_per_cell_batch(cell); ++v)
-          area_cell[v] = data.get_cell_iterator(cell,v)->measure();
+          area_cell[v] = inv_degree * data.get_cell_iterator(cell,v)->measure();
 
         for (unsigned int q = 0; q < phi_tracer.n_q_points; ++q)
           {
