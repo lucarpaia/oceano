@@ -281,11 +281,9 @@ namespace Problem
     void make_dofs();
     void make_ic(
       const ICBC::Ic<dim, 1+dim+n_tra>            ic,
-      std::map<unsigned int, Point<dim>>         &dof_points,
       LinearAlgebra::distributed::Vector<Number> &postprocess_velocity);
     void refine_grid(
       const Amr::AmrTuner                        &amr_tuner,
-      std::map<unsigned int, Point<dim>>         &dof_points,
       LinearAlgebra::distributed::Vector<Number> &postprocess_velocity);
 
     LinearAlgebra::distributed::Vector<Number> solution_height;
@@ -622,7 +620,6 @@ namespace Problem
   template <int dim, int n_tra>
   void OceanoProblem<dim, n_tra>::make_ic(
     const ICBC::Ic<dim, 1+dim+n_tra>            ic,
-    std::map<unsigned int, Point<dim>>         &dof_points,
     LinearAlgebra::distributed::Vector<Number> &postprocess_velocity)
   {
     oceano_operator.project_hydro(
@@ -632,10 +629,8 @@ namespace Problem
       ic, solution_tracer);
 #endif
     oceano_operator.evaluate_velocity_field(
-      dof_handler_height,
       solution_height,
       solution_discharge,
-      dof_points,
       postprocess_velocity);
   }
 
@@ -652,7 +647,6 @@ namespace Problem
   template <int dim, int n_tra>
   void OceanoProblem<dim, n_tra>::refine_grid(
     const Amr::AmrTuner                        &amr_tuner,
-    std::map<unsigned int, Point<dim>>         &dof_points,
     LinearAlgebra::distributed::Vector<Number> &postprocess_velocity)
   {
     {
@@ -769,11 +763,8 @@ namespace Problem
       solution_tracer = transfer_tracer;
 #endif
       postprocess_velocity.reinit(solution_discharge);
-      dof_points = DoFTools::map_dofs_to_support_points(mapping, dof_handler_height);
-      oceano_operator.evaluate_velocity_field(dof_handler_height,
-                                              solution_height,
+      oceano_operator.evaluate_velocity_field(solution_height,
                                               solution_discharge,
-                                              dof_points,
                                               postprocess_velocity);
 #else
     Assert(amr_tuner.max_level_refinement > 0
@@ -1125,12 +1116,12 @@ namespace Problem
     {
       TimerOutput::Scope t(timer, "compute initial solution");
       ICBC::Ic<dimension, n_variables> ic(prm);
-      make_ic(ic, dof_points, postprocess_velocity);
+      make_ic(ic, postprocess_velocity);
 
       for (unsigned int lev = 0; lev < amr_tuner.max_level_refinement; ++lev)
         {
-          refine_grid(amr_tuner, dof_points, postprocess_velocity);
-          make_ic(ic, dof_points, postprocess_velocity);
+          refine_grid(amr_tuner, postprocess_velocity);
+          make_ic(ic, postprocess_velocity);
         }
     }
 
@@ -1291,10 +1282,8 @@ namespace Problem
                                        rk_register_discharge_2,
                                        rk_register_tracer_2);
 
-          oceano_operator.evaluate_velocity_field(dof_handler_height,
-                                                  solution_height,
+          oceano_operator.evaluate_velocity_field(solution_height,
                                                   solution_discharge,
-                                                  dof_points,
                                                   postprocess_velocity);
         }
 
@@ -1303,7 +1292,7 @@ namespace Problem
         if (static_cast<int>(time / amr_tuner.remesh_tick) !=
               static_cast<int>((time - time_step) / amr_tuner.remesh_tick))
           {
-            refine_grid(amr_tuner, dof_points, postprocess_velocity);
+            refine_grid(amr_tuner, postprocess_velocity);
 
             integrator.reinit(solution_height, solution_discharge, solution_tracer,
               rk_register_height_1,
