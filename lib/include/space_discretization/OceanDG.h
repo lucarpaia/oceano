@@ -211,11 +211,9 @@ namespace SpaceDiscretization
       const LinearAlgebra::distributed::Vector<Number> &solution_discharge) const;
 
     void evaluate_velocity_field(
-      const DoFHandler<dim>                                   &dof_handler_height,
       const LinearAlgebra::distributed::Vector<Number>        &solution_height,
       const LinearAlgebra::distributed::Vector<Number>        &solution_discharge,
-      std::map<unsigned int, Point<dim>>                      &evaluation_points,
-      LinearAlgebra::distributed::Vector<Number>              &computed_vector_quantities) const;
+      LinearAlgebra::distributed::Vector<Number>              &postprocess_velocity) const;
 
     void evaluate_postprocess_field(
       const DoFHandler<dim>                                   &dof_handler_height,
@@ -2042,11 +2040,62 @@ namespace SpaceDiscretization
     return max_transport;
   }
 
-  // For the main evaluation of the field variables, have two functions, one
+  // For the main evaluation of the field variables, we have two functions, one
   // for evaluating the velocity and one for scalars that are needed in postprocessing.
-  // We first check that the lengths of the arrays equal the expected values (namely
-  // the length of the postprocessed variable vector equal the solution vector).
-  // Then we loop over all evaluation points and fill the respective information.
+  // The postprocessing is implemented differently for the two functions.
+  //
+  // For the velocity we use a projection to compute the postprocessed quantity at
+  // the degrees of freedom. Velocity is computed after the discharge, the free-surface
+  // and the bathymetry. With an interpolation, simply
+  // \[
+  // \boldsymbol{v}_j=\frac{\boldsymbol{q}_j}{\zeta_j+z_b(\boldsymbol{x}_j)}
+  // \]
+  // may give highly oscillatory velocities. Oscillatory currents may be not very nice in
+  // postprocessing but more important we may use their gradients in turbulence models or in
+  // error estimate. Reconstructing a finite element gradient from oscillatory data is
+  // dangerous. We use a more conservative projection approach, in the same fashion of
+  // `project_hydro`. This is quite satisfactory.
+  // It can be interesting to increase the number of quadrature points but in the actual
+  // implementation of the mass matrix this is not possible.
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_tra, degree, n_points_1d>::evaluate_velocity_field(
+    const LinearAlgebra::distributed::Vector<Number>        &solution_height,
+    const LinearAlgebra::distributed::Vector<Number>        &solution_discharge,
+    LinearAlgebra::distributed::Vector<Number>              &postprocess_velocity) const
+  {
+    FEEvaluation<dim, degree, degree + 1, 1, Number> phi_height(data, 0, 1);
+    FEEvaluation<dim, degree, degree + 1, dim, Number> phi_discharge(data, 1, 1);
+    FEEvaluation<dim, degree, degree + 1, dim, Number> phi_velocity(data, 1, 1);
+    MatrixFreeOperators::CellwiseInverseMassMatrix<dim, degree, dim, Number>
+      inverse_velocity(phi_velocity);
+
+    for (unsigned int cell = 0; cell < data.n_cell_batches(); ++cell)
+      {
+        phi_height.reinit(cell);
+        phi_height.gather_evaluate(solution_height, EvaluationFlags::values);
+        phi_discharge.reinit(cell);
+        phi_discharge.gather_evaluate(solution_discharge, EvaluationFlags::values);
+        phi_velocity.reinit(cell);
+
+        for (unsigned int q = 0; q < phi_velocity.n_q_points; ++q)
+          {
+            const auto z_q = phi_height.get_value(q);
+            const auto q_q = phi_discharge.get_value(q);
+            const VectorizedArray<Number> data_q =
+              evaluate_function<dim, Number>(
+                *bc->problem_data, phi_velocity.quadrature_point(q), 0);
+
+            phi_velocity.submit_dof_value(q_q/(z_q+data_q), q);
+          }
+        inverse_velocity.transform_from_q_points_to_basis(dim,
+                                                 phi_velocity.begin_dof_values(),
+                                                 phi_velocity.begin_dof_values());
+        phi_velocity.set_dof_values(postprocess_velocity);
+      }
+  }
+
+  // For the scalar variables we use a simpler interpolation for now, we loop over all evaluation
+  // points and fill the respective information.
   // The postprocessing variables are defined in the model class and they can change from
   // model to model.
   // For now such variables can depend only on the solution and on given data. For the
@@ -2071,44 +2120,6 @@ namespace SpaceDiscretization
   // The iterator is not vectorized. However the usual way to recover data with
   // the `evaluate_function` operates on vectorized data. With a few tricks the
   // the `evaluate_function` has been adapted to a non-vectorized loop.
-  template <int dim, int n_tra, int degree, int n_points_1d>
-  void OceanoOperator<dim, n_tra, degree, n_points_1d>::evaluate_velocity_field(
-    const DoFHandler<dim>                                   &dof_handler,
-    const LinearAlgebra::distributed::Vector<Number>        &solution_height,
-    const LinearAlgebra::distributed::Vector<Number>        &solution_discharge,
-    std::map<unsigned int, Point<dim>>                      &evaluation_points,
-    LinearAlgebra::distributed::Vector<Number>              &computed_vector_quantities) const
-  {
-    const std::vector<std::string> postproc_names = model.postproc_vars_name;
-
-    Assert(computed_vector_quantities.locally_owned_size() == solution_height.locally_owned_size()*dim,
-           ExcInternalError());
-    Assert(solution_discharge.locally_owned_size() == solution_height.locally_owned_size()*dim,
-           ExcInternalError());
-
-    IndexSet myset = dof_handler.locally_owned_dofs();
-    IndexSet::ElementIterator index = myset.begin();
-    for (index=myset.begin(); index!=myset.end(); ++index)
-      {
-        const auto height = solution_height(*index);
-        Tensor<1, dim> discharge;
-        for (unsigned int d = 0; d < dim; ++d)
-          discharge[d] = solution_discharge(*index*dim+d);
-
-        Point<dim,VectorizedArray<Number>> x_evaluation_points;
-        for (unsigned int d = 0; d < dim; ++d)
-          x_evaluation_points[d] = evaluation_points[*index][d];
-
-        const auto data = evaluate_function<dim, Number>(
-            *bc->problem_data, x_evaluation_points, 0);
-
-        const Tensor<1, dim> velocity = model.velocity<dim>(height, discharge, data[0]);
-
-        for (unsigned int d = 0; d < dim; ++d)
-          computed_vector_quantities(*index*dim+d) = velocity[d];
-      }
-  }
-
   template <int dim, int n_tra, int degree, int n_points_1d>
   void OceanoOperator<dim, n_tra, degree, n_points_1d>::evaluate_postprocess_field(
     const DoFHandler<dim>                                   &dof_handler,
