@@ -101,11 +101,11 @@
 // functionality to the scheme, for example the computation of tracers.
 // For this reason it starts with `OCEANO_WITH`.
 // In some case they are used just for a more compact `#if defined` statement.
-#undef OCEANO_WITH_TRACERS
+#undef  OCEANO_WITH_TRACERS
 #if defined MODEL_SHALLOWWATERWITHTRACER
 #define OCEANO_WITH_TRACERS
 #endif
-#undef OCEANO_WITH_MASSCONSERVATIONCHECK
+#undef  OCEANO_WITH_MASSCONSERVATIONCHECK
 
 // The include files are similar to the previous matrix-free tutorial programs
 // step-37, step-48, and step-59
