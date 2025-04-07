@@ -504,7 +504,7 @@ namespace Problem
       for (auto i : integralHistory_data)
         {
           to_gnuplot << i.first << " " << std::setprecision(14) << i.second[0]
-                                << " " << std::setprecision(7) << i.second[1]
+                                << " " << std::setprecision(12) << i.second[1]
                                 << '\n';
         }
       to_gnuplot.close();
