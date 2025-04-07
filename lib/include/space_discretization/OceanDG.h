@@ -197,13 +197,12 @@ namespace SpaceDiscretization
       LinearAlgebra::distributed::Vector<Number>                    &solution_discharge,
       LinearAlgebra::distributed::Vector<Number>                    &next_ri_height,
       LinearAlgebra::distributed::Vector<Number>                    &next_ri_discharge) const;
-
+#endif
     void
     check_mass(
       const Number                                                   factor_residual,
       const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
       LinearAlgebra::distributed::Vector<Number>                    &solution_height);
-#endif
 
     void project_hydro(const Function<dim> &                       function,
                        LinearAlgebra::distributed::Vector<Number> &solution_height,
@@ -1812,7 +1811,7 @@ namespace SpaceDiscretization
         }
     }
   }
-
+#endif
 #ifdef OCEANO_WITH_MASSCONSERVATIONCHECK
   // The mass conservation balance is based on the following global check.
   // The updated mass integral over the whole computational domain must be
@@ -1877,7 +1876,6 @@ namespace SpaceDiscretization
       check_mass_boundary_integral += global_integrals[1];
     }
   }
-#endif
 #endif
 
   // Having discussed the implementation of the functions that deal with
