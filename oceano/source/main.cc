@@ -97,15 +97,15 @@
 //
 //
 //
-// Finally we assures that there are no inconsistencies in the choice of preprocessors.
-// We define a new preprocessor that permits a more compact `#if defined` statement.
-// This preprocessor does not identify a specific class but
-// rather it add a functionality to the scheme, namely the computation of tracer.
+// Finally we define new preprocessors that do not identify a specific class but rather add a
+// functionality to the scheme, for example the computation of tracers.
 // For this reason it starts with `OCEANO_WITH`.
+// In some case they are used just for a more compact `#if defined` statement.
 #undef OCEANO_WITH_TRACERS
 #if defined MODEL_SHALLOWWATERWITHTRACER
 #define OCEANO_WITH_TRACERS
 #endif
+#undef OCEANO_WITH_MASSCONSERVATIONCHECK
 
 // The include files are similar to the previous matrix-free tutorial programs
 // step-37, step-48, and step-59
@@ -253,9 +253,9 @@ namespace Problem
   // however reused many functions.
   // The interface of the DataPostprocessor class is intuitive,
   // requiring us to provide information about what needs to be evaluated
-  // (typically the solution fields, the solution at specific points or the
-  // error), when it needs to be evaluated (at what frequency) and the names of
-  // what gets evaluated. Note that it would also be possible to extract most
+  // (typically the solution fields, the solution at specific points, integrals
+  // or an error), when it needs to be evaluated (at what frequency) and the names
+  // of what gets evaluated. Note that it would also be possible to extract most
   // information by calculator tools within visualization programs such as
   // ParaView, but it is so much more convenient to do it already when writing
   // the output.
@@ -340,12 +340,14 @@ namespace Problem
         DataComponentInterpretation::DataComponentInterpretation>
       get_data_component_interpretation() const;
 
-      void write_pointHistory_gnuplot() const;
+      void write_history_gnuplot() const;
 
       std::string output_filename;
 
       std::map<double, std::vector<std::vector<double>>> pointHistory_data;
       std::vector<Point<dim>> point_vector;
+
+      std::map<double, std::array<double, 2>> integralHistory_data;
 
       // variables
       std::vector<std::string> postproc_vars_name;
@@ -356,6 +358,7 @@ namespace Problem
       // what
       bool do_solution;
       bool do_pointHistory;
+      bool do_integralHistory;
       bool do_error;
       bool do_meshsize;
     };
@@ -397,10 +400,11 @@ namespace Problem
          point_vector.push_back(Point<dim>(std::stof(info[0]), std::stof(info[1])));
       }
 
-    do_solution     = true;
-    do_pointHistory = !point_vector.empty();
-    do_error        = prm.get_bool("Output_error");
-    do_meshsize     = prm.get_bool("Output_meshsize");
+    do_solution        = true;
+    do_pointHistory    = !point_vector.empty();
+    do_integralHistory = false;
+    do_error           = prm.get_bool("Output_error");
+    do_meshsize        = prm.get_bool("Output_meshsize");
 
     prm.leave_subsection();
 
@@ -435,9 +439,9 @@ namespace Problem
   }
 
 
-  // The user can request output files to be generated for the point history.
-  // These files are in Gnuplot format but are basically just regular text and can
-  // easily be imported into other programs well, for example into spreadsheets.
+  // The user can request output files to be generated for the point or integral
+  // history. These files are in Gnuplot format but are basically just regular text
+  // and can easily be imported into other programs well, for example into spreadsheets.
   // We write out a series of gnuplot files named "point_history" + "-01.gpl", etc.
   // The data file gives information about where the points and interpreting the
   // data. The names of the data columns is supplied, depending on
@@ -447,19 +451,24 @@ namespace Problem
   // point into the file as comments, write general data stored.
   // Note that for the file name we use two digits, so up two 100 points can be
   // written.
+  //
+  // For the integral history we need high precision number to check accurately
+  // mass conservation. The total mass in the computational domain is typically a
+  // big number and we use 12 digits. The total mass flux across the boundary is
+  // smaller, we use 6 digits.
   template <int dim, int n_tra>
-  void OceanoProblem<dim, n_tra>::Postprocessor::write_pointHistory_gnuplot() const
+  void OceanoProblem<dim, n_tra>::Postprocessor::write_history_gnuplot() const
   {
     typename std::vector<Point<dim>>::const_iterator point = point_vector.begin();
     for (unsigned int point_vector_index = 0;
          point != point_vector.end();
          ++point, ++point_vector_index)
       {
-        const std::string filename =
+        const std::string filename_point =
           output_filename + "_pointHistory_"
           + Utilities::int_to_string(point_vector_index+1, 2) + ".gpl";
 
-        std::ofstream to_gnuplot(filename);
+        std::ofstream to_gnuplot(filename_point);
 
         to_gnuplot << "# Requested location: " << *point
                    << '\n';
@@ -483,6 +492,23 @@ namespace Problem
           }
         to_gnuplot.close();
       }
+#ifdef OCEANO_WITH_MASSCONSERVATIONCHECK
+      const std::string filename_integral =
+        output_filename + "_integralHistory.gpl";
+
+      std::ofstream to_gnuplot(filename_integral);
+
+      to_gnuplot << "# Requested variables: " << "depth\n";
+      to_gnuplot << "# Time " << " " << "total_mass" << " " << "boundary_flux\n";
+
+      for (auto i : integralHistory_data)
+        {
+          to_gnuplot << i.first << " " << std::setprecision(14) << i.second[0]
+                                << " " << std::setprecision(7) << i.second[1]
+                                << '\n';
+        }
+      to_gnuplot.close();
+#endif
   }
 
 
@@ -1028,6 +1054,18 @@ namespace Problem
         }
     }
 
+    if (postprocessor.do_integralHistory)
+    {
+      // This is an analogue to the previous but it outputs the integrals of a variable
+      // instead of puctual values. For now it works only with the water depth to compute
+      // the global mass balance of the scheme which is a delicate issue for coastal models,
+      // both when mesh adaptation and/or wetting and drying is involved. The mass
+      // balance is strictly related to the scheme, here we do almost nothing since much of
+      // the work has been done into the space discretization class, `OceanoOperator`.
+      postprocessor.integralHistory_data[time] =
+        {{oceano_operator.check_mass_cell_integral, oceano_operator.check_mass_boundary_integral}};
+    }
+
     if (postprocessor.do_meshsize)
     {
       // Outputting the meshsize is useful to keep under control the timestep.
@@ -1310,6 +1348,9 @@ namespace Problem
         postprocessor.do_pointHistory =
           (static_cast<int>(time / postprocessor.pointHistory_tick) !=
             static_cast<int>((time - time_step) / postprocessor.pointHistory_tick));
+#ifdef OCEANO_WITH_MASSCONSERVATIONCHECK
+        postprocessor.do_integralHistory = postprocessor.do_solution;
+#endif
         if (postprocessor.do_solution || postprocessor.do_pointHistory)
           output_results(
             postprocessor,
@@ -1318,7 +1359,7 @@ namespace Problem
             postprocess_velocity);
       }
 
-    postprocessor.write_pointHistory_gnuplot();
+    postprocessor.write_history_gnuplot();
 
     timer.print_wall_time_statistics(MPI_COMM_WORLD);
     pcout << std::endl;

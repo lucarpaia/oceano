@@ -154,6 +154,8 @@ namespace SpaceDiscretization
     static constexpr unsigned int n_quadrature_points_1d = n_points_1d;
 
     double factor_matrix;
+    double check_mass_cell_integral;
+    double check_mass_boundary_integral;
 
     OceanoOperator(IO::ParameterHandler      &param,
                   ICBC::BcBase<dim, 1+dim+n_tra> *bc,
@@ -195,6 +197,12 @@ namespace SpaceDiscretization
       LinearAlgebra::distributed::Vector<Number>                    &solution_discharge,
       LinearAlgebra::distributed::Vector<Number>                    &next_ri_height,
       LinearAlgebra::distributed::Vector<Number>                    &next_ri_discharge) const;
+
+    void
+    check_mass(
+      const Number                                                   factor_residual,
+      const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
+      LinearAlgebra::distributed::Vector<Number>                    &solution_height);
 #endif
 
     void project_hydro(const Function<dim> &                       function,
@@ -302,6 +310,12 @@ namespace SpaceDiscretization
       const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
       const std::pair<unsigned int, unsigned int>                   &cell_range) const;
 
+    void local_apply_cell_mass_depth(
+      const MatrixFree<dim, Number>                                 &data,
+      LinearAlgebra::distributed::Vector<Number>                    &dst,
+      const LinearAlgebra::distributed::Vector<Number>              &src,
+      const std::pair<unsigned int, unsigned int>                   &cell_range) const;
+
     void local_apply_cell_mass_discharge(
       const MatrixFree<dim, Number>                                 &data,
       LinearAlgebra::distributed::Vector<Number>                    &dst,
@@ -331,6 +345,12 @@ namespace SpaceDiscretization
       LinearAlgebra::distributed::Vector<Number>                    &dst,
       const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
       const std::pair<unsigned int, unsigned int>                   &face_range) const;
+
+    void local_apply_fake_depth(
+      const MatrixFree<dim, Number>                                 &data,
+      LinearAlgebra::distributed::Vector<Number>                    &dst,
+      const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
+      const std::pair<unsigned int, unsigned int>                   &face_range) const;
   };
 
 
@@ -339,7 +359,9 @@ namespace SpaceDiscretization
   // namely the boundary conditions, the model and the numerical fluxes.
   // Beside we set the name of the model variables. This is a trick to avoid
   // initialization of such names into the model class constructor which is not
-  // templated (`dim` and `n_tra` are not available there).
+  // templated (`dim` and `n_tra` are not available there). In case you would
+  // like to inspect the mass conservation property of the scheme we set to zero
+  // the boundary flux which will be cumulated in time.
   template <int dim, int n_tra, int degree, int n_points_1d>
   OceanoOperator<dim, n_tra, degree, n_points_1d>::OceanoOperator(
     IO::ParameterHandler             &param,
@@ -351,6 +373,8 @@ namespace SpaceDiscretization
     , timer(timer)
   {
      model.set_vars_name<dim, n_tra>();
+     check_mass_cell_integral = 0.;
+     check_mass_boundary_integral = 0.;
   }
 
 
@@ -1284,6 +1308,48 @@ namespace SpaceDiscretization
       }
   }
 
+#ifdef OCEANO_WITH_MASSCONSERVATIONCHECK
+  // The next two functions are local operations that are used to compute
+  // the mass conservation balance. The next function computes the
+  // mass contained at each degree of freedom.
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_tra, degree, n_points_1d>::local_apply_cell_mass_depth(
+    const MatrixFree<dim, Number> &,
+    LinearAlgebra::distributed::Vector<Number>                    &dst,
+    const LinearAlgebra::distributed::Vector<Number>              &src,
+    const std::pair<unsigned int, unsigned int>                   &cell_range) const
+  {
+    FEEvaluation<dim, degree, n_points_1d, 1, Number> phi_height(data,0);
+
+    for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
+      {
+        phi_height.reinit(cell);
+        phi_height.gather_evaluate(src, EvaluationFlags::values);
+
+        for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
+          {
+            const auto z_q = phi_height.get_value(q);
+            const VectorizedArray<Number> data_q =
+              evaluate_function<dim, Number>(
+                *bc->problem_data, phi_height.quadrature_point(q), 0);
+            phi_height.submit_value(z_q+data_q, q);
+          }
+
+        phi_height.integrate_scatter(EvaluationFlags::values,
+                                       dst);
+      }
+  }
+
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_tra, degree, n_points_1d>::local_apply_fake_depth(
+    const MatrixFree<dim, Number> &,
+    LinearAlgebra::distributed::Vector<Number>                    &/*dst*/,
+    const std::vector<LinearAlgebra::distributed::Vector<Number>> &/*src*/,
+    const std::pair<unsigned int, unsigned int>                   &/*face_range*/) const
+  {
+  }
+#endif
+
   // @sect4{The apply() and related functions}
 
   // We now come to the function which implements the evaluation of the ocean
@@ -1746,6 +1812,72 @@ namespace SpaceDiscretization
         }
     }
   }
+
+#ifdef OCEANO_WITH_MASSCONSERVATIONCHECK
+  // The mass conservation balance is based on the following global check.
+  // The updated mass integral over the whole computational domain must be
+  // equal to the integral of the boundary flux over the whole simulation time
+  // plus the initial mass (which is only a constant and it thus not computed
+  // here, it can be recovered in postprocessing).
+  // We recall that the mass in shallow water is the water depth. A change of
+  // variable is necessary to go from the prognostic variable, the water height,
+  // to the water depth.
+  // Concerning the implementation, we use the same code structure of the water
+  // elevation update, which make things simpler and eventually free of errors.
+  // Space integrals are realized with sums over the dofs and cells.
+  // The boundary flux is also cumulated in time to realized the time integral.
+  // Local face and cell integrals are zero when summed over the dofs and are
+  // not explicitly computed but they are replaced by fake functions that do
+  // nothing.
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_tra, degree, n_points_1d>::check_mass(
+    const Number                                                   factor_residual,
+    const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
+    LinearAlgebra::distributed::Vector<Number>                    &solution_height)
+  {
+
+    {
+      TimerOutput::Scope t(timer, "rk_stage hydro - check mass");
+
+      LinearAlgebra::distributed::Vector<Number> vec_ki_depth;
+      LinearAlgebra::distributed::Vector<Number> integral_depth;
+      vec_ki_depth.reinit(solution_height);
+      integral_depth.reinit(solution_height);
+
+      double local_integrals[2] = {0., 0.};
+
+      data.loop(&OceanoOperator::local_apply_fake_depth,
+                &OceanoOperator::local_apply_fake_depth,
+                &OceanoOperator::local_apply_boundary_face_height,
+                this,
+                vec_ki_depth,
+                current_ri,
+                true,
+                MatrixFree<dim, Number>::DataAccessOnFaces::values,
+                MatrixFree<dim, Number>::DataAccessOnFaces::values);
+      data.cell_loop(&OceanoOperator::local_apply_cell_mass_depth,
+                     this,
+                     integral_depth,
+                     solution_height,
+                     std::function<void(const unsigned int, const unsigned int)>(),
+                     [&](const unsigned int start_range, const unsigned int end_range) {
+                       /* DEAL_II_OPENMP_SIMD_PRAGMA */
+                       for (unsigned int i = start_range; i < end_range; ++i)
+                         {
+                           const Number k_i     = vec_ki_depth.local_element(i);
+                           local_integrals[0] += integral_depth.local_element(i);
+                           local_integrals[1] += factor_residual * k_i;
+                         }
+                     },
+                     0);
+
+      double global_integrals[2];
+      Utilities::MPI::sum(local_integrals, MPI_COMM_WORLD, global_integrals);
+      check_mass_cell_integral = global_integrals[0];
+      check_mass_boundary_integral += global_integrals[1];
+    }
+  }
+#endif
 #endif
 
   // Having discussed the implementation of the functions that deal with
