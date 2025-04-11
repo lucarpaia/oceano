@@ -6,7 +6,7 @@ It is a finite element shallow water solver for coastal applications based on th
 
 In order to compile and use the code you need to have the following programs installed:
 - CMake (tested version 3.22 or later)
-- a c++ compiler (tested gcc versions 11.2 and 11.4 and intel/oneapi-2021--binary)
+- a c++ compiler (tested gcc versions 11.2 and 11.4 and intel/oneapi-2021)
 - mpi (tested openmpi version 5.0 and intelmpi/oneapi-2021)
 - the finite element library deal.ii (version 9.5.1) with p4est for handling dynamic meshes across multiple processors. For both see https://www.dealii.org/current/readme.html.
 
