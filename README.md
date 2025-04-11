@@ -1,6 +1,6 @@
 # What is this repository about?
 
-It is a finite element shallow water solver based on the deal.ii library for coastal applications. It uses high order discontinuous finite elements and adaptive non-conforming quadrilateral meshes.
+It is a finite element shallow water solver for coastal applications based on the deal.ii library. It uses high order discontinuous finite elements and adaptive non-conforming quadrilateral meshes.
 
 ## Requirements
 
