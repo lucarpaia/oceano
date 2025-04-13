@@ -837,7 +837,7 @@ namespace Problem
           ICBC::ExactSolution<dimension, n_variables>(time,prm),
           solution_height, solution_discharge);
 #ifdef OCEANO_WITH_TRACERS
-      const std::array<double,n_tra> errors_tracers =
+      const std::array<double,1> errors_tracers =
         oceano_operator.compute_errors_tracers(
           ICBC::ExactSolution<dimension, n_variables>(time,prm), solution_tracer);
 #endif
@@ -856,9 +856,8 @@ namespace Problem
             << std::setw(10) << errors_hydro[1];
 
 #ifdef OCEANO_WITH_TRACERS
-      for (unsigned int t = 0; t < n_tra; ++t)
-        pcout << ", "+ vars_names[dim+t+1] + ":" << std::setprecision(4)
-              << std::setw(10) << errors_tracers[t];
+      pcout << ", "+ vars_names[dim+0+1] + ":" << std::setprecision(4)
+            << std::setw(10) << errors_tracers[0];
 #endif
       pcout << std::endl;
 

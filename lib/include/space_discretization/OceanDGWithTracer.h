@@ -82,6 +82,28 @@ namespace SpaceDiscretization
     return result;
   }
 
+  // The following is another call that avoid `if` statements for multiple
+  // tracers. If, in the data,  a flag -999  is found, then the value is recognized
+  // as unphysical and we impose a Neumann boundary condition.
+  template <typename Number, int n_vars>
+  void
+  check_absorbing_outflow(
+    const VectorizedArray<Number>  &t_m,
+    VectorizedArray<Number>        &t_p)
+  {
+    if (int(t_p[0]) == -999) t_p = t_m;
+  }
+
+  template <typename Number, int n_tra>
+  void
+  check_absorbing_outflow(
+    const Tensor<1, n_tra, VectorizedArray<Number>> &t_m,
+    Tensor<1, n_tra, VectorizedArray<Number>>       &t_p)
+  {
+    for (unsigned int t = 0; t < n_tra; ++t)
+      if (int(t_p[t][0]) == -999) t_p[t] = t_m[t];
+  }
+
 
 
   // @sect3{The OceanoWithTracerOperation class}
@@ -128,7 +150,7 @@ namespace SpaceDiscretization
     void project_tracers(const Function<dim> &                       function,
                          LinearAlgebra::distributed::Vector<Number> &solution_tracer) const;
 
-    std::array<double, n_tra> compute_errors_tracers(
+    std::array<double, 1> compute_errors_tracers(
       const Function<dim> &                             function,
       const LinearAlgebra::distributed::Vector<Number> &solution_tracer) const;
 
@@ -514,14 +536,12 @@ namespace SpaceDiscretization
   // More complicated is the case of subcritical flows.
   // Here the tracers can enter from some portion of the boundary and leave
   // the domain from some other part and this can be time-varing. All case have to
-  // be covered and on SIMD vectorization, the 'if' statement does not work. As we work on
+  // be covered and on SIMD vectorization, the if statement does not work. As we work on
   // data of several quadrature points at once for SIMD vectorizations, we here need to
   // explicitly loop over the array entries of the SIMD array.
   //
   // A last option which could be interesting is a Neumann boundary condition for the tracer with
   // an in-going flow. This could be helpful in case where we just want that nothing enters.
-  // We have realized this condition with a simple if statment: if a value of -999 is read
-  // the code switches to imposing the interior value.
   template <int dim, int n_tra, int degree, int n_points_1d>
   void OceanoOperatorWithTracer<dim, n_tra, degree, n_points_1d>::local_apply_boundary_face_tracer(
     const MatrixFree<dim, Number> &,
@@ -580,7 +600,7 @@ namespace SpaceDiscretization
                 t_p = evaluate_function_tracer<dim, Number, n_tra>(
                         *bc->supercritical_inflow_boundaries.find(boundary_id)->second,
                         phi_tracer.quadrature_point(q),
-                        phi_tracer.get_value(q));
+                        t_m);
               }
             else if (bc->supercritical_outflow_boundaries.find(boundary_id) !=
                      bc->supercritical_outflow_boundaries.end())
@@ -613,14 +633,14 @@ namespace SpaceDiscretization
                   t_p = evaluate_function_tracer<dim, Number, n_tra>(
                         *bc->height_inflow_boundaries.find(boundary_id)->second,
                         phi_tracer.quadrature_point(q),
-                        phi_tracer.get_value(q));
+                        t_m);
                 else if (at_outflow != VectorizedArray<Number>::size())
                   t_p = evaluate_function_tracer<dim, Number, n_tra>(
                         *bc->height_inflow_boundaries.find(boundary_id)->second,
                         phi_tracer.quadrature_point(q),
-                        phi_tracer.get_value(q)) * (1.-mask_outflow) + mask_outflow*t_m;
+                        t_m) * (1.-mask_outflow) + mask_outflow*t_m;
 
-                if (t_p[0] == -999) t_p = t_m;
+                check_absorbing_outflow<Number, n_tra>(t_m, t_p);
 
               }
             else if (bc->discharge_inflow_boundaries.find(boundary_id) !=
@@ -648,12 +668,12 @@ namespace SpaceDiscretization
                   t_p = evaluate_function_tracer<dim, Number, n_tra>(
                         *bc->discharge_inflow_boundaries.find(boundary_id)->second,
                         phi_tracer.quadrature_point(q),
-                        phi_tracer.get_value(q));
+                        t_m);
                 else if (at_outflow != VectorizedArray<Number>::size())
                   t_p = evaluate_function_tracer<dim, Number, n_tra>(
                         *bc->discharge_inflow_boundaries.find(boundary_id)->second,
                         phi_tracer.quadrature_point(q),
-                        phi_tracer.get_value(q)) * (1.-mask_outflow) + mask_outflow*t_m;
+                        t_m) * (1.-mask_outflow) + mask_outflow*t_m;
 
               }
             else if (bc->absorbing_outflow_boundaries.find(boundary_id) !=
@@ -737,10 +757,8 @@ namespace SpaceDiscretization
             inverse_jxw[q] *= 1. / (z_q+data_q);
           }
 
-        inverse.apply(inverse_jxw, dim, phi_tracer.begin_dof_values(),
+        inverse.apply(inverse_jxw, n_tra, phi_tracer.begin_dof_values(),
           phi_tracer.begin_dof_values());
-//        inverse.apply(phi_discharge.begin_dof_values(), phi_discharge.begin_dof_values());
-
         phi_tracer.set_dof_values(dst);
       }
   }
@@ -968,44 +986,17 @@ namespace SpaceDiscretization
       }
   }
 
-  // The next function again repeats functionality also provided by the
-  // deal.II library, namely VectorTools::integrate_difference(). We here show
-  // the explicit code to highlight how the vectorization across several cells
-  // works and how to accumulate results via that interface: Recall that each
-  // <i>lane</i> of the vectorized array holds data from a different cell. By
-  // the loop over all cell batches that are owned by the current MPI process,
-  // we could then fill a VectorizedArray of results; to obtain a global sum,
-  // we would need to further go on and sum across the entries in the SIMD
-  // array. However, such a procedure is not stable as the SIMD array could in
-  // fact not hold valid data for all its lanes. This happens when the number
-  // of locally owned cells is not a multiple of the SIMD width. To avoid
-  // invalid data, we must explicitly skip those invalid lanes when accessing
-  // the data. While one could imagine that we could make it work by simply
-  // setting the empty lanes to zero (and thus, not contribute to a sum), the
-  // situation is more complicated than that: What if we were to compute a
-  // velocity out of the momentum? Then, we would need to divide by the
-  // density, which is zero -- the result would consequently be NaN and
-  // contaminate the result. This trap is avoided by accumulating the results
-  // from the valid SIMD range as we loop through the cell batches, using the
-  // function MatrixFree::n_active_entries_per_cell_batch() to give us the
-  // number of lanes with valid data. It equals VectorizedArray::size() on
-  // most cells, but can be less on the last cell batch if the number of cells
-  // has a remainder compared to the SIMD width.
-  // 
-  // Pay also attention to the implementation of the error formula. The error has
-  // dimension `n_vars-(dim-1)` because we compute only one error for all the
-  // momentum components. Also, the formula implies that the variables are stored
-  // in the following order $(h,\, hu^i,\, T^j)$ with $i=1,...dim$ and $j=0,...N_T$
-  // the number of tracers. First the error we compute the error on the depth,
-  // the momentum error and finally we loop over the tracers. The number of tracers
-  // is recovered from the number of variables and the problem dimension `n_vars-dim-1`.
+  // This is a similar function to the one that compute the error for the hydrodynamics.
+  // Here, in a completely similar mannel, we computes the error for the tracer.
+  // To avoid to print to screen to much information we just compute the error for one tracer, the
+  // first one. For this reason `n_err=1`.
   template <int dim, int n_tra, int degree, int n_points_1d>
-  std::array<double, n_tra> OceanoOperatorWithTracer<dim, n_tra, degree, n_points_1d>::compute_errors_tracers(
+  std::array<double, 1> OceanoOperatorWithTracer<dim, n_tra, degree, n_points_1d>::compute_errors_tracers(
     const Function<dim> &                             function,
     const LinearAlgebra::distributed::Vector<Number> &solution_tracer) const
   {
     TimerOutput::Scope t(timer, "compute errors");
-    const unsigned int n_err = n_tra;
+    const unsigned int n_err = 1;
     double             errors_squared[n_err] = {};
     FEEvaluation<dim, degree, n_points_1d, n_tra, Number> phi_tracer(data, 2, 0);
 
@@ -1016,13 +1007,13 @@ namespace SpaceDiscretization
         phi_tracer.gather_evaluate(solution_tracer, EvaluationFlags::values);
         for (unsigned int q = 0; q < phi_tracer.n_q_points; ++q)
           {
-            const auto error = evaluate_function_tracer<dim, Number, n_tra>(
+            const auto error = evaluate_function_tracer<dim, Number, 1>(
             		         function, 
                                  phi_tracer.quadrature_point(q),
-                                 phi_tracer.get_value(q))
-              		     - phi_tracer.get_value(q);
+                                 phi_tracer.get_value(q)[0])
+                             - phi_tracer.get_value(q)[0];
             const auto JxW = phi_tracer.JxW(q);
-            for (unsigned int t = 0; t < n_tra; ++t)
+            for (unsigned int t = 0; t < n_err; ++t)
               local_errors_squared[t] += (error[t] * error[t]) * JxW;
           }
 
