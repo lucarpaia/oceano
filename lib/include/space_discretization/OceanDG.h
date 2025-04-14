@@ -239,6 +239,11 @@ namespace SpaceDiscretization
       LinearAlgebra::distributed::Vector<Number>              &computed_vector_quantities,
       std::vector<LinearAlgebra::distributed::Vector<Number>> &computed_scalar_quantities) const;
 
+    void evaluate_velocity_field(
+      const LinearAlgebra::distributed::Vector<Number>        &solution_height,
+      const LinearAlgebra::distributed::Vector<Number>        &solution_discharge,
+      LinearAlgebra::distributed::Vector<Number>              &postprocess_velocity) const;
+
     void
     initialize_vector(LinearAlgebra::distributed::Vector<Number> &vector,
                       const unsigned int                          variable) const;
@@ -2257,6 +2262,43 @@ namespace SpaceDiscretization
   // However the usual way to recover data is with
   // the `evaluate_function` that operates on vectorized data. With a few tricks the
   // the `evaluate_function` has been adapted to a non-vectorized loop.
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_tra, degree, n_points_1d>::evaluate_velocity_field(
+    const LinearAlgebra::distributed::Vector<Number>        &solution_height,
+    const LinearAlgebra::distributed::Vector<Number>        &solution_discharge,
+    LinearAlgebra::distributed::Vector<Number>              &postprocess_velocity) const
+  {
+    FEEvaluation<dim, degree, degree + 1, 1, Number> phi_height(data, 0, 1);
+    FEEvaluation<dim, degree, degree + 1, dim, Number> phi_discharge(data, 1, 1);
+    FEEvaluation<dim, degree, degree + 1, dim, Number> phi_velocity(data, 1, 1);
+    MatrixFreeOperators::CellwiseInverseMassMatrix<dim, degree, dim, Number>
+      inverse_velocity(phi_velocity);
+
+    for (unsigned int cell = 0; cell < data.n_cell_batches(); ++cell)
+      {
+        phi_height.reinit(cell);
+        phi_height.gather_evaluate(solution_height, EvaluationFlags::values);
+        phi_discharge.reinit(cell);
+        phi_discharge.gather_evaluate(solution_discharge, EvaluationFlags::values);
+        phi_velocity.reinit(cell);
+
+        for (unsigned int q = 0; q < phi_velocity.n_q_points; ++q)
+          {
+            const auto z_q = phi_height.get_value(q);
+            const auto q_q = phi_discharge.get_value(q);
+            const VectorizedArray<Number> data_q =
+              evaluate_function<dim, Number>(
+                *bc->problem_data, phi_velocity.quadrature_point(q), 0);
+
+            phi_velocity.submit_dof_value(q_q/(z_q+data_q), q);
+          }
+        inverse_velocity.transform_from_q_points_to_basis(dim,
+                                                 phi_velocity.begin_dof_values(),
+                                                 phi_velocity.begin_dof_values());
+        phi_velocity.set_dof_values(postprocess_velocity);
+      }
+  }
+
   template <int dim, int n_tra, int degree, int n_points_1d>
   void OceanoOperator<dim, n_tra, degree, n_points_1d>::evaluate_vector_field(
     const LinearAlgebra::distributed::Vector<Number>        &solution_height,

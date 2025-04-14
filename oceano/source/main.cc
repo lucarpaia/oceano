@@ -753,6 +753,12 @@ namespace Problem
                                               postprocess_vector_variables,
                                               postprocess_scalar_variables);
 
+        LinearAlgebra::distributed::Vector<Number> postprocess_vector_variables2;
+        postprocess_vector_variables2.reinit(solution_discharge);
+        oceano_operator.evaluate_velocity_field(solution_height,
+                                                solution_discharge,
+                                                postprocess_vector_variables2);
+
         std::vector<std::string> names_postproc
           = postprocessor.get_names();
         std::vector<std::string> names_vector;
@@ -768,7 +774,7 @@ namespace Problem
           interpretation_vector.push_back(interpretation_postproc[d]);
 
         data_out.add_data_vector(dof_handler_discharge,
-                                 postprocess_vector_variables,
+                                 postprocess_vector_variables2,
                                  names_vector,
                                  interpretation_vector);
         for (unsigned int v = 0; v < postprocessor.n_postproc_vars-dim; ++v)
