@@ -91,7 +91,8 @@ namespace SpaceDiscretization
     const VectorizedArray<Number>  &t_m,
     VectorizedArray<Number>        &t_p)
   {
-    if (int(t_p[0]) == -999) t_p = t_m;
+    for (unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v)
+      if (int(t_p[v]) == -999) t_p[v] = t_m[v];
   }
 
   template <typename Number, int n_tra>
@@ -100,8 +101,9 @@ namespace SpaceDiscretization
     const Tensor<1, n_tra, VectorizedArray<Number>> &t_m,
     Tensor<1, n_tra, VectorizedArray<Number>>       &t_p)
   {
-    for (unsigned int t = 0; t < n_tra; ++t)
-      if (int(t_p[t][0]) == -999) t_p[t] = t_m[t];
+    for (unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v)
+      for (unsigned int t = 0; t < n_tra; ++t)
+        if (int(t_p[t][v]) == -999) t_p[t][v] = t_m[t][v];
   }
 
 
