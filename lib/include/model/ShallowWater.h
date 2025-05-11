@@ -213,7 +213,8 @@ namespace Model
       Tensor<1, dim, Number>
       source_stiff(const Number                  height,
                    const Tensor<1, dim, Number> &discharge,
-                   const Tensor<1, 2, Number>   &parameters) const;
+                   const Number                  bathymetry,
+                   const Number                  drag_coefficient) const;
 
     // The next function computes an estimate of the square of the graivty wave speed, from
     // the vector of conserved variables
@@ -415,13 +416,14 @@ namespace Model
     ShallowWater::source_stiff(
       const Number                  height,
       const Tensor<1, dim, Number> &discharge,
-      const Tensor<1, 2, Number>   &parameters) const
+      const Number                  bathymetry,
+      const Number                  drag_coefficient) const
   {
     const Tensor<1, dim, Number> v =
-      velocity<dim>(height, discharge, parameters[0]);
-    const Number depth = height + parameters[0];
+      velocity<dim>(height, discharge, bathymetry);
+    const Number depth = height + bathymetry;
 
-    return -bottom_friction.source<dim, Number>(v, parameters[1], depth);
+    return -bottom_friction.source<dim, Number>(v, drag_coefficient, depth);
   }
 
   template <typename Number>

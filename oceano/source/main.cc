@@ -620,7 +620,9 @@ namespace Problem
 
 
   // The degrees of freedom and the solution vector needs to be
-  // initialized.
+  // initialized. We take advantage of this function to initialize
+  // also static data (typically computed at the quadrature points),
+  // that does not change during the simulation.
   template <int dim, int n_tra>
   void OceanoProblem<dim, n_tra>::make_dofs()
   {
@@ -637,6 +639,7 @@ namespace Problem
 #ifdef OCEANO_WITH_TRACERS
     oceano_operator.initialize_vector(solution_tracer, 2);
 #endif
+    oceano_operator.initialize_data();
   }
 
 
