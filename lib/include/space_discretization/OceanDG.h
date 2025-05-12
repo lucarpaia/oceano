@@ -415,14 +415,15 @@ namespace SpaceDiscretization
   //
   // With the last function we want also to initialize lots of data that
   // we do not want to recompute at each time-step but rather store in memory
-  // and access it. Since these are bathymetry, friction and other data
+  // and access it. These are bathymetry, friction and other data
   // that are defined at quadrature points and that need to be accessed
-  // many many times, we try to store them contiguously using the class
+  // many many times. We store them contiguously using the class
   // `CellDataStorage`. For each quadrature formula used in the code,
   // we store a separate class object with different data defined in it.
   // For exmaple, for face quadratures, we must store only the bathymetry,
   // while for high order Gauss quadrature on the cell we need to store
-  // the complete data to compute the rhs.
+  // the complete data to compute the rhs. The `FEEvaluation` and `FEFaceEvaluation`
+  // are used only to retrieve the quadratures rules.
   template <int dim, int n_tra, int degree, int n_points_1d>
   void OceanoOperator<dim, n_tra, degree, n_points_1d>::reinit(
     const Mapping<dim> &   mapping,
@@ -476,14 +477,13 @@ namespace SpaceDiscretization
     FEEvaluation<dim, degree, n_points_1d, 1, Number> phi_cell_0(data,0);
     for (unsigned int cell = 0; cell < data.n_cell_batches(); ++cell)
       {
-        phi_cell_0.reinit(cell); //lrp:really needed?
+        phi_cell_0.reinit(cell);
         for (unsigned int q = 0; q < phi_cell_0.n_q_points; ++q)
           {
-            const auto data_q =
+            data_quadrature_cell_0.submit_data(
               evaluate_function<dim, Number, dim+3>(
-                *bc->problem_data, phi_cell_0.quadrature_point(q));
-            data_quadrature_cell_0.submit_data(data_q);
-            //data_cell_0.push_back(data_q);
+                *bc->problem_data, phi_cell_0.quadrature_point(q))
+              );
           }
       }
 
@@ -491,14 +491,12 @@ namespace SpaceDiscretization
     FEEvaluation<dim, degree, degree + 1, 1, Number> phi_cell_1(data, 0, 1);
     for (unsigned int cell = 0; cell < data.n_cell_batches(); ++cell)
       {
-        phi_cell_1.reinit(cell); //lrp:really needed?
+        phi_cell_1.reinit(cell);
         for (unsigned int q = 0; q < phi_cell_1.n_q_points; ++q)
           {
-            const auto data_q =
+            data_quadrature_cell_1.submit_data(
               evaluate_function<dim, Number, 2>(
-                *bc->problem_data, phi_cell_1.quadrature_point(q));
-            //data_cell_1.push_back(data_q);
-            data_quadrature_cell_1.submit_data(data_q);
+                *bc->problem_data, phi_cell_1.quadrature_point(q)));
           }
       }
 
@@ -506,34 +504,28 @@ namespace SpaceDiscretization
     FEFaceEvaluation<dim, degree, n_points_1d, 1, Number> phi_face(data, true, 0);
     for (unsigned int face = 0; face < data.n_inner_face_batches(); ++face)
       {
-        phi_face.reinit(face); //lrp:really needed?
+        phi_face.reinit(face);
         for (unsigned int q = 0; q < phi_face.n_q_points; ++q)
           {
-            const auto data_m =
+            data_quadrature_face.submit_data(
               evaluate_function<dim, Number>(*bc->problem_data,
-                phi_face.quadrature_point(q)-1e-12*phi_face.normal_vector(q), 0);
-            //data_inner_face.push_back(data_m);
-            data_quadrature_face.submit_data(data_m);
-            const auto data_p =
+                phi_face.quadrature_point(q)-1e-12*phi_face.normal_vector(q), 0));
+            data_quadrature_face.submit_data(
               evaluate_function<dim, Number>(*bc->problem_data,
-                phi_face.quadrature_point(q)+1e-12*phi_face.normal_vector(q), 0);
-            //data_inner_face.push_back(data_p);
-            data_quadrature_face.submit_data(data_p);
+                phi_face.quadrature_point(q)+1e-12*phi_face.normal_vector(q), 0));
           }
       }
 
     data_quadrature_boundary.initialize(n_points_1d);
-    //FEFaceEvaluation<dim, degree, n_points_1d, 1, Number> phi_boundary(data, true, 0);
-    for (unsigned int face = data.n_inner_face_batches(); face < data.n_inner_face_batches()+data.n_boundary_face_batches(); ++face)
+    for (unsigned int face = data.n_inner_face_batches();
+      face < data.n_inner_face_batches()+data.n_boundary_face_batches(); ++face)
       {
-        phi_face.reinit(face); //lrp:really needed?
+        phi_face.reinit(face);
         for (unsigned int q = 0; q < phi_face.n_q_points; ++q)
           {
-            const auto data_m =
+            data_quadrature_boundary.submit_data(
               evaluate_function<dim, Number>(*bc->problem_data,
-                phi_face.quadrature_point(q), 0);
-            //data_boundary_face.push_back(data_m);
-            data_quadrature_boundary.submit_data(data_m);
+                phi_face.quadrature_point(q), 0));
           }
       }
   }

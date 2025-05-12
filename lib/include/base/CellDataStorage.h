@@ -19,6 +19,8 @@
 #ifndef CELLDATASTORAGE_HPP
 #define CELLDATASTORAGE_HPP
 
+using namespace dealii;
+
 /**
  * A class for storing at each cell a vector of object of length
  * `number_of_points_per_cell` of type `DataType`. This is an adaptation
@@ -69,10 +71,15 @@ public:
   /**
    * Get a point of the data located at the cell defined by the index `cell`
    * and at the point defined by the index `q`. It extract an object of type
-   * `DataType`.
+   * `DataType`. To reduce overhead to a minimum, we check that we are not
+   * exeeding the vector size with an `Assert` exception which is active in
+   * debug mode only.
    */
   DataType get_data(const unsigned int cell, const unsigned int q) const
   {
+    Assert(data_cell.size() >= number_of_points_per_cell*cell + q,
+      ExcMessage("The provided cell index or quadrature point does not belong"
+                 "to the triangulation that corresponds to the CellDataStorage object."));
     return data_cell[number_of_points_per_cell*cell + q];
   }
 
