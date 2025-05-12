@@ -45,12 +45,15 @@ public:
 
   /**
    * Initialize class members, in particular the number of objects to be
-   * stored for each cell.
-   * This function has to be called once at the beginning.
+   * stored for each cell. It clears also all the data stored in this object.
+   * This function has to be called once at the beginning for static runs.
+   * For dynamic runs it has to be called after evrey mesh refinement to
+   * update the stored objects on the new grid.
    */
   void initialize(const unsigned int number_of_data_points_per_cell)
   {
     number_of_points_per_cell = number_of_data_points_per_cell;
+    data_cell.clear();
   }
 
   /**
