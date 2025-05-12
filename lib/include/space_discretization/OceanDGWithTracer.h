@@ -158,6 +158,11 @@ namespace SpaceDiscretization
 
     using OceanoOperator<dim, n_tra, degree, n_points_1d>::bc;
 
+    using OceanoOperator<dim, n_tra, degree, n_points_1d>::data_quadrature_cell_0;
+    using OceanoOperator<dim, n_tra, degree, n_points_1d>::data_quadrature_cell_1;
+    using OceanoOperator<dim, n_tra, degree, n_points_1d>::data_quadrature_face;
+    using OceanoOperator<dim, n_tra, degree, n_points_1d>::data_quadrature_boundary;
+
     using OceanoOperator<dim, n_tra, degree, n_points_1d>::model;
 
   private:
@@ -364,12 +369,13 @@ namespace SpaceDiscretization
             const auto t_q = phi_tracer.get_value(q);
             const auto dt_q = phi_tracer.get_gradient(q);
             const auto du_q = phi_velocity.get_gradient(q);
-            const VectorizedArray<Number> data_q =
-              evaluate_function<dim, Number>(
-                *bc->problem_data, phi_tracer.quadrature_point(q), 0);
+            const auto zb_q = data_quadrature_cell_0.get_data(cell, q)[0];
+            //const VectorizedArray<Number> zb_q =
+            //  evaluate_function<dim, Number>(
+            //    *bc->problem_data, phi_tracer.quadrature_point(q), 0);
 
             phi_tracer.submit_gradient(
-              model.tracer_adv_diff_flux(q_q, t_q, du_q, (z_q+data_q)*dt_q, area_cell),
+              model.tracer_adv_diff_flux(q_q, t_q, du_q, (z_q+zb_q)*dt_q, area_cell),
               q);
           }
 
@@ -401,10 +407,11 @@ namespace SpaceDiscretization
           {
             const auto z_q = phi_height.get_value(q);
             const auto t_q = phi_tracer.get_value(q);
-            const VectorizedArray<Number> data_q =
-              evaluate_function<dim, Number>(
-                *bc->problem_data, phi_tracer.quadrature_point(q), 0);
-            phi_tracer.submit_value((z_q+data_q)*t_q, q);
+            const auto zb_q = data_quadrature_cell_1.get_data(cell, q)[0];
+            //const VectorizedArray<Number> zb_q =
+            //  evaluate_function<dim, Number>(
+            //    *bc->problem_data, phi_tracer.quadrature_point(q), 0);
+            phi_tracer.submit_value((z_q+zb_q)*t_q, q);
           }
 
         phi_tracer.integrate_scatter(EvaluationFlags::values,
@@ -504,12 +511,12 @@ namespace SpaceDiscretization
 
         for (unsigned int q = 0; q < phi_tracer_m.n_q_points; ++q)
           {
-            const VectorizedArray<Number> data_m =
-              evaluate_function<dim, Number>(*bc->problem_data,
-                phi_tracer_m.quadrature_point(q)-1e-12*phi_tracer_m.normal_vector(q), 0);
-            const VectorizedArray<Number> data_p =
-              evaluate_function<dim, Number>(*bc->problem_data,
-                phi_tracer_m.quadrature_point(q)+1e-12*phi_tracer_m.normal_vector(q), 0);
+            //const VectorizedArray<Number> data_m =
+            //  evaluate_function<dim, Number>(*bc->problem_data,
+            //    phi_tracer_m.quadrature_point(q)-1e-12*phi_tracer_m.normal_vector(q), 0);
+            //const VectorizedArray<Number> data_p =
+            //  evaluate_function<dim, Number>(*bc->problem_data,
+            //    phi_tracer_m.quadrature_point(q)+1e-12*phi_tracer_m.normal_vector(q), 0);
 
             auto numerical_flux_p =
               num_flux.numerical_tracflux_weak(phi_height_m.get_value(q),
@@ -519,8 +526,8 @@ namespace SpaceDiscretization
                                                phi_tracer_m.get_value(q),
                                                phi_tracer_p.get_value(q),
                                                phi_tracer_m.normal_vector(q),
-                                               data_m,
-                                               data_p);
+                                               data_quadrature_face.get_data(face, 2*q),
+                                               data_quadrature_face.get_data(face, 2*q+1));
 
             phi_tracer_m.submit_value(-numerical_flux_p, q);
             phi_tracer_p.submit_value(numerical_flux_p, q);
@@ -573,9 +580,11 @@ namespace SpaceDiscretization
             const auto t_m    = phi_tracer.get_value(q);
 
             const auto normal = phi_tracer.normal_vector(q);
-            const VectorizedArray<Number> data_m =
-              evaluate_function<dim, Number>(
-                *bc->problem_data, phi_tracer.quadrature_point(q), 0);
+            const auto zb_m =
+              data_quadrature_boundary.get_data(face-data.n_inner_face_batches(), q);
+            //const VectorizedArray<Number> zb_m =
+            //  evaluate_function<dim, Number>(
+            //    *bc->problem_data, phi_tracer.quadrature_point(q), 0);
 
             auto rho_u_dot_n = q_m * normal;
 
@@ -688,14 +697,14 @@ namespace SpaceDiscretization
                 z_p = w_p[0];
                 for (unsigned int d = 0; d < dim; ++d) q_p[d] = w_p[d+1];
                 const auto r_p
-                  = model.riemann_invariant_p(z_m, q_m, normal, data_m);
+                  = model.riemann_invariant_p(z_m, q_m, normal, zb_m);
                 const auto r_m
-                  = model.riemann_invariant_m(z_p, q_p, normal, data_m);
+                  = model.riemann_invariant_m(z_p, q_p, normal, zb_m);
                 const auto c_b = 0.25 * (r_p - r_m);
                 const auto h_b = c_b * c_b / model.g;
                 const auto u_b = 0.5 * (r_p + r_m);
 
-                z_p = h_b - data_m;
+                z_p = h_b - zb_m;
                 const auto norm = 1./normal.norm_square();
                 q_p =  u_b * h_b * norm * normal;
                 t_p = t_m;
@@ -707,7 +716,7 @@ namespace SpaceDiscretization
                                      "this part of the domain boundary?"));
 
             auto flux = num_flux.numerical_tracflux_weak(
-                z_m, z_p, q_m, q_p, t_m, t_p, normal, data_m, data_m);
+                z_m, z_p, q_m, q_p, t_m, t_p, normal, zb_m, zb_m);
 
             phi_tracer.submit_value(-flux, q);
           }
@@ -751,12 +760,13 @@ namespace SpaceDiscretization
 
         for (unsigned int q = 0; q < phi_tracer.n_q_points; ++q)
           {
-            const VectorizedArray<Number> data_q =
-              evaluate_function<dim, Number>(
-                *bc->problem_data, phi_tracer.quadrature_point(q), 0);
+            //const VectorizedArray<Number> zb_q =
+            //  evaluate_function<dim, Number>(
+            //    *bc->problem_data, phi_tracer.quadrature_point(q), 0);
             const auto z_q = phi_height_ri.get_value(q);
+            const auto zb_q = data_quadrature_cell_1.get_data(cell, q)[0];
 
-            inverse_jxw[q] *= 1. / (z_q+data_q);
+            inverse_jxw[q] *= 1. / (z_q+zb_q);
           }
 
         inverse.apply(inverse_jxw, n_tra, phi_tracer.begin_dof_values(),

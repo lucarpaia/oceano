@@ -1082,7 +1082,8 @@ namespace SpaceDiscretization
             //  evaluate_function<dim, Number>(
             //    *bc->problem_data, phi_height.quadrature_point(q), 0);
             //const auto zb_m = data_boundary_face[phi_height.n_q_points*(face-data.n_inner_face_batches())+q];
-            const auto zb_m = data_quadrature_boundary.get_data(face-data.n_inner_face_batches(),q);
+            const auto zb_m =
+              data_quadrature_boundary.get_data(face-data.n_inner_face_batches(), q);
 
             auto rho_u_dot_n = q_m * normal;
 
@@ -1195,7 +1196,7 @@ namespace SpaceDiscretization
             //    *bc->problem_data, phi_discharge.quadrature_point(q), 0);
             //const auto zb_m = data_boundary_face[phi_discharge.n_q_points*(face-data.n_inner_face_batches())+q];
             const auto zb_m   =
-              data_quadrature_boundary.get_data(face-data.n_inner_face_batches(),q);
+              data_quadrature_boundary.get_data(face-data.n_inner_face_batches(), q);
 
             auto rho_u_dot_n = q_m * normal;
 
@@ -1430,7 +1431,7 @@ namespace SpaceDiscretization
     const LinearAlgebra::distributed::Vector<Number>              &src,
     const std::pair<unsigned int, unsigned int>                   &cell_range) const
   {
-    FEEvaluation<dim, degree, n_points_1d, 1, Number> phi_height(data,0);
+    FEEvaluation<dim, degree, degree+1, 1, Number> phi_height(data, 0, 1);
 
     for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
       {
@@ -1440,10 +1441,11 @@ namespace SpaceDiscretization
         for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
           {
             const auto z_q = phi_height.get_value(q);
-            const VectorizedArray<Number> data_q =
-              evaluate_function<dim, Number>(
-                *bc->problem_data, phi_height.quadrature_point(q), 0);
-            phi_height.submit_value(z_q+data_q, q);
+            const auto zb_q = data_quadrature_cell_1.get_data(cell, q)[0];
+            //const VectorizedArray<Number> zb_q =
+            //  evaluate_function<dim, Number>(
+            //    *bc->problem_data, phi_height.quadrature_point(q), 0);
+            phi_height.submit_value(z_q+zb_q, q);
           }
 
         phi_height.integrate_scatter(EvaluationFlags::values,
