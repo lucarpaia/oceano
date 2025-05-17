@@ -670,12 +670,6 @@ namespace SpaceDiscretization
             const auto q_q = phi_discharge.get_value(q);
             const auto du_q = phi_velocity.get_gradient(q);
             const auto data_q = data_quadrature_cell_0.get_data(cell, q);
-            //const auto data_q = data_cell_0[cell*phi_discharge.n_q_points+q];
-            //std::cout << zb_q << " " << std::endl;
-
-            //Tensor<1, dim+3, VectorizedArray<Number>> data_q =
-            //  evaluate_function<dim, Number, dim+3>(
-            //    *bc->problem_data, phi_discharge.quadrature_point(q));
 
             phi_discharge.submit_gradient(
               model.momentum_adv_diff_flux<dim>(
@@ -726,11 +720,6 @@ namespace SpaceDiscretization
             const auto q_q = phi_discharge.get_value(q);
             const auto du_q = phi_velocity.get_gradient(q);
             const auto data_q = data_quadrature_cell_0.get_data(cell, q);
-            //const auto data_q = data_cell_0[cell*phi_discharge.n_q_points+q];
-
-            //Tensor<1, dim+3, VectorizedArray<Number>> data_q =
-            //  evaluate_function<dim, Number, dim+3>(
-            //    *bc->problem_data, phi_discharge.quadrature_point(q));
 
             phi_discharge.submit_gradient(
               model.momentum_adv_diff_flux<dim>(
@@ -770,11 +759,6 @@ namespace SpaceDiscretization
             const auto q_q = phi_discharge.get_value(q);
             const auto z_q = phi_height.get_value(q);
             const auto data_q = data_quadrature_cell_0.get_data(cell, q);
-//            const auto data_q = data_cell_0[cell*phi_discharge.n_q_points+q];
-
-//            Tensor<1, 2, VectorizedArray<Number>> data_q =
-//              evaluate_function<dim, Number, 2>(
-//                *bc->problem_data, phi_discharge.quadrature_point(q));
 
             phi_discharge.submit_value(
               model.source_stiff<dim>(z_q, q_q, data_q[0], data_q[1]),
@@ -895,17 +879,6 @@ namespace SpaceDiscretization
 
         for (unsigned int q = 0; q < phi_height_m.n_q_points; ++q)
           {
-            //const VectorizedArray<Number> data_m =
-            //  evaluate_function<dim, Number>(*bc->problem_data,
-            //    phi_height_m.quadrature_point(q)-1e-12*phi_height_m.normal_vector(q), 0);
-            //const VectorizedArray<Number> data_p =
-            //  evaluate_function<dim, Number>(*bc->problem_data,
-            //    phi_height_m.quadrature_point(q)+1e-12*phi_height_m.normal_vector(q), 0);
-            //const auto data_m = data_inner_face[phi_height_m.n_q_points*2*face+2*q];
-            //const auto data_p = data_inner_face[phi_height_m.n_q_points*2*face+2*q+1];
-            //const auto data_m = data_quadrature_face.get_data(face,2*q);
-            //const auto data_p = data_quadrature_face.get_data(face,2*q+1);
-
             auto numerical_flux_p =
               num_flux.numerical_massflux_weak<dim>(phi_height_m.get_value(q),
                                                     phi_height_p.get_value(q),
@@ -957,17 +930,8 @@ namespace SpaceDiscretization
             const auto z_m    = phi_height_m.get_value(q);
             const auto z_p    = phi_height_p.get_value(q);
             const auto normal = phi_discharge_m.normal_vector(q);
-
-            //const VectorizedArray<Number> zb_m =
-            //  evaluate_function<dim, Number>(*bc->problem_data,
-            //    phi_discharge_m.quadrature_point(q)-1e-12*phi_discharge_m.normal_vector(q), 0);
-            //const VectorizedArray<Number> zb_p =
-            //  evaluate_function<dim, Number>(*bc->problem_data,
-            //    phi_discharge_m.quadrature_point(q)+1e-12*phi_discharge_m.normal_vector(q), 0);
-            //const auto zb_m = data_inner_face[phi_height_m.n_q_points*2*face+2*q];
-            //const auto zb_p = data_inner_face[phi_height_m.n_q_points*2*face+2*q+1];
-            const auto zb_m = data_quadrature_face.get_data(face, 2*q);
-            const auto zb_p = data_quadrature_face.get_data(face, 2*q+1);
+            const auto zb_m   = data_quadrature_face.get_data(face, 2*q);
+            const auto zb_p   = data_quadrature_face.get_data(face, 2*q+1);
 
             auto numerical_flux_p =
               num_flux.numerical_advflux_weak<dim>(z_m,
@@ -1078,11 +1042,7 @@ namespace SpaceDiscretization
             const auto z_m    = phi_height.get_value(q);
             const auto q_m    = phi_discharge.get_value(q);
             const auto normal = phi_height.normal_vector(q);
-            //const VectorizedArray<Number> zb_m =
-            //  evaluate_function<dim, Number>(
-            //    *bc->problem_data, phi_height.quadrature_point(q), 0);
-            //const auto zb_m = data_boundary_face[phi_height.n_q_points*(face-data.n_inner_face_batches())+q];
-            const auto zb_m =
+            const auto zb_m   =
               data_quadrature_boundary.get_data(face-data.n_inner_face_batches(), q);
 
             auto rho_u_dot_n = q_m * normal;
@@ -1191,10 +1151,6 @@ namespace SpaceDiscretization
             const auto z_m    = phi_height.get_value(q);
             const auto q_m    = phi_discharge.get_value(q);
             const auto normal = phi_discharge.normal_vector(q);
-            //const VectorizedArray<Number> zb_m =
-            //  evaluate_function<dim, Number>(
-            //    *bc->problem_data, phi_discharge.quadrature_point(q), 0);
-            //const auto zb_m = data_boundary_face[phi_discharge.n_q_points*(face-data.n_inner_face_batches())+q];
             const auto zb_m   =
               data_quadrature_boundary.get_data(face-data.n_inner_face_batches(), q);
 
@@ -1394,15 +1350,8 @@ namespace SpaceDiscretization
 
         for (unsigned int q = 0; q < phi_discharge.n_q_points; ++q)
           {
-            //const VectorizedArray<Number> data_q =
-            //  evaluate_function<dim, Number>(
-            //    *bc->problem_data, phi_discharge.quadrature_point(q), 0);
-            //const VectorizedArray<Number> drag_q =
-            //  evaluate_function<dim, Number>(
-            //    *bc->problem_data, phi_discharge.quadrature_point(q), 1);
             const auto z_q = phi_height_ri.get_value(q);
             const auto q_q = phi_discharge_ri.get_value(q);
-            //const auto data_q = data_cell_1[cell*phi_discharge.n_q_points+q];
             const auto data_q = data_quadrature_cell_1.get_data(cell, q);
 
             inverse_jxw[q] *= 1. / ( 1. + factor_matrix
@@ -1442,9 +1391,7 @@ namespace SpaceDiscretization
           {
             const auto z_q = phi_height.get_value(q);
             const auto zb_q = data_quadrature_cell_1.get_data(cell, q)[0];
-            //const VectorizedArray<Number> zb_q =
-            //  evaluate_function<dim, Number>(
-            //    *bc->problem_data, phi_height.quadrature_point(q), 0);
+
             phi_height.submit_value(z_q+zb_q, q);
           }
 
@@ -2233,12 +2180,8 @@ namespace SpaceDiscretization
         VectorizedArray<Number> local_max = 0.;
         for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
           {
-            //const VectorizedArray<Number> zb_q =
-            //  evaluate_function<dim, Number>(
-            //    *bc->problem_data, phi_height.quadrature_point(q), 0);
             const auto zq = phi_height.get_value(q);
             const auto qq = phi_discharge.get_value(q);
-            //const auto zb_q = data_cell_1[cell*phi_height.n_q_points+q][0];
             const auto zb_q = data_quadrature_cell_1.get_data(cell, q)[0];
             const auto velocity = model.velocity<dim>(zq, qq, zb_q);
 
@@ -2327,10 +2270,6 @@ namespace SpaceDiscretization
           {
             const auto z_q = phi_height.get_value(q);
             const auto q_q = phi_discharge.get_value(q);
-            //const auto zb_q = data_cell_1[cell*phi_velocity.n_q_points+q][0];
-            //const VectorizedArray<Number> zb_q =
-            //  evaluate_function<dim, Number>(
-            //    *bc->problem_data, phi_velocity.quadrature_point(q), 0);
             const auto zb_q = data_quadrature_cell_1.get_data(cell, q)[0];
 
             phi_velocity.submit_dof_value(q_q/(z_q+zb_q), q);
@@ -2391,7 +2330,7 @@ namespace SpaceDiscretization
         for (unsigned int d = 0; d < dim; ++d)
           x_evaluation_points[d] = evaluation_points[*index][d];
 
-        const auto data = evaluate_function<dim, Number>( // lrp:todo
+        const auto data = evaluate_function<dim, Number>( //lrp: replace with CellDataStorage
             *bc->problem_data, x_evaluation_points, 0);
 
         for (unsigned int v = 0; v < postproc_names.size()-dim; ++v)
