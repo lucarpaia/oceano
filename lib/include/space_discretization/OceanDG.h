@@ -571,12 +571,12 @@ namespace SpaceDiscretization
               evaluate_function<dim, Number, dim+3>(
                 *bc->problem_data, phi_discharge.quadrature_point(q));
             data_q[0] = phi_bathymetry.get_value(q);
-            for (unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v)
-              {
-                const auto h_q = z_q[v] + data_q[0][v];
-                if (h_q < 1e-3)
-                  std::cout << "negative water depth:" << h_q << std::endl;
-              }
+            //for (unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v)
+            //  {
+            //    const auto h_q = z_q[v] + data_q[0][v];
+            //    if (h_q < 1e-3)
+            //      std::cout << "negative water depth: " << z_q[v]  << " " << data_q[0][v] << std::endl;
+            //  } // lrp: this is wrong with vectorization, you got also non existing cells filled with zeros
 
             phi_discharge.submit_gradient(
               model.advectiveflux<dim>(z_q, q_q, data_q[0]), q);
