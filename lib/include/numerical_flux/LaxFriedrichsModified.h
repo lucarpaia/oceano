@@ -217,7 +217,7 @@ namespace NumericalFlux
     Tensor<1, n_tra, Number> numflux;
     for (unsigned int t = 0; t < n_tra; ++t)
       numflux[t] = 0.5 * (flux_m[t] * normal + flux_p[t] * normal) +
-           0.5 * lambda * ((z_m+data_m)*t_m[t] - (z_p+data_p)*t_p[t]);
+                   0.5 * lambda * (z_m * t_m[t] - z_p * t_p[t]);
 
      return numflux;
   }
@@ -249,7 +249,7 @@ namespace NumericalFlux
     const auto flux_p = model.tracer_adv_flux(q_p, t_p);
 
     return 0.5 * (flux_m * normal + flux_p * normal) +
-           0.5 * lambda * ((z_m+data_m)*t_m - (z_p+data_p)*t_p);
+           0.5 * lambda * (z_m * t_m - z_p * t_p);
   }
 #endif
 } // namespace NumericalFlux

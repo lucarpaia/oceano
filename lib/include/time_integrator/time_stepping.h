@@ -203,6 +203,7 @@ namespace TimeSteppingOceano
             tmp[1] = 0.5;
             this->a.push_back(tmp);
             tmp.resize(3);
+            tmp[0] = 0.0;
             tmp[1] = 0.0;
             tmp[2] = 1.0;
             this->a.push_back(tmp);
