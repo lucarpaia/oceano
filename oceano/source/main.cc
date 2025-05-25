@@ -367,7 +367,6 @@ namespace Problem
     void output_results(
       Postprocessor                                    &postprocessor,
       const unsigned int                                result_number,
-      std::map<unsigned int, Point<dim>>               &dof_points,
       const LinearAlgebra::distributed::Vector<Number> &postprocess_velocity);
   };
 
@@ -639,7 +638,7 @@ namespace Problem
 #ifdef OCEANO_WITH_TRACERS
     oceano_operator.initialize_vector(solution_tracer, 2);
 #endif
-    oceano_operator.initialize_data();
+    oceano_operator.initialize_data(mapping, dof_handler_height);
   }
 
 
@@ -816,14 +815,12 @@ namespace Problem
   void OceanoProblem<dim, n_tra>::output_results(
     Postprocessor                                    &postprocessor,
     const unsigned int                                result_number,
-    std::map<unsigned int, Point<dim>>               &dof_points,
     const LinearAlgebra::distributed::Vector<Number> &postprocess_velocity)
   {
     std::vector<LinearAlgebra::distributed::Vector<Number>>
       postprocess_scalar_variables(postprocessor.n_postproc_vars-dim, solution_height);
     oceano_operator.evaluate_postprocess_field(dof_handler_height,
                                                solution_height,
-                                               dof_points,
                                                postprocess_scalar_variables);
 
     if (postprocessor.do_solution)
@@ -1136,17 +1133,14 @@ namespace Problem
     // for the choice of the error estimate.
     Amr::AmrTuner amr_tuner(prm);
 
-    // We introduce two auxiliary vectors to store the velocity and
-    // the dof position. Velocities are derived from discharges and are
-    // ubiquious (output, grid refinement, eddy viscosity/diffusivity).
+    // We introduce an auxiliary vector to store the velocity. Velocities are derived
+    // from discharges and are ubiquious (output, grid refinement, eddy viscosity/diffusivity).
     // We prefer to store them, rather than recompute locally in each code subroutine.
     // Moreover, having a solution vector also for the velocity, we can exploit
     // fast access to the projected velocity at the quadrature points thanks to
     // the capabilities of FEEvaluation.
     LinearAlgebra::distributed::Vector<Number> postprocess_velocity;
     postprocess_velocity.reinit(solution_discharge);
-    std::map<unsigned int, Point<dim>> dof_points =
-      DoFTools::map_dofs_to_support_points(mapping, dof_handler_height);
 
     // We set the initial conditions. This is done in a scope to free
     // the memory associated to the data stored in the initial condition class.
@@ -1276,7 +1270,7 @@ namespace Problem
     // error or norm of the solution.
     Postprocessor postprocessor(prm, oceano_operator.model.postproc_vars_name);
 
-    output_results(postprocessor, 0, dof_points, postprocess_velocity);
+    output_results(postprocessor, 0, postprocess_velocity);
 
     // Now we are ready to start the time loop, which we run until the time
     // has reached the desired end time. Every 5 time steps, we compute a new    
@@ -1357,7 +1351,6 @@ namespace Problem
           output_results(
             postprocessor,
             static_cast<unsigned int>(std::round(time / postprocessor.solution_tick)),
-            dof_points,
             postprocess_velocity);
       }
 

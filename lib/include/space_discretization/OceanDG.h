@@ -234,14 +234,14 @@ namespace SpaceDiscretization
     void evaluate_postprocess_field(
       const DoFHandler<dim>                                   &dof_handler_height,
       const LinearAlgebra::distributed::Vector<Number>        &solution_height,
-      std::map<unsigned int, Point<dim>>                      &evaluation_points,
       std::vector<LinearAlgebra::distributed::Vector<Number>> &computed_scalar_quantities) const;
 
     void
     initialize_vector(LinearAlgebra::distributed::Vector<Number> &vector,
                       const unsigned int                          variable) const;
 
-    void initialize_data();
+    void initialize_data(const Mapping<dim>    &mapping,
+                         const DoFHandler<dim> &dof_handler_height);
 
     ICBC::BcBase<dim, 1+dim+n_tra> *bc;
 
@@ -249,6 +249,7 @@ namespace SpaceDiscretization
     CellDataStorage<Tensor<1, 2, VectorizedArray<Number>>> data_quadrature_cell_1;
     CellDataStorage<VectorizedArray<Number>> data_quadrature_face;
     CellDataStorage<VectorizedArray<Number>> data_quadrature_boundary;
+    CellDataStorage<Number> data_dofs;
 
     // The switch between the different models is realized with
     // Preprocessor keys. As already explained we have avoided pointers to 
@@ -423,7 +424,8 @@ namespace SpaceDiscretization
   // For exmaple, for face quadratures, we must store only the bathymetry,
   // while for high order Gauss quadrature on the cell we need to store
   // the complete data to compute the rhs. The `FEEvaluation` and `FEFaceEvaluation`
-  // are used only to retrieve the quadratures rules.
+  // are used only to retrieve the quadratures rules. We use the `CellDataStorage`
+  // also to store the bathymetry at the dofs for postprocessing nodal quantity.
   template <int dim, int n_tra, int degree, int n_points_1d>
   void OceanoOperator<dim, n_tra, degree, n_points_1d>::reinit(
     const Mapping<dim> &   mapping,
@@ -471,7 +473,9 @@ namespace SpaceDiscretization
 
 
   template <int dim, int n_tra, int degree, int n_points_1d>
-  void OceanoOperator<dim, n_tra, degree, n_points_1d>::initialize_data()
+  void OceanoOperator<dim, n_tra, degree, n_points_1d>::initialize_data(
+    const Mapping<dim>    &mapping,
+    const DoFHandler<dim> &dof_handler)
   {
     data_quadrature_cell_0.initialize(n_points_1d*n_points_1d);
     FEEvaluation<dim, degree, n_points_1d, 1, Number> phi_cell_0(data,0);
@@ -527,6 +531,17 @@ namespace SpaceDiscretization
               evaluate_function<dim, Number>(*bc->problem_data,
                 phi_face.quadrature_point(q), 0));
           }
+      }
+
+    data_dofs.initialize(1);
+    std::map<unsigned int, Point<dim>> dof_points =
+      DoFTools::map_dofs_to_support_points(mapping, dof_handler);
+    IndexSet myset = dof_handler.locally_owned_dofs();
+    IndexSet::ElementIterator index = myset.begin();
+    for (index=myset.begin(); index!=myset.end(); ++index)
+      {
+        data_dofs.submit_data(
+          (*bc->problem_data).value(dof_points[*index], 0));
       }
   }
 
@@ -2299,19 +2314,10 @@ namespace SpaceDiscretization
   // access to the vector is done with the global index. Since we are operating
   // on locally owened dofs that represent a contiguous range, the access should be
   // as fast as a local access.
-  // We are assuming that all the solution variables are distributed in the
-  // same fashion over the processores. For safaty the last assert checks
-  // the size of the solution vectors on each processor and throw an exception if
-  // they are not equals.
-  //
-  // The iterator is not vectorized. However the usual way to recover data with
-  // the `evaluate_function` operates on vectorized data. With a few tricks the
-  // the `evaluate_function` has been adapted to a non-vectorized loop.
   template <int dim, int n_tra, int degree, int n_points_1d>
   void OceanoOperator<dim, n_tra, degree, n_points_1d>::evaluate_postprocess_field(
     const DoFHandler<dim>                                   &dof_handler,
     const LinearAlgebra::distributed::Vector<Number>        &solution_height,
-    std::map<unsigned int, Point<dim>>                      &evaluation_points,
     std::vector<LinearAlgebra::distributed::Vector<Number>> &computed_scalar_quantities) const
   {
     const std::vector<std::string> postproc_names = model.postproc_vars_name;
@@ -2320,29 +2326,24 @@ namespace SpaceDiscretization
            computed_scalar_quantities.empty(),
            ExcInternalError());
 
+    unsigned int count = 0;
     IndexSet myset = dof_handler.locally_owned_dofs();
     IndexSet::ElementIterator index = myset.begin();
     for (index=myset.begin(); index!=myset.end(); ++index)
       {
         const auto height = solution_height(*index);
-
-        Point<dim,VectorizedArray<Number>> x_evaluation_points;
-        for (unsigned int d = 0; d < dim; ++d)
-          x_evaluation_points[d] = evaluation_points[*index][d];
-
-        const auto data = evaluate_function<dim, Number>( //lrp: replace with CellDataStorage
-            *bc->problem_data, x_evaluation_points, 0);
+        const auto zb = data_dofs.get_data(count, 0);
 
         for (unsigned int v = 0; v < postproc_names.size()-dim; ++v)
           {
             if (postproc_names[v+dim] == "pressure")
               computed_scalar_quantities[v](*index) =
-                model.pressure(height, data[0]);
+                model.pressure(height, zb);
             else if (postproc_names[v+dim] == "depth")
-              computed_scalar_quantities[v](*index) = height + data[0];
+              computed_scalar_quantities[v](*index) = height + zb;
             else if (postproc_names[v+dim] == "speed_of_sound")
               computed_scalar_quantities[v](*index) =
-                std::sqrt(model.square_wavespeed(height, data[0]));
+                std::sqrt(model.square_wavespeed(height, zb));
             else
               {
                 std::cout << "Postprocessing variable " << postproc_names[dim+v]
@@ -2351,6 +2352,7 @@ namespace SpaceDiscretization
                 Assert(false, ExcNotImplemented());
               }
           }
+        count++;
       }
   }
 
