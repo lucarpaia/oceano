@@ -638,7 +638,7 @@ namespace Problem
 #ifdef OCEANO_WITH_TRACERS
     oceano_operator.initialize_vector(solution_tracer, 2);
 #endif
-    oceano_operator.initialize_data(mapping, dof_handler_height);
+    oceano_operator.initialize_data_at_quadrature();
   }
 
 
@@ -1323,8 +1323,10 @@ namespace Problem
 
         time += time_step;
 
-        if (static_cast<int>(time / amr_tuner.remesh_tick) !=
-              static_cast<int>((time - time_step) / amr_tuner.remesh_tick))
+        const bool do_refine =
+          (static_cast<int>(time / amr_tuner.remesh_tick) !=
+             static_cast<int>((time - time_step) / amr_tuner.remesh_tick));
+        if (do_refine)
           {
             refine_grid(amr_tuner, postprocess_velocity);
 
@@ -1339,19 +1341,24 @@ namespace Problem
 
         postprocessor.do_solution =
           (static_cast<int>(time / postprocessor.solution_tick) !=
-            static_cast<int>((time - time_step) / postprocessor.solution_tick) ||
-              time >= final_time - 1e-12);
+             static_cast<int>((time - time_step) / postprocessor.solution_tick) ||
+               time >= final_time - 1e-12);
         postprocessor.do_pointHistory =
           (static_cast<int>(time / postprocessor.pointHistory_tick) !=
-            static_cast<int>((time - time_step) / postprocessor.pointHistory_tick));
+             static_cast<int>((time - time_step) / postprocessor.pointHistory_tick));
 #ifdef OCEANO_WITH_MASSCONSERVATIONCHECK
         postprocessor.do_integralHistory = postprocessor.do_solution;
 #endif
         if (postprocessor.do_solution || postprocessor.do_pointHistory)
-          output_results(
-            postprocessor,
-            static_cast<unsigned int>(std::round(time / postprocessor.solution_tick)),
-            postprocess_velocity);
+          {
+            if (do_refine) oceano_operator.initialize_data_at_dofs(mapping,
+                                                                   dof_handler_height);
+
+            output_results(
+              postprocessor,
+              static_cast<unsigned int>(std::round(time / postprocessor.solution_tick)),
+              postprocess_velocity);
+          }
       }
 
     postprocessor.write_history_gnuplot();

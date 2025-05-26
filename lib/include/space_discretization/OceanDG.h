@@ -240,8 +240,11 @@ namespace SpaceDiscretization
     initialize_vector(LinearAlgebra::distributed::Vector<Number> &vector,
                       const unsigned int                          variable) const;
 
-    void initialize_data(const Mapping<dim>    &mapping,
-                         const DoFHandler<dim> &dof_handler_height);
+    void initialize_data_at_quadrature();
+
+    void initialize_data_at_dofs(
+      const Mapping<dim>    &mapping,
+      const DoFHandler<dim> &dof_handler_height);
 
     ICBC::BcBase<dim, 1+dim+n_tra> *bc;
 
@@ -414,7 +417,7 @@ namespace SpaceDiscretization
   // the fast inversion of the mass matrix by tensor product techniques,
   // necessary to ensure optimal computational efficiency overall.
   //
-  // With the last function we want also to initialize lots of data that
+  // With the last two functions we want also to initialize lots of data that
   // we do not want to recompute at each time-step but rather store in memory
   // and access it. These are bathymetry, friction and other data
   // that are defined at quadrature points and that need to be accessed
@@ -424,8 +427,9 @@ namespace SpaceDiscretization
   // For exmaple, for face quadratures, we must store only the bathymetry,
   // while for high order Gauss quadrature on the cell we need to store
   // the complete data to compute the rhs. The `FEEvaluation` and `FEFaceEvaluation`
-  // are used only to retrieve the quadratures rules. We use the `CellDataStorage`
-  // also to store the bathymetry at the dofs for postprocessing nodal quantity.
+  // are used only to retrieve the quadratures rules.
+  // We use the `CellDataStorage` also to store the bathymetry at the dofs for outputting
+  // nodal quantity.
   template <int dim, int n_tra, int degree, int n_points_1d>
   void OceanoOperator<dim, n_tra, degree, n_points_1d>::reinit(
     const Mapping<dim> &   mapping,
@@ -473,9 +477,7 @@ namespace SpaceDiscretization
 
 
   template <int dim, int n_tra, int degree, int n_points_1d>
-  void OceanoOperator<dim, n_tra, degree, n_points_1d>::initialize_data(
-    const Mapping<dim>    &mapping,
-    const DoFHandler<dim> &dof_handler)
+  void OceanoOperator<dim, n_tra, degree, n_points_1d>::initialize_data_at_quadrature()
   {
     data_quadrature_cell_0.initialize(n_points_1d*n_points_1d);
     FEEvaluation<dim, degree, n_points_1d, 1, Number> phi_cell_0(data,0);
@@ -532,7 +534,15 @@ namespace SpaceDiscretization
                 phi_face.quadrature_point(q), 0));
           }
       }
+  }
 
+
+
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_tra, degree, n_points_1d>::initialize_data_at_dofs(
+    const Mapping<dim>    &mapping,
+    const DoFHandler<dim> &dof_handler)
+  {
     data_dofs.initialize(1);
     std::map<unsigned int, Point<dim>> dof_points =
       DoFTools::map_dofs_to_support_points(mapping, dof_handler);
