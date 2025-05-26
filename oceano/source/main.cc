@@ -258,7 +258,9 @@ namespace Problem
   // of what gets evaluated. Note that it would also be possible to extract most
   // information by calculator tools within visualization programs such as
   // ParaView, but it is so much more convenient to do it already when writing
-  // the output.
+  // the output. A boolean is added to reinit external data that is necessary
+  // to output some postprocessing variable, for example, the water depth needs
+  // the bathyemtry.
   //
   // The class is templated with the dimension and the number of tracers.
   // Both are important because they define the number of equation (and of
@@ -361,6 +363,8 @@ namespace Problem
       bool do_integralHistory;
       bool do_error;
       bool do_meshsize;
+
+      bool do_reinit_data;
     };
 
    private:
@@ -406,6 +410,8 @@ namespace Problem
     do_meshsize        = prm.get_bool("Output_meshsize");
 
     prm.leave_subsection();
+
+    do_reinit_data     = true;
 
     n_postproc_vars = postproc_vars_name.size();
   }
@@ -809,7 +815,8 @@ namespace Problem
   // tools that help in the outputting.
   // We examine the outputs one by one. 
   //
-  // At the beginning, we postprocess some variables depending on the model
+  // At the beginning, we may need to reinitialize the data attached to the
+  // dofs. Just after we postprocess the solution variables depending on the model
   // class request. The call `evaluate_postprocess_field` do the job here.
   template <int dim, int n_tra>
   void OceanoProblem<dim, n_tra>::output_results(
@@ -817,6 +824,11 @@ namespace Problem
     const unsigned int                                result_number,
     const LinearAlgebra::distributed::Vector<Number> &postprocess_velocity)
   {
+    if (postprocessor.do_reinit_data)
+    {
+      oceano_operator.initialize_data_at_dofs(mapping, dof_handler_height);
+      postprocessor.do_reinit_data = false;
+    }
     std::vector<LinearAlgebra::distributed::Vector<Number>>
       postprocess_scalar_variables(postprocessor.n_postproc_vars-dim, solution_height);
     oceano_operator.evaluate_postprocess_field(dof_handler_height,
@@ -1323,10 +1335,8 @@ namespace Problem
 
         time += time_step;
 
-        const bool do_refine =
-          (static_cast<int>(time / amr_tuner.remesh_tick) !=
-             static_cast<int>((time - time_step) / amr_tuner.remesh_tick));
-        if (do_refine)
+        if (static_cast<int>(time / amr_tuner.remesh_tick) !=
+             static_cast<int>((time - time_step) / amr_tuner.remesh_tick))
           {
             refine_grid(amr_tuner, postprocess_velocity);
 
@@ -1337,6 +1347,8 @@ namespace Problem
               rk_register_height_2,
               rk_register_discharge_2,
               rk_register_tracer_2);
+
+            postprocessor.do_reinit_data = true;
           }
 
         postprocessor.do_solution =
@@ -1351,9 +1363,6 @@ namespace Problem
 #endif
         if (postprocessor.do_solution || postprocessor.do_pointHistory)
           {
-            if (do_refine) oceano_operator.initialize_data_at_dofs(mapping,
-                                                                   dof_handler_height);
-
             output_results(
               postprocessor,
               static_cast<unsigned int>(std::round(time / postprocessor.solution_tick)),
