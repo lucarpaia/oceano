@@ -648,13 +648,17 @@ namespace SpaceDiscretization
     for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
       {
         phi_height.reinit(cell);
+        phi_height.gather_evaluate(src[0], EvaluationFlags::values);
         phi_discharge.reinit(cell);
         phi_discharge.gather_evaluate(src[1], EvaluationFlags::values);
 
         for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
           {
+            const auto z_q = phi_height.get_value(q);
             const auto q_q = phi_discharge.get_value(q);
-            phi_height.submit_gradient(model.mass_flux<dim>(q_q), q);
+            const auto zb_q = data_quadrature_cell_0.get_data(cell, q)[0];
+
+            phi_height.submit_gradient(model.mass_flux<dim>(z_q, q_q, zb_q), q);
           }
 
         phi_height.integrate_scatter(EvaluationFlags::gradients,
@@ -698,7 +702,7 @@ namespace SpaceDiscretization
 
             phi_discharge.submit_gradient(
               model.momentum_adv_diff_flux<dim>(
-                z_q, q_q, (z_q+data_q[0])*du_q, data_q[0], area_cell),
+                z_q, q_q, model.depth(z_q, data_q[0])*du_q, data_q[0], area_cell),
               q);
 
             phi_discharge.submit_value(
@@ -748,7 +752,7 @@ namespace SpaceDiscretization
 
             phi_discharge.submit_gradient(
               model.momentum_adv_diff_flux<dim>(
-                z_q, q_q, (z_q+data_q[0])*du_q, data_q[0], area_cell),
+                z_q, q_q, model.depth(z_q, data_q[0])*du_q, data_q[0], area_cell),
               q);
 
             phi_discharge.submit_value(
@@ -1382,7 +1386,7 @@ namespace SpaceDiscretization
             inverse_jxw[q] *= 1. / ( 1. + factor_matrix
               * model.bottom_friction.jacobian<dim>(model.velocity<dim>(z_q, q_q, data_q[0]),
                                                     data_q[1],
-                                                    z_q+data_q[0])
+                                                    model.depth(z_q, data_q[0]))
                                    );
           }
 
@@ -1417,7 +1421,7 @@ namespace SpaceDiscretization
             const auto z_q = phi_height.get_value(q);
             const auto zb_q = data_quadrature_cell_1.get_data(cell, q)[0];
 
-            phi_height.submit_value(z_q+zb_q, q);
+            phi_height.submit_value(model.depth(z_q, zb_q), q);
           }
 
         phi_height.integrate_scatter(EvaluationFlags::values,
@@ -2297,7 +2301,8 @@ namespace SpaceDiscretization
             const auto q_q = phi_discharge.get_value(q);
             const auto zb_q = data_quadrature_cell_1.get_data(cell, q)[0];
 
-            phi_velocity.submit_dof_value(q_q/(z_q+zb_q), q);
+            phi_velocity.submit_dof_value(
+              model.velocity<dim>(z_q, q_q, zb_q), q);
           }
         inverse_velocity.transform_from_q_points_to_basis(dim,
                                                  phi_velocity.begin_dof_values(),
@@ -2350,7 +2355,9 @@ namespace SpaceDiscretization
               computed_scalar_quantities[v](*index) =
                 model.pressure(height, zb);
             else if (postproc_names[v+dim] == "depth")
-              computed_scalar_quantities[v](*index) = height + zb;
+              computed_scalar_quantities[v](*index) = model.depth(height, zb);
+            else if (postproc_names[v+dim] == "bathymetry")
+              computed_scalar_quantities[v](*index) = zb;
             else if (postproc_names[v+dim] == "speed_of_sound")
               computed_scalar_quantities[v](*index) =
                 std::sqrt(model.square_wavespeed(height, zb));

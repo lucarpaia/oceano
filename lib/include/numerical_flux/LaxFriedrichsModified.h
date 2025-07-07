@@ -155,8 +155,14 @@ namespace NumericalFlux
     const auto lambda =
       0.5 * std::max(lambda_p, lambda_m);
 
-    return 0.5 * (q_m * normal + q_p * normal) +
-           0.5 * lambda * (z_m - z_p);
+    const auto flux_m = model.mass_flux<dim>(z_m, q_m, data_m);
+    const auto flux_p = model.mass_flux<dim>(z_p, q_p, data_p);
+
+    const auto zcorr_m = std::max(z_m, -data_m);
+    const auto zcorr_p = std::max(z_p, -data_p);
+
+    return 0.5 * (flux_m * normal + flux_p * normal) +
+           0.5 * lambda * (zcorr_m - zcorr_p);
   }
 
   template <int dim, typename Number>
@@ -183,8 +189,11 @@ namespace NumericalFlux
     const auto flux_m = model.momentum_adv_flux<dim>(z_m, q_m, data_m);
     const auto flux_p = model.momentum_adv_flux<dim>(z_p, q_p, data_p);
 
+    const auto qcorr_m = model.mass_flux<dim>(z_m, q_m, data_m);
+    const auto qcorr_p = model.mass_flux<dim>(z_p, q_p, data_p);
+
     return 0.5 * (flux_m * normal + flux_p * normal) +
-           0.5 * lambda * (q_m - q_p);
+           0.5 * lambda * (qcorr_m - qcorr_p);
   }
 
 #ifdef OCEANO_WITH_TRACERS
