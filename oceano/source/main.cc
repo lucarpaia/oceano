@@ -56,6 +56,7 @@
 #undef  ICBC_LAKEATREST
 #undef  ICBC_TRACERADVECTION
 #undef  ICBC_CHANNELFLOW
+#undef  ICBC_THACKEROSCILLATIONS1D
 #define ICBC_REALISTIC
 // We have two models: a non-hydrostatic Euler model for perfect gas which was the
 // original model coded in the deal.II example and the shallow water model. The Euler model
@@ -190,6 +191,8 @@
 #include <icbc/Icbc_TracerAdvection.h>
 #elif defined ICBC_CHANNELFLOW
 #include <icbc/Icbc_ChannelFlow.h>
+#elif defined ICBC_THACKEROSCILLATIONS1D
+#include <icbc/Icbc_ThackerOscillations1d.h>
 #elif defined ICBC_REALISTIC
 #include <icbc/Icbc_Realistic.h>
 #endif
@@ -1434,6 +1437,8 @@ int main(int argc, char **argv)
       bc = new ICBC::BcTracerAdvection<dimension, n_variables>(prm);
 #elif defined ICBC_CHANNELFLOW
       bc = new ICBC::BcChannelFlow<dimension, n_variables>(prm);
+#elif defined ICBC_THACKEROSCILLATIONS1D
+      bc = new ICBC::BcThackerOscillations1d<dimension, n_variables>(prm);
 #elif defined ICBC_REALISTIC
       bc = new ICBC::BcRealistic<dimension, n_variables>(prm);
 #else
