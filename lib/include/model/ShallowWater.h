@@ -301,13 +301,14 @@ namespace Model
   {
     const Number h = depth(height, bathymetry);
     const Number h4 = h*h*h*h;
-    const Number inverse_depth = h / sqrt( h4 + std::max(h4, Number(1.e-2)) );
+    const Number cu = Number(1.e-1);
+    const Number inverse_depth = h / sqrt( h4 + std::max(h4, cu*cu*cu*cu) );
 
     return sqrt(2.) * discharge * inverse_depth;
     /*Tensor<1, dim, Number> vel; //lrp: wetting-drying
     for (unsigned int v = 0; v < 2; ++v)
     {
-    if (h[v]>1.e-2)
+    if (h[v]>1.e-3)
       for (unsigned int d = 0; d < dim; ++d)
         vel[d][v] = discharge[d][v]/h[v];
     else
@@ -323,7 +324,7 @@ namespace Model
     ShallowWater::depth(const Number height,
                         const Number bathymetry) const
   {
-    return std::max(height + bathymetry, Number(1.e-8));
+    return std::max(height + bathymetry, Number(5.e-2));
   }
 
   template <typename Number>
