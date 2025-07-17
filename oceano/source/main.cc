@@ -729,8 +729,16 @@ namespace Problem
       GridRefinement::coarsen(
         triangulation, estimated_error_per_cell, amr_tuner.threshold_coarsening * max_error);
 
+      // We enforce bounds on maximum and minimum mesh levels with the following lines.
+      // The minimum mesh level is the number of global refinement while the maximum
+      // is related both by a user provided value and a minimum target mesh size.
+      const unsigned int min_grid_level = amr_tuner.min_level_refinement;
       const unsigned int max_grid_level = amr_tuner.max_level_refinement;
       const unsigned int min_grid_size = amr_tuner.min_mesh_size;
+      if (min_grid_level > 0)
+        for (const auto &cell :
+             triangulation.active_cell_iterators_on_level(min_grid_level))
+          cell->clear_coarsen_flag();
       if (triangulation.n_levels() > max_grid_level)
         for (const auto &cell :
              triangulation.active_cell_iterators_on_level(max_grid_level))
