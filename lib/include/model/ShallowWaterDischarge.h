@@ -16,8 +16,8 @@
  *
  * Author: Luca Arpaia,        2023
  */
-#ifndef SHALLOWWATER_HPP
-#define SHALLOWWATER_HPP
+#ifndef SHALLOWWATERDISCHARGE_HPP
+#define SHALLOWWATERDISCHARGE_HPP
 
 // The following files include the oceano libraries
 #include <io/ParameterReader.h>
@@ -40,13 +40,15 @@ namespace Model
   // In the following functions, we implement the various problem-specific
   // operators pertaining to the Shallow Water equations. The Shallow Water
   // equations may be implemented in different ways. In this class we
-  // implement the Shallow Water equation in conservative form but using as
-  // prognostic variables the water height and the velocity. As a result each
-  // function acts on the vector of prognostic variables $[\zeta, \mathbf{u}]$,
+  // implement the Shallow Water equation in conservative form and using as
+  // prognostic variables the water height and the discharge. As a result each
+  // function acts on the vector of prognostic variables $[\zeta, h\mathbf{u}]$,
   // on their gradients and on the bathymetry function.
   // From the solution we computes various derived quantities.
   //
-  // One thing to note here is that we decorate all those functions with the keyword
+  // First out is the computation of the velocity, that we derive from the
+  // discharge variable $h \mathbf{u}$ by division by $h$. One thing to
+  // note here is that we decorate all those functions with the keyword
   // `DEAL_II_ALWAYS_INLINE`. This is a special macro that maps to a
   // compiler-specific keyword that tells the compiler to never create a
   // function call for any of those functions, and instead move the
@@ -66,6 +68,17 @@ namespace Model
   // may not have figured it out by themselves but where we know for sure that
   // inlining is a win.)
   //
+  // Another trick we apply is a separate variable for the inverse depth
+  // $\frac{1}{h}$. This enables the compiler to only perform a single
+  // division for the flux, despite the division being used at several
+  // places. As divisions are around ten to twenty times as expensive as
+  // multiplications or additions, avoiding redundant divisions is crucial for
+  // performance. We note that taking the inverse first and later multiplying
+  // with it is not equivalent to a division in floating point arithmetic due
+  // to roundoff effects, so the compiler is not allowed to exchange one way by
+  // the other with standard optimization flags. However, it is also not
+  // particularly difficult to write the code in the right way.
+  //
   // To summarize, the chosen strategy of always inlining and careful
   // definition of expensive arithmetic operations allows us to write compact
   // code without passing all intermediate results around, despite making sure
@@ -76,11 +89,11 @@ namespace Model
   // to the class functions which take `Number` while receive
   // `VectorizedArray<Number>`. I don't know why, without a template class,
   // everything works. For now I have left both classes without template.
-  class ShallowWater
+  class ShallowWaterDischarge
   {
   public:
-    ShallowWater(IO::ParameterHandler &prm);
-    ~ShallowWater(){};
+    ShallowWaterDischarge(IO::ParameterHandler &prm);
+    ~ShallowWaterDischarge(){};
  
     double g;
 
@@ -129,7 +142,7 @@ namespace Model
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Number>
       velocity(const Number                  height,
-               const Tensor<1, dim, Number> &velocity,
+               const Tensor<1, dim, Number> &discharge,
                const Number                  bathymetry) const;
 
     // The next function computes the pressure from the vector of conserved
@@ -155,21 +168,21 @@ namespace Model
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Number>
       mass_flux(const Number                  height,
-                const Tensor<1, dim, Number> &velocity,
+                const Tensor<1, dim, Number> &discharge,
                 const Number                  bathymetry) const;
 
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Tensor<1, dim, Number>>
       momentum_adv_flux(const Number                  height,
-                        const Tensor<1, dim, Number> &velocity,
+                        const Tensor<1, dim, Number> &discharge,
                         const Number                  bathymetry) const;
 
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Tensor<1, dim, Number>>
       momentum_adv_diff_flux(const Number                    height,
-                             const Tensor<1, dim, Number>   &velocity,
+                             const Tensor<1, dim, Number>   &discharge,
                              const Tensor<dim, dim, Number> &gradient_velocity,
                              const Number                    bathymetry,
                              const Number                    area) const;
@@ -184,7 +197,7 @@ namespace Model
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Number>
       source(const Number                    height,
-             const Tensor<1, dim, Number>   &velocity,
+             const Tensor<1, dim, Number>   &discharge,
              const Tensor<1, dim, Number>   &gradient_height,
              const Tensor<1, dim+3, Number> &parameters) const;
 
@@ -238,8 +251,8 @@ namespace Model
 
     // The next function computes the weights that multiply the prognostic variable in
     // the momentum equation, to obtain a transformation between conservative and
-    // non-conservative variables (discharge/velocity). Since we use velocity as
-    // prognostic variable, the weight that bring to the conservative discharge is the
+    // non-conservative variables (discharge/velocity). Since we use the discharge as
+    // prognostic variable, the weight that brings to the conservative discharge is the
     // water depth.
     template <typename Number>
     inline DEAL_II_ALWAYS_INLINE //
@@ -266,7 +279,7 @@ namespace Model
   // parameters are stored as class members. In this way they are defined/read 
   // from file in one place and then used whenever needed  with `model.param`, 
   // instead of being read/defined multiple times.
-  ShallowWater::ShallowWater(
+  ShallowWaterDischarge::ShallowWaterDischarge(
     IO::ParameterHandler &prm)
     : bottom_friction(prm)
     , wind_stress(prm)
@@ -281,7 +294,7 @@ namespace Model
   template <int dim, int n_tra>
   inline DEAL_II_ALWAYS_INLINE //
     void
-    ShallowWater::set_vars_name()
+    ShallowWaterDischarge::set_vars_name()
   {
     vars_name.push_back("free_surface");
     for (unsigned int d = 0; d < dim; ++d)
@@ -294,18 +307,23 @@ namespace Model
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
-    ShallowWater::velocity(const Number                  /*height*/,
-                           const Tensor<1, dim, Number> &velocity,
-                           const Number                  /*bathymetry*/) const
+    ShallowWaterDischarge::velocity(
+      const Number                  height,
+      const Tensor<1, dim, Number> &discharge,
+      const Number                  bathymetry) const
   {
-    return velocity;
+    const Number inverse_depth
+      = Number(1.) / (height + bathymetry);
+
+    return discharge * inverse_depth;
   }
 
   template <typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Number
-    ShallowWater::pressure(const Number height,
-                           const Number bathymetry) const
+    ShallowWaterDischarge::pressure(
+      const Number height,
+      const Number bathymetry) const
   {
     const Number depth = height + bathymetry;
     return 0.5 * g * depth*depth;
@@ -314,26 +332,29 @@ namespace Model
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
-    ShallowWater::mass_flux(const Number                  height,
-                            const Tensor<1, dim, Number> &velocity,
-                            const Number                  bathymetry) const
+    ShallowWaterDischarge::mass_flux(
+      const Number                  /*height*/,
+      const Tensor<1, dim, Number> &discharge,
+      const Number                  /*bathymetry*/) const
   {
-    return (height + bathymetry) * velocity;
+    return discharge;
   }
 
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Tensor<1, dim, Number>>
-    ShallowWater::momentum_adv_flux(const Number                  height,
-                                    const Tensor<1, dim, Number> &velocity,
-                                    const Number                  bathymetry) const
+    ShallowWaterDischarge::momentum_adv_flux(
+      const Number                  height,
+      const Tensor<1, dim, Number> &discharge,
+      const Number                  bathymetry) const
   {
-    const Number depth = height + bathymetry;
-
+    const Tensor<1, dim, Number> v =
+      velocity<dim>(height, discharge, bathymetry);
+    
     Tensor<1, dim, Tensor<1, dim, Number>> flux;
     for (unsigned int d = 0; d < dim; ++d)
       for (unsigned int e = 0; e < dim; ++e)
-        flux[e][d] = depth * velocity[e] * velocity[d];
+        flux[e][d] = discharge[e] * v[d];
 
     return flux;
   }
@@ -341,14 +362,15 @@ namespace Model
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Tensor<1, dim, Number>>
-    ShallowWater::momentum_adv_diff_flux(
+    ShallowWaterDischarge::momentum_adv_diff_flux(
       const Number                    height,
-      const Tensor<1, dim, Number>   &velocity,
+      const Tensor<1, dim, Number>   &discharge,
       const Tensor<dim, dim, Number> &gradient_velocity,
       const Number                    bathymetry,
       const Number                    area) const
   {
-    const Number depth = height + bathymetry;
+    const Tensor<1, dim, Number> v =
+      velocity<dim>(height, discharge, bathymetry);
 
     const Number nu = viscosity_coefficient.value<dim, Number>(gradient_velocity, area);
     const Number div = gradient_velocity[0][0] + gradient_velocity[1][1];
@@ -356,7 +378,7 @@ namespace Model
     Tensor<1, dim, Tensor<1, dim, Number>> flux;
     for (unsigned int d = 0; d < dim; ++d)
       for (unsigned int e = 0; e < dim; ++e)
-        flux[e][d] = depth * velocity[e] * velocity[d]
+        flux[e][d] = discharge[e] * v[d]
           - nu * (gradient_velocity[e][d] + gradient_velocity[d][e]);
     for (unsigned int e = 0; e < dim; ++e)
       flux[e][e] += nu * div;
@@ -367,19 +389,21 @@ namespace Model
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
-    ShallowWater::source(const Number                    height,
-                         const Tensor<1, dim, Number>   &velocity,
+    ShallowWaterDischarge::source(const Number                    height,
+                         const Tensor<1, dim, Number>   &discharge,
                          const Tensor<1, dim, Number>   &gradient_height,
                          const Tensor<1, dim+3, Number> &parameters) const
   {
+    const Tensor<1, dim, Number> v =
+      velocity<dim>(height, discharge, parameters[0]);
     const Number depth = height + parameters[0];
 
     const Tensor<1, dim, Number> bottomfric =
-      bottom_friction.source<dim, Number>(velocity, parameters[1], depth);
+      bottom_friction.source<dim, Number>(v, parameters[1], depth);
     const Tensor<1, dim, Number> windstress =
       wind_stress.source<dim, Number>(&parameters[2]);
     const Tensor<1, dim, Number> coriolis =
-      coriolis_force.source<dim, Number>(velocity, parameters[4]);
+      coriolis_force.source<dim, Number>(discharge, parameters[4]);
 
     Tensor<1, dim, Number> source =
         - g * depth * gradient_height
@@ -393,7 +417,7 @@ namespace Model
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
-    ShallowWater::source_nonstiff(
+    ShallowWaterDischarge::source_nonstiff(
       const Number                    height,
       const Tensor<1, dim, Number>   &discharge,
       const Tensor<1, dim, Number>   &gradient_height,
@@ -417,7 +441,7 @@ namespace Model
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
-    ShallowWater::source_stiff(
+    ShallowWaterDischarge::source_stiff(
       const Number                  height,
       const Tensor<1, dim, Number> &discharge,
       const Number                  bathymetry,
@@ -433,7 +457,7 @@ namespace Model
   template <typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Number
-    ShallowWater::square_wavespeed(
+    ShallowWaterDischarge::square_wavespeed(
       const Number                  height,
       const Number                  bathymetry) const
   {
@@ -443,7 +467,7 @@ namespace Model
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Number
-    ShallowWater::riemann_invariant_p(
+    ShallowWaterDischarge::riemann_invariant_p(
       const Number                  height,
       const Tensor<1, dim, Number> &discharge,
       const Tensor<1, dim, Number> &normal,
@@ -460,7 +484,7 @@ namespace Model
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Number
-    ShallowWater::riemann_invariant_m(
+    ShallowWaterDischarge::riemann_invariant_m(
       const Number                  height,
       const Tensor<1, dim, Number> &discharge,
       const Tensor<1, dim, Number> &normal,
@@ -477,21 +501,21 @@ namespace Model
   template <typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Number
-    ShallowWater::factor_to_discharge(
-      const Number height,
-      const Number bathymetry) const
-  {
-    return height + bathymetry;
-  }
-
-  template <typename Number>
-  inline DEAL_II_ALWAYS_INLINE //
-    Number
-    ShallowWater::factor_from_velocity(
+    ShallowWaterDischarge::factor_to_discharge(
       const Number /*height*/,
       const Number /*bathymetry*/) const
   {
     return Number(1.);
   }
+
+  template <typename Number>
+  inline DEAL_II_ALWAYS_INLINE //
+    Number
+    ShallowWaterDischarge::factor_from_velocity(
+      const Number height,
+      const Number bathymetry) const
+  {
+    return height + bathymetry;
+  }
 } // namespace Model
-#endif //SHALLOWWATER_HPP
+#endif //SHALLOWWATERDISCHARGE_HPP

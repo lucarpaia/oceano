@@ -90,6 +90,8 @@ namespace NumericalFlux
     Model::Euler model;
 #elif defined MODEL_SHALLOWWATER
     Model::ShallowWater model;
+#elif defined MODEL_SHALLOWWATERDISCHARGE
+    Model::ShallowWaterDischarge model;
 #elif defined MODEL_SHALLOWWATERWITHTRACER
     Model::ShallowWaterWithTracer model;
 #endif

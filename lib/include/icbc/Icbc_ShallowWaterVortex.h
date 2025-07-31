@@ -90,7 +90,7 @@ namespace ICBC
     double g;
   };  
 
-  // We return either the water depth or the momentum
+  // We return either the water depth or the velocity
   // depending on which component is requested.
   template <int dim, int n_vars>
   double ExactSolution<dim, n_vars>::value(const Point<dim> & x,
@@ -174,9 +174,9 @@ namespace ICBC
     if (component == 0)
       return depth;
     else if (component == 1)
-      return depth * u;
+      return u;
     else if (component == 2)
-      return depth * v;
+      return v;
     else
       return 0.1 * x[1];
   }
