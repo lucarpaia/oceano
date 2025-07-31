@@ -2105,12 +2105,15 @@ namespace SpaceDiscretization
         phi_height.gather_evaluate(solution_height, EvaluationFlags::values);
         for (unsigned int q = 0; q < phi_discharge.n_q_points; ++q) 
           {
-            const auto z_q = phi_height.get_value(q);
-            const auto zb_q = data_quadrature_cell_1.get_data(cell, q)[0];
+            const auto fact_q = model.factor_from_velocity(
+                             evaluate_function<dim, Number>(function,
+                                                phi_discharge.quadrature_point(q),
+                                                0),
+                             data_quadrature_cell_1.get_data(cell, q)[0]);
             for (unsigned int d = 0; d < dim; ++d)
               discharge[d] = evaluate_function<dim, Number>(function,
                                                 phi_discharge.quadrature_point(q),
-                                                1+d) * model.factor_from_velocity(z_q, zb_q);
+                                                1+d) * fact_q;
             phi_discharge.submit_dof_value(discharge, q);
           }
         inverse_discharge.transform_from_q_points_to_basis(dim,
@@ -2180,13 +2183,16 @@ namespace SpaceDiscretization
           }
         for (unsigned int q = 0; q < phi_discharge.n_q_points; ++q)
           {
-            const auto z_q = phi_height.get_value(q);
-            const auto zb_q = data_quadrature_cell_1.get_data(cell, q)[0];
+            const auto fact_q = model.factor_from_velocity(
+                             evaluate_function<dim, Number>(function,
+                                                phi_discharge.quadrature_point(q),
+                                                0),
+                             data_quadrature_cell_0.get_data(cell, q)[0]);
             for (unsigned int d = 0; d < dim; ++d)
               error[d+1] = evaluate_function<dim, Number>(
-              			function, 
-              			phi_discharge.quadrature_point(q),
-                                d+1) * model.factor_from_velocity(z_q, zb_q) -
+                                function,
+                                phi_discharge.quadrature_point(q),
+                                d+1) * fact_q -
               		  phi_discharge.get_value(q)[d];
             const auto JxW = phi_discharge.JxW(q);
             for (unsigned int d = 0; d < dim; ++d)
