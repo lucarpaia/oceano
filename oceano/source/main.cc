@@ -100,11 +100,17 @@
 // Finally we define new preprocessors that do not identify a specific class but rather add a
 // functionality to the scheme, for example the computation of tracers.
 // For this reason it starts with `OCEANO_WITH`.
-// In some case they are used just for a more compact `#if defined` statement.
+// In some case they are used just for a more compact `#if defined` statement. Previous
+// keys are used to avoid runtime polymorphism and they activate/deactivate classes, so they
+// should appear only when the class is defined, keeping the code clean. Differently, these keys
+// may appear at different places in the code whenever a functionality is requested. They make
+// the code more complex to read but, at the same time, they make the implementation more
+// flexible, avoiding to define a new class for each new functionality.
 #undef  OCEANO_WITH_TRACERS
 #if defined MODEL_SHALLOWWATERWITHTRACER
 #define OCEANO_WITH_TRACERS
 #endif
+// Activate global mass conservation checks:
 #undef  OCEANO_WITH_MASSCONSERVATIONCHECK
 
 // The include files are similar to the previous matrix-free tutorial programs
@@ -349,7 +355,7 @@ namespace Problem
       std::map<double, std::vector<std::vector<double>>> pointHistory_data;
       std::vector<Point<dim>> point_vector;
 
-      std::map<double, std::array<double, 2>> integralHistory_data;
+      std::map<double, std::array<double, (n_tra==0) ? 2 : 4>> integralHistory_data;
 
       // variables
       std::vector<std::string> postproc_vars_name;
@@ -510,6 +516,10 @@ namespace Problem
         {
           to_gnuplot << i.first << " " << std::setprecision(14) << i.second[0]
                                 << " " << std::setprecision(12) << i.second[1]
+#ifdef OCEANO_WITH_TRACERS
+                                << " " << std::setprecision(14) << i.second[2]
+                                << " " << std::setprecision(12) << i.second[3]
+#endif
                                 << '\n';
         }
       to_gnuplot.close();
@@ -1082,7 +1092,12 @@ namespace Problem
       // balance is strictly related to the scheme, here we do almost nothing since much of
       // the work has been done into the space discretization class, `OceanoOperator`.
       postprocessor.integralHistory_data[time] =
-        {{oceano_operator.check_mass_cell_integral, oceano_operator.check_mass_boundary_integral}};
+        {{oceano_operator.check_mass_cell_integral, oceano_operator.check_mass_boundary_integral
+#ifdef OCEANO_WITH_TRACERS
+         ,oceano_operator.check_tracer_mass_cell_integral
+         ,oceano_operator.check_tracer_mass_boundary_integral
+#endif
+        }};
     }
 
     if (postprocessor.do_meshsize)

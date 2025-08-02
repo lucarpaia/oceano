@@ -211,7 +211,7 @@ namespace SpaceDiscretization
     check_mass(
       const Number                                                   factor_residual,
       const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
-      LinearAlgebra::distributed::Vector<Number>                    &solution_height);
+      const LinearAlgebra::distributed::Vector<Number>              &solution_height);
 
     void project_hydro(const Function<dim> &                       function,
                        LinearAlgebra::distributed::Vector<Number> &solution_height,
@@ -1914,11 +1914,14 @@ namespace SpaceDiscretization
   // Local face and cell integrals are zero when summed over the dofs and are
   // not explicitly computed but they are replaced by fake functions that do
   // nothing.
+  // We have not used a different code path for the last stage where we need
+  // to compute the update mass. Instead we recompute the mass at each stage
+  // and overwrite the previous value.
   template <int dim, int n_tra, int degree, int n_points_1d>
   void OceanoOperator<dim, n_tra, degree, n_points_1d>::check_mass(
     const Number                                                   factor_residual,
     const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
-    LinearAlgebra::distributed::Vector<Number>                    &solution_height)
+    const LinearAlgebra::distributed::Vector<Number>              &solution_height)
   {
 
     {
@@ -1940,21 +1943,22 @@ namespace SpaceDiscretization
                 true,
                 MatrixFree<dim, Number>::DataAccessOnFaces::values,
                 MatrixFree<dim, Number>::DataAccessOnFaces::values);
-      data.cell_loop(&OceanoOperator::local_apply_cell_mass_depth,
-                     this,
-                     integral_depth,
-                     solution_height,
-                     std::function<void(const unsigned int, const unsigned int)>(),
-                     [&](const unsigned int start_range, const unsigned int end_range) {
-                       /* DEAL_II_OPENMP_SIMD_PRAGMA */
-                       for (unsigned int i = start_range; i < end_range; ++i)
-                         {
-                           const Number k_i     = vec_ki_depth.local_element(i);
-                           local_integrals[0] += integral_depth.local_element(i);
-                           local_integrals[1] += factor_residual * k_i;
-                         }
-                     },
-                     0);
+      data.cell_loop(
+        &OceanoOperator::local_apply_cell_mass_depth,
+        this,
+        integral_depth,
+        solution_height,
+        std::function<void(const unsigned int, const unsigned int)>(),
+        [&](const unsigned int start_range, const unsigned int end_range) {
+          /* DEAL_II_OPENMP_SIMD_PRAGMA */
+          for (unsigned int i = start_range; i < end_range; ++i)
+            {
+              const Number k_i     = vec_ki_depth.local_element(i);
+              local_integrals[0] += integral_depth.local_element(i);
+              local_integrals[1] += factor_residual * k_i;
+            }
+        },
+        0);
 
       double global_integrals[2];
       Utilities::MPI::sum(local_integrals, MPI_COMM_WORLD, global_integrals);

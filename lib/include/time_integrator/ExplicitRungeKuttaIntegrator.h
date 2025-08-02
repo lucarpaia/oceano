@@ -270,6 +270,12 @@ namespace TimeIntegrator
     pde_operator.check_mass(b_i[0],
                             vec_ri,
                             solution_height);
+#ifdef OCEANO_WITH_TRACERS
+    pde_operator.check_tracer_mass(b_i[0],
+                                   vec_ri,
+                                   solution_height,
+                                   solution_tracer);
+#endif
 #endif
 
     for (unsigned int stage = 1; stage < ci.size(); ++stage)
@@ -311,6 +317,12 @@ namespace TimeIntegrator
         pde_operator.check_mass(b_i[stage],
                                 vec_ri,
                                 solution_height);
+#ifdef OCEANO_WITH_TRACERS
+        pde_operator.check_tracer_mass(b_i[stage],
+                                       vec_ri,
+                                       solution_height,
+                                       solution_tracer);
+#endif
 #endif
       }
   }

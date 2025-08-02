@@ -127,6 +127,9 @@ namespace SpaceDiscretization
   public:
     static constexpr unsigned int n_quadrature_points_1d = n_points_1d;
 
+    double check_tracer_mass_cell_integral;
+    double check_tracer_mass_boundary_integral;
+
     OceanoOperatorWithTracer(IO::ParameterHandler           &param,
                              ICBC::BcBase<dim, 1+dim+n_tra> *bc,
                              TimerOutput                    &timer_output);
@@ -149,6 +152,13 @@ namespace SpaceDiscretization
       LinearAlgebra::distributed::Vector<Number>                    &next_ri_tracer) const;
 
 #endif
+    void
+    check_tracer_mass(
+      const Number                                                   factor_residual,
+      const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
+      const LinearAlgebra::distributed::Vector<Number>              &solution_height,
+      const LinearAlgebra::distributed::Vector<Number>              &solution_tracer);
+
     void project_tracers(const Function<dim> &                       function,
                          LinearAlgebra::distributed::Vector<Number> &solution_tracer) const;
 
@@ -202,6 +212,12 @@ namespace SpaceDiscretization
       LinearAlgebra::distributed::Vector<Number>                    &dst,
       const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
       const std::pair<unsigned int, unsigned int>                   &face_range) const;
+
+    void local_apply_fake_tracer(
+      const MatrixFree<dim, Number>                                 &data,
+      LinearAlgebra::distributed::Vector<Number>                    &dst,
+      const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
+      const std::pair<unsigned int, unsigned int>                   &face_range) const;
   };
 
 
@@ -212,7 +228,10 @@ namespace SpaceDiscretization
     ICBC::BcBase<dim, 1+dim+n_tra>   *bc,
     TimerOutput                      &timer)
     : OceanoOperator<dim, n_tra, degree, n_points_1d>(param, bc, timer)
-  {}
+  {
+     check_tracer_mass_cell_integral = 0.;
+     check_tracer_mass_boundary_integral = 0.;
+  }
 
 
 
@@ -757,6 +776,22 @@ namespace SpaceDiscretization
       }
   }
 
+#ifdef OCEANO_WITH_MASSCONSERVATIONCHECK
+  // The next functions is a dummy function used to compute the tracer
+  // conservation balance check. It does nothing. We could have used the similar
+  // dummy function in the `OceanDG` class but we prefer to keep local operators
+  // private.
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperatorWithTracer<dim, n_tra, degree, n_points_1d>::local_apply_fake_tracer(
+    const MatrixFree<dim, Number> &,
+    LinearAlgebra::distributed::Vector<Number>                    &/*dst*/,
+    const std::vector<LinearAlgebra::distributed::Vector<Number>> &/*src*/,
+    const std::pair<unsigned int, unsigned int>                   &/*face_range*/) const
+  {
+  }
+#endif
+
+
   // @sect4{The apply() and related functions}
 
   // We now come to the function which implements the evaluation of the ocean
@@ -900,6 +935,71 @@ namespace SpaceDiscretization
             {vec_ki_tracer.front(), next_ri_height},
             true);
         }
+    }
+  }
+#endif
+#ifdef OCEANO_WITH_MASSCONSERVATIONCHECK
+  // The tracer conservation balance is based on a similar algorithm of the one
+  // that performs the global mass check. We refer the related comments for details.
+  // The updated tracer integral over the whole computational domain must be
+  // equal to the integral of the boundary flux over the whole simulation time
+  // plus the initial mass (which is only a constant and it thus not computed
+  // here, it can be recovered in postprocessing).
+  // Concerning the implementation, we use the same code structure of the tracer
+  // update, which make things simpler and eventually free of errors.
+  // Space integrals are realized with sums over the dofs and cells.
+  // The boundary flux is also cumulated in time to realized the time integral.
+  // Local face and cell integrals are zero when summed over the dofs and are
+  // not explicitly computed but they are replaced by fake functions that do
+  // nothing.
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperatorWithTracer<dim, n_tra, degree, n_points_1d>::check_tracer_mass(
+    const Number                                                   factor_residual,
+    const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
+    const LinearAlgebra::distributed::Vector<Number>              &solution_height,
+    const LinearAlgebra::distributed::Vector<Number>              &solution_tracer)
+  {
+
+    {
+      TimerOutput::Scope t(timer, "rk_stage tracer - check mass");
+
+      LinearAlgebra::distributed::Vector<Number> vec_ki_tracer;
+      LinearAlgebra::distributed::Vector<Number> integral_tracer;
+      vec_ki_tracer.reinit(solution_tracer);
+      integral_tracer.reinit(solution_tracer);
+
+      double local_integrals[2] = {0., 0.};
+
+      data.loop(&OceanoOperatorWithTracer::local_apply_fake_tracer,
+                &OceanoOperatorWithTracer::local_apply_fake_tracer,
+                &OceanoOperatorWithTracer::local_apply_boundary_face_tracer,
+                this,
+                vec_ki_tracer,
+                current_ri,
+                true,
+                MatrixFree<dim, Number>::DataAccessOnFaces::values,
+                MatrixFree<dim, Number>::DataAccessOnFaces::values);
+      data.cell_loop(
+        &OceanoOperatorWithTracer::local_apply_cell_mass_tracer,
+        this,
+        integral_tracer,
+        {solution_tracer, solution_height},
+        std::function<void(const unsigned int, const unsigned int)>(),
+        [&](const unsigned int start_range, const unsigned int end_range) {
+          /* DEAL_II_OPENMP_SIMD_PRAGMA */
+          for (unsigned int i = start_range; i < end_range; ++i)
+            {
+              const Number k_i     = vec_ki_tracer.local_element(i);
+              local_integrals[0] += integral_tracer.local_element(i);
+              local_integrals[1] += factor_residual * k_i;
+            }
+        },
+        2);
+
+      double global_integrals[2];
+      Utilities::MPI::sum(local_integrals, MPI_COMM_WORLD, global_integrals);
+      check_tracer_mass_cell_integral = global_integrals[0];
+      check_tracer_mass_boundary_integral += global_integrals[1];
     }
   }
 #endif
