@@ -44,8 +44,8 @@ namespace ICBC
   // We consider a 100 m long channel, with a constant discharge as in
   // (Rosatti&Bonaventura,2011). For a subcritical flow we can
   // impose only one characteristic variable or a physical one. Based on physical
-  // arguments we impose the discharge at the inflow and the water height at the
-  // outflow.
+  // arguments we impose the discharge at the inflow `q0` and the water height at
+  // the outflow taken as zero.
   //
   // We have added a discontinuous bathymetry with a jump. The regular
   // solution does not hold anymore but we can compute the weak solution from
@@ -81,163 +81,6 @@ namespace ICBC
 
   // @sect3{Equation data}
 
-  // The class `ExactSolution` defines analytical functions that can be useful
-  // to define initial and boundary conditions. Apart for the template for the
-  // dimension which is in common with the base `Function` class, we have added
-  // the number of variables. As seen in the introduction the free-surface is
-  // available in a semi-analytical form and must be read from a file. We have
-  // thus modified the constructor with two classes: a data reader class and a
-  // the data class itself. Thanks to them we can read and compute the exact
-  // solution with a bilinear interpolation. We do not talk more about these two
-  // classes and about the file format because they are discussed in detail in
-  // `Icbc_Realistic` where the same classes are used to read the bathymetry.
-  //
-  // In the Oceano variables the exact solution must be given in the free-surface
-  // and discharge variables. We check that the test runs in two-dimensions
-  // which is consistent with the dimension of the file (otherwise it would raise
-  // an error difficult to detect). The free-surface is computed by a bilinear
-  // interpolation of the data read from file. If tracers are added they are
-  // taken constant to check the tracer consistency with the continuity when
-  // a non-polynomial bathymetry is present.
-  template <int dim, int n_vars>  
-  class ExactSolution : public Function<dim>
-  {
-  public:
-    ExactSolution(const double          time,
-                  IO::ParameterHandler &prm)
-      : Function<dim>(n_vars, time)
-      , data_reader(filename(prm))
-      , data(
-          data_reader.endpoints,
-          data_reader.n_intervals,
-          Table<dim, double>(data_reader.n_intervals.front()+1,
-                             data_reader.n_intervals.back()+1,
-                             data_reader.get_data(data_reader.filename).begin()))
-    {}
-
-    virtual double value(const Point<dim> & p,
-                         const unsigned int component = 0) const override;
-
-  private:
-    std::string filename(IO::ParameterHandler &prm) const;
-    IO::TxtDataReader<dim> data_reader;
-    const Functions::InterpolatedUniformGridData<dim> data;
-  };
-
-  template <int dim, int n_vars>
-  std::string ExactSolution<dim, n_vars>::filename(IO::ParameterHandler &prm) const
-  {
-    prm.enter_subsection("Input data files");
-    std::string filename = prm.get("Exact_solution_filename");
-    prm.leave_subsection();
-
-    return filename;
-  }
-
-  template <int dim, int n_vars>
-  double ExactSolution<dim, n_vars>::value(const Point<dim> & x,
-                                           const unsigned int component) const
-  {
-    Assert(dim == 2, ExcNotImplemented());
-
-    if (component == 0)
-      return data.value(x);
-    else if (component == 1)
-      return q0;
-    else if (component == 2)
-      return 0.;
-    else
-      return 1.;
-  }
-
-
-
-  // The `Ic` and `Bc` classes define the initial/boundary condition for the
-  // test-case. They are very similar in the templates and the constructor.
-  // They both take as argument the parameter class and they stored it
-  // internally. This means that we can read the Parameter file from
-  // anywhere when we are implementing ic/bc and we can access constants or
-  // filenames from which the initial/boundary data depends.
-  // Since the slope of the channel is small we start with a wet channel
-  // with a constant water level equal to the exact one at left boundary.
-  // We return either the water depth or the momentum depending on which
-  // component is requested. Two sanity checks have been added. One is to
-  // control that the space dimension is two (you cannot run this test in
-  // one dimension) and another one on the number of variables, that for
-  // two-dimensional shallow water equation is three or more (if you have
-  // tracers).
-  //
-  // If tracers are presents they are simply set to zero.
-  // A subcritical inflow/outflow boundary condition is specified on the left and
-  // right boundary of the domain. Top and bottom boundaries are walls.
-  template <int dim, int n_vars>
-  class Ic : public Function<dim>
-  {
-  public:
-    Ic(IO::ParameterHandler &prm)
-      : Function<dim>(n_vars, 0.)
-    {
-      prm.enter_subsection("Physical constants");
-      g = prm.get_double("g");
-      prm.leave_subsection();
-    }
-    ~Ic(){};
-
-    virtual double value(const Point<dim> & p,
-                         const unsigned int component = 0) const override;
-  private:
-    double g;
-  };
-
-  template <int dim, int n_vars>
-  double Ic<dim, n_vars>::value(const Point<dim>  &/*x*/,
-                                const unsigned int component) const
-  {
-    Assert(dim == 2, ExcNotImplemented());
-
-    if (component == 0)
-      return 0.;
-    else if (component == 1)
-      return q0;
-    else if (component == 2)
-      return 0.;
-    else
-      return 1.;
-  }
-
-
-
-  template <int dim, int n_vars>  
-  class BcChannelFlow : public BcBase<dim, n_vars>
-  {
-  public:
-  
-    BcChannelFlow(IO::ParameterHandler &prm);
-    ~BcChannelFlow(){};
-
-    void set_boundary_conditions() override;
-
-  private:
-    ParameterHandler &prm;
-  };
-  
-  template <int dim, int n_vars>
-  BcChannelFlow<dim, n_vars>::BcChannelFlow(IO::ParameterHandler &prm)
-    : prm(prm)
-  {}
-
-  template <int dim, int n_vars>
-  void BcChannelFlow<dim, n_vars>::set_boundary_conditions()
-  {
-    this->set_discharge_inflow_boundary(
-      1, std::make_unique<ExactSolution<dim, n_vars>>(0, prm));
-    this->set_height_inflow_boundary(
-      2, std::make_unique<ExactSolution<dim, n_vars>>(0, prm));
-    this->set_wall_boundary(0);
-  }         
-
-
-
   // We need a class to handle the problem data. Problem data are case dependent;
   // for this reason it appears inside the `ICBC` namespace. The data in general
   // depends on both time and space. Deal.II has a class `Function` which returns
@@ -256,7 +99,7 @@ namespace ICBC
   // names which contains the may be imported too.
   //
   // For this case we need to define the bathyemtry data values and the manning friction.
-  template <int dim>  
+  template <int dim>
   class ProblemData : public Function<dim>
   {
   public:
@@ -310,6 +153,209 @@ namespace ICBC
       return n0;
     else
       return 0.0;
+  }
+
+
+
+  // Apart from surface data we have the boundary conditions data.
+  // Boundary data has `n_var` components at maximum. In practice in
+  // coastal simulation we often use subcritical boundaries that we
+  // need less conditions, thus less external data, but
+  // we keep the function general so we have hard-coded `n_var`
+  // components.
+  // For the channel flow we create a simple boundary data function
+  // for constant data only. The boundary data are simple being 0 for
+  // the height at the outflow and `q0` for the discharge at the
+  // inflow.
+  template <int dim, int n_vars>
+  class BoundaryData : public Function<dim>
+  {
+  public:
+    BoundaryData()
+      : Function<dim>(n_vars, 0.)
+    {}
+    ~BoundaryData(){};
+
+    virtual double value(const Point<dim> & p,
+                         const unsigned int component = 0) const override;
+  };
+
+  template <int dim, int n_vars>
+  double BoundaryData<dim, n_vars>::value(const Point<dim>  &/*x*/,
+                                          const unsigned int component) const
+  {
+    Assert(dim == 2, ExcNotImplemented());
+
+    if (component == 0)
+      return 0.;
+    else if (component == 1)
+      return q0;
+    else if (component == 2)
+      return 0.;
+    else
+      return 1.;
+  }
+
+
+
+  // The class `ExactSolution` defines analytical functions that can be useful
+  // to define initial and boundary conditions. Apart for the template for the
+  // dimension which is in common with the base `Function` class, we have added
+  // the number of variables. As seen in the introduction the free-surface is
+  // available in a semi-analytical form and must be read from a file. We have
+  // thus modified the constructor with two classes: a data reader class and a
+  // the data class itself. Thanks to them we can read and compute the exact
+  // solution with a bilinear interpolation. We do not talk more about these two
+  // classes and about the file format because they are discussed in detail in
+  // `Icbc_Realistic` where the same classes are used to read the bathymetry.
+  //
+  // In the Oceano variables the exact solution must be given in the free-surface
+  // and discharge variables. We check that the test runs in two-dimensions
+  // which is consistent with the dimension of the file (otherwise it would raise
+  // an error difficult to detect). The free-surface is computed by a bilinear
+  // interpolation of the data read from file. If tracers are added they are
+  // taken constant to check the tracer consistency with the continuity when
+  // a non-polynomial bathymetry is present.
+  template <int dim, int n_vars>  
+  class ExactSolution : public Function<dim>
+  {
+  public:
+    ExactSolution(const double          time,
+                  IO::ParameterHandler &prm)
+      : Function<dim>(n_vars, time)
+      , channelFlow_data(prm)
+      , data_reader(filename(prm))
+      , data(
+          data_reader.endpoints,
+          data_reader.n_intervals,
+          Table<dim, double>(data_reader.n_intervals.front()+1,
+                             data_reader.n_intervals.back()+1,
+                             data_reader.get_data(data_reader.filename).begin()))
+    {}
+
+    virtual double value(const Point<dim> & p,
+                         const unsigned int component = 0) const override;
+
+  private:
+    ProblemData<dim> channelFlow_data;
+    std::string filename(IO::ParameterHandler &prm) const;
+    IO::TxtDataReader<dim> data_reader;
+    const Functions::InterpolatedUniformGridData<dim> data;
+  };
+
+  template <int dim, int n_vars>
+  std::string ExactSolution<dim, n_vars>::filename(IO::ParameterHandler &prm) const
+  {
+    prm.enter_subsection("Input data files");
+    std::string filename = prm.get("Exact_solution_filename");
+    prm.leave_subsection();
+
+    return filename;
+  }
+
+  template <int dim, int n_vars>
+  double ExactSolution<dim, n_vars>::value(const Point<dim> & x,
+                                           const unsigned int component) const
+  {
+    Assert(dim == 2, ExcNotImplemented());
+
+    const auto z = data.value(x);
+    if (component == 0)
+      return z;
+    else if (component == 1)
+      return q0/(z+channelFlow_data.value(x,0));
+    else if (component == 2)
+      return 0.;
+    else
+      return 1.;
+  }
+
+
+
+  // The `Ic` and `Bc` classes define the initial/boundary condition for the
+  // test-case. They are very similar in the templates and the constructor.
+  // They both take as argument the parameter class and they stored it
+  // internally. This means that we can read the Parameter file from
+  // anywhere when we are implementing ic/bc and we can access constants or
+  // filenames from which the initial/boundary data depends.
+  // Since the slope of the channel is small we start with a wet channel
+  // with a constant water level equal to the exact one at left boundary.
+  // We return either the water depth or the momentum depending on which
+  // component is requested. Two sanity checks have been added. One is to
+  // control that the space dimension is two (you cannot run this test in
+  // one dimension) and another one on the number of variables, that for
+  // two-dimensional shallow water equation is three or more (if you have
+  // tracers).
+  //
+  // If tracers are presents they are simply set to zero.
+  // A subcritical inflow/outflow boundary condition is specified on the left and
+  // right boundary of the domain. Top and bottom boundaries are walls.
+  template <int dim, int n_vars>
+  class Ic : public Function<dim>
+  {
+  public:
+    Ic(IO::ParameterHandler &prm)
+      : Function<dim>(n_vars, 0.)
+      , channelFlow_data(prm)
+    {
+      prm.enter_subsection("Physical constants");
+      g = prm.get_double("g");
+      prm.leave_subsection();
+    }
+    ~Ic(){};
+
+    virtual double value(const Point<dim> & p,
+                         const unsigned int component = 0) const override;
+  private:
+    double g;
+    ProblemData<dim> channelFlow_data;
+  };
+
+  template <int dim, int n_vars>
+  double Ic<dim, n_vars>::value(const Point<dim>  &x,
+                                const unsigned int component) const
+  {
+    Assert(dim == 2, ExcNotImplemented());
+
+    if (component == 0)
+      return 0.;
+    else if (component == 1)
+      return q0/(0.+channelFlow_data.value(x,0));
+    else if (component == 2)
+      return 0.;
+    else
+      return 1.;
+  }
+
+
+
+  template <int dim, int n_vars>  
+  class BcChannelFlow : public BcBase<dim, n_vars>
+  {
+  public:
+  
+    BcChannelFlow(IO::ParameterHandler &prm);
+    ~BcChannelFlow(){};
+
+    void set_boundary_conditions() override;
+
+  private:
+    ParameterHandler &prm;
+  };
+  
+  template <int dim, int n_vars>
+  BcChannelFlow<dim, n_vars>::BcChannelFlow(IO::ParameterHandler &prm)
+    : prm(prm)
+  {}
+
+  template <int dim, int n_vars>
+  void BcChannelFlow<dim, n_vars>::set_boundary_conditions()
+  {
+    this->set_discharge_inflow_boundary(
+      1, std::make_unique<BoundaryData<dim, n_vars>>());
+    this->set_height_inflow_boundary(
+      2, std::make_unique<BoundaryData<dim, n_vars>>());
+    this->set_wall_boundary(0);
   }
 } // namespace ICBC
 #endif //ICBC_CHANNELFLOW_HPP

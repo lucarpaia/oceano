@@ -54,6 +54,54 @@ namespace ICBC
 
 
   // @sect3{Equation data}
+  //
+  // We need a class to handle the problem data. Problem data are case dependent; for this
+  // reason it appears inside the `ICBC` namespace. The data in general depends on
+  // both time and space. Deal.II has a class `Function` which returns function
+  // of space and time, thus we simply create a derived class. The size of the data is
+  // fixed to `dim+3=5` scalar quantities. The first component is the bathymetry.
+  // The second is the bottom friction coefficient. The third and fourth components
+  // are the cartesian components of the wind velocity (in order, eastward and northward).
+  // The fifth one is the Coriolis parameter. The test-dependent functions `stommelGyre_wind()`
+  // and `stommelGyre_coriolis()` contain the definition of analytical functions for the
+  // different data. The call to `value()` returns all the external data necessary to
+  // complete the computation.
+  //
+  // Finally the parameter handler class allows to read constants from the prm file.
+  // The parameter handler class may seems redundant but it is not! Constants that appears
+  // in you data may be easily recovered from the configuration file. More important file
+  // names which contains the may be imported too.
+  //
+  // We do not have any source term and no associated data values.
+  template <int dim>
+  class ProblemData : public Function<dim>
+  {
+  public:
+    ProblemData(IO::ParameterHandler &prm);
+    ~ProblemData(){};
+
+    virtual double value(const Point<dim> & p,
+                         const unsigned int component = 0) const override;
+  };
+
+  template <int dim>
+  ProblemData<dim>::ProblemData(IO::ParameterHandler &/*prm*/)
+    : Function<dim>(dim+3)
+  {}
+
+
+
+  template <int dim>
+  double ProblemData<dim>::value(const Point<dim> & /*x*/,
+                                 const unsigned int component) const
+  {
+    if (component == 0)
+      return hoo;
+    else
+      return 0.;
+  }
+
+
 
   // The class `ExactSolution` defines analytical functions that can be useful
   // to define initial and boundary conditions. Apart for the template for the
@@ -154,54 +202,6 @@ namespace ICBC
 
     this->set_wall_boundary(0);
   }
-
-
-  // We need a class to handle the problem data. Problem data are case dependent; for this
-  // reason it appears inside the `ICBC` namespace. The data in general depends on
-  // both time and space. Deal.II has a class `Function` which returns function
-  // of space and time, thus we simply create a derived class. The size of the data is
-  // fixed to `dim+3=5` scalar quantities. The first component is the bathymetry.
-  // The second is the bottom friction coefficient. The third and fourth components
-  // are the cartesian components of the wind velocity (in order, eastward and northward).
-  // The fifth one is the Coriolis parameter. The test-dependent functions `stommelGyre_wind()`
-  // and `stommelGyre_coriolis()` contain the definition of analytical functions for the
-  // different data. The call to `value()` returns all the external data necessary to
-  // complete the computation.
-  //
-  // Finally the parameter handler class allows to read constants from the prm file.
-  // The parameter handler class may seems redundant but it is not! Constants that appears
-  // in you data may be easily recovered from the configuration file. More important file
-  // names which contains the may be imported too.
-  //
-  // We do not have any source term and no associated data values.
-  template <int dim>
-  class ProblemData : public Function<dim>
-  {
-  public:
-    ProblemData(IO::ParameterHandler &prm);
-    ~ProblemData(){};
-
-    virtual double value(const Point<dim> & p,
-                         const unsigned int component = 0) const override;
-  };
-
-  template <int dim>
-  ProblemData<dim>::ProblemData(IO::ParameterHandler &/*prm*/)
-    : Function<dim>(dim+3)
-  {}
-
-
-
-  template <int dim>
-  double ProblemData<dim>::value(const Point<dim> & /*x*/,
-                                 const unsigned int component) const
-  {
-    if (component == 0)
-      return hoo;
-    else
-      return 0.;
-  }
-
 } // namespace ICBC
 
 #endif //ICBC_TRACERADVECTION_HPP

@@ -67,7 +67,79 @@ namespace ICBC
   // following offset:
   constexpr double z0      = 1.0;
 
+
+
   // @sect3{Equation data}
+  //
+  // We need a class to handle the problem data. Problem data are case dependent; for this
+  // reason it appears inside the `ICBC` namespace. The data in general depends on
+  // both time and space. Deal.II has a class `Function` which returns function
+  // of space and time, thus we simply create a derived class. The size of the data is
+  // fixed to `dim+3=5` scalar quantities. The first component is the bathymetry.
+  // The second is the bottom friction coefficient. The third and fourth components
+  // are the cartesian components of the wind velocity (in order, eastward and northward).
+  // The fifth one is the Coriolis parameter. The test-dependent functions `stommelGyre_wind()`
+  // and `stommelGyre_coriolis()` contain the definition of analytical functions for the
+  // different data. The call to `value()` returns all the external data necessary to
+  // complete the computation.
+  //
+  // Finally the parameter handler class allows to read constants from the prm file.
+  // The parameter handler class may seems redundant but it is not! Constants that appears
+  // in you data may be easily recovered from the configuration file. More important file
+  // names which contains the may be imported too.
+  //
+  // For this case we need to define the bathyemtry data values.
+  template <int dim>
+  class ProblemData : public Function<dim>
+  {
+  public:
+    ProblemData(IO::ParameterHandler &prm);
+    ~ProblemData(){};
+
+    inline double lakeAtRest_bathymetry(const Point<dim> & p) const;
+
+    virtual double value(const Point<dim> & p,
+                         const unsigned int component = 0) const override;
+  };
+
+  template <int dim>
+  ProblemData<dim>::ProblemData(IO::ParameterHandler &/*prm*/)
+    : Function<dim>(dim+3)
+  {}
+
+
+
+  template <int dim>
+  inline double ProblemData<dim>::lakeAtRest_bathymetry(
+    const Point<dim> & x) const
+  {
+    const double x0 = x[0] - 0.9;
+    const double x1 = x[1] - 0.5;
+#if defined ICBC_LAKEATREST_BATHYMETRYDISCONTINUOUS
+    if ( x[0] >= 0.9 && x[0] <= 1.1 && x[1] >= 0.3 && x[1] <= 0.7 )
+      {
+        const double pot = std::sqrt( x0 * x0 + x1 * x1 );
+        return -z0 +h0 -b0 * std::exp(pot);
+      }
+    else
+#endif
+      {
+        const double pot = -5. * x0 * x0 - 50. * x1 * x1;
+        return -z0 +h0 -b0 * std::exp(pot);
+      }
+  }
+
+  template <int dim>
+  double ProblemData<dim>::value(const Point<dim>  &x,
+                                 const unsigned int component) const
+  {
+    if (component == 0)
+      return lakeAtRest_bathymetry(x);
+    else
+      return 0.0;
+  }
+
+
 
   // The class `ExactSolution` defines analytical functions that can be useful
   // to define initial and boundary conditions. Apart for the template for the
@@ -106,8 +178,6 @@ namespace ICBC
 
 
 
-  // @sect3{Equation data}
-  //
   // The `Ic` and `Bc` classes define the initial/boundary condition for the
   // test-case. They are very similar in the templates and the constructor.
   // They both take as argument the parameter class and they stored it
@@ -193,76 +263,6 @@ namespace ICBC
     this->set_wall_boundary(1);
 #endif
     this->set_wall_boundary(0);
-  }         
-
-
-
-  // We need a class to handle the problem data. Problem data are case dependent; for this
-  // reason it appears inside the `ICBC` namespace. The data in general depends on
-  // both time and space. Deal.II has a class `Function` which returns function
-  // of space and time, thus we simply create a derived class. The size of the data is
-  // fixed to `dim+3=5` scalar quantities. The first component is the bathymetry.
-  // The second is the bottom friction coefficient. The third and fourth components
-  // are the cartesian components of the wind velocity (in order, eastward and northward).
-  // The fifth one is the Coriolis parameter. The test-dependent functions `stommelGyre_wind()`
-  // and `stommelGyre_coriolis()` contain the definition of analytical functions for the
-  // different data. The call to `value()` returns all the external data necessary to
-  // complete the computation.
-  //
-  // Finally the parameter handler class allows to read constants from the prm file.
-  // The parameter handler class may seems redundant but it is not! Constants that appears
-  // in you data may be easily recovered from the configuration file. More important file
-  // names which contains the may be imported too.
-  //
-  // For this case we need to define the bathyemtry data values.
-  template <int dim>  
-  class ProblemData : public Function<dim>
-  {
-  public:
-    ProblemData(IO::ParameterHandler &prm);
-    ~ProblemData(){};
-
-    inline double lakeAtRest_bathymetry(const Point<dim> & p) const;
-
-    virtual double value(const Point<dim> & p,
-                         const unsigned int component = 0) const override;
-  };
-
-  template <int dim>
-  ProblemData<dim>::ProblemData(IO::ParameterHandler &/*prm*/)
-    : Function<dim>(dim+3)
-  {}
-
-
-
-  template <int dim>
-  inline double ProblemData<dim>::lakeAtRest_bathymetry(
-    const Point<dim> & x) const
-  {
-    const double x0 = x[0] - 0.9;
-    const double x1 = x[1] - 0.5;
-#if defined ICBC_LAKEATREST_BATHYMETRYDISCONTINUOUS
-    if ( x[0] >= 0.9 && x[0] <= 1.1 && x[1] >= 0.3 && x[1] <= 0.7 )
-      {
-        const double pot = std::sqrt( x0 * x0 + x1 * x1 );
-        return -z0 +h0 -b0 * std::exp(pot);
-      }
-    else
-#endif
-      {
-        const double pot = -5. * x0 * x0 - 50. * x1 * x1;
-        return -z0 +h0 -b0 * std::exp(pot);
-      }
-  }
-
-  template <int dim>
-  double ProblemData<dim>::value(const Point<dim>  &x,
-                                 const unsigned int component) const
-  {
-    if (component == 0)
-      return lakeAtRest_bathymetry(x);
-    else
-      return 0.0;
   }
 } // namespace ICBC
 

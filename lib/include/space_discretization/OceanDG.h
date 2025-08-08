@@ -1103,7 +1103,8 @@ namespace SpaceDiscretization
                     *bc->supercritical_inflow_boundaries.find(boundary_id)->second,
                     phi_height.quadrature_point(q));
                 z_p = w_p[0];
-                for (unsigned int d = 0; d < dim; ++d) q_p[d] = w_p[d+1];
+                for (unsigned int d = 0; d < dim; ++d) q_p[d] =
+                  w_p[d+1] * model.factor_from_velocity(z_p, zb_m);
               }
             else if (bc->supercritical_outflow_boundaries.find(boundary_id) !=
                      bc->supercritical_outflow_boundaries.end())
@@ -1127,7 +1128,8 @@ namespace SpaceDiscretization
                 q_p =
                   evaluate_function<dim, Number>(
                     *bc->discharge_inflow_boundaries.find(boundary_id)->second,
-                    phi_height.quadrature_point(q), 1) * -normal;
+                    phi_height.quadrature_point(q), 1)
+                  / model.factor_to_discharge(z_p, zb_m) * -normal;
               }
             else if (bc->absorbing_outflow_boundaries.find(boundary_id) !=
                      bc->absorbing_outflow_boundaries.end())
@@ -1137,7 +1139,8 @@ namespace SpaceDiscretization
                     *bc->absorbing_outflow_boundaries.find(boundary_id)->second,
                       phi_height.quadrature_point(q));
                 z_p = w_p[0];
-                for (unsigned int d = 0; d < dim; ++d) q_p[d] = w_p[d+1];
+                for (unsigned int d = 0; d < dim; ++d) q_p[d]
+                  = w_p[d+1] * model.factor_from_velocity(z_p, zb_m);
                 const auto r_p
                   = model.riemann_invariant_p<dim>(z_m, q_m, normal, zb_m);
                 const auto r_m
@@ -1147,7 +1150,7 @@ namespace SpaceDiscretization
                 const auto u_b = 0.5 * (r_p + r_m);
 
                 z_p = h_b - zb_m;
-                q_p =  u_b * h_b * normal;
+                q_p =  u_b * model.factor_from_velocity(z_p, zb_m) * normal;
               }
             else
               AssertThrow(false,
@@ -1214,7 +1217,8 @@ namespace SpaceDiscretization
                     *bc->supercritical_inflow_boundaries.find(boundary_id)->second,
                     phi_discharge.quadrature_point(q));
                 z_p = w_p[0];
-                for (unsigned int d = 0; d < dim; ++d) q_p[d] = w_p[d+1];
+                for (unsigned int d = 0; d < dim; ++d) q_p[d] =
+                  w_p[d+1] * model.factor_from_velocity(z_p, zb_m);
               }
             else if (bc->supercritical_outflow_boundaries.find(boundary_id) !=
                      bc->supercritical_outflow_boundaries.end())
@@ -1239,7 +1243,8 @@ namespace SpaceDiscretization
                 q_p =
                   evaluate_function<dim, Number>(
                     *bc->discharge_inflow_boundaries.find(boundary_id)->second,
-                    phi_discharge.quadrature_point(q), 1) * -normal;
+                    phi_discharge.quadrature_point(q), 1)
+                  / model.factor_to_discharge(z_p, zb_m) * -normal;
               }
             else if (bc->absorbing_outflow_boundaries.find(boundary_id) !=
                      bc->absorbing_outflow_boundaries.end())
@@ -1249,7 +1254,8 @@ namespace SpaceDiscretization
                     *bc->absorbing_outflow_boundaries.find(boundary_id)->second,
                       phi_discharge.quadrature_point(q));
                 z_p = w_p[0];
-                for (unsigned int d = 0; d < dim; ++d) q_p[d] = w_p[d+1];
+                for (unsigned int d = 0; d < dim; ++d) q_p[d] =
+                  w_p[d+1] * model.factor_from_velocity(z_p, zb_m);
                 const auto r_p
                   = model.riemann_invariant_p<dim>(z_m, q_m, normal, zb_m);
                 const auto r_m
@@ -1259,7 +1265,7 @@ namespace SpaceDiscretization
                 const auto u_b = 0.5 * (r_p + r_m);
 
                 z_p = h_b - zb_m;
-                q_p =  u_b * h_b * normal;
+                q_p =  u_b * model.factor_from_velocity(z_p, zb_m) * normal;
               }
             else
               AssertThrow(false,
@@ -1418,12 +1424,11 @@ namespace SpaceDiscretization
             const auto zb_q = data_quadrature_cell_1.get_data(cell, q)[0];
             const auto cf_q = data_quadrature_cell_1.get_data(cell, q)[1];
 
-            inverse_jxw[q] *= 1. / ( model.factor_to_discharge(z_q, zb_q) +
+            inverse_jxw[q] *= 1. / (model.factor_to_discharge(z_q, zb_q) * ( 1. +
               factor_matrix * model.bottom_friction.jacobian<dim>(
                 model.velocity<dim>(z_q, q_q, zb_q),
                 cf_q,
-                z_q+zb_q)
-              );
+                z_q+zb_q) )        );
           }
 
         inverse.apply(inverse_jxw, dim, phi_discharge.begin_dof_values(),

@@ -153,6 +153,35 @@ namespace ICBC
 
 
 
+  // The class `ExactSolution` defines a reference functions that can be used
+  // for diagnostic, for example to measure the errors with respect ot another
+  // model. For the realistic test we do not have a reference solution, so we use
+  // a simple water at rest state with constant tracer as a background state.
+  template <int dim, int n_vars>
+  class ExactSolution : public Function<dim>
+  {
+  public:
+    ExactSolution(const double          time,
+                  IO::ParameterHandler &/*prm*/)
+      : Function<dim>(n_vars, time)
+    {}
+
+    virtual double value(const Point<dim> & p,
+                         const unsigned int component = 0) const override;
+  };
+
+  template <int dim, int n_vars>
+  double ExactSolution<dim, n_vars>::value(const Point<dim> & /*x*/,
+                                           const unsigned int component) const
+  {
+    if (component > dim)
+      return 1.;
+    else
+      return 0.;
+  }
+
+
+
   // Apart from surface data we have the boundary conditions data.
   // Boundary data has `n_var` components at maximum. In practice in
   // coastal simulation we often use subcritical boundaries that we
@@ -228,35 +257,6 @@ namespace ICBC
       return bc_constant[type_and_count.second].value(t);
     else
       return bc_data[type_and_count.second].value(t);
-  }
-
-
-
-  // The class `ExactSolution` defines a reference functions that can be used
-  // for diagnostic, for example to measure the errors with respect ot another
-  // model. For the realistic test we do not have a reference solution, so we use
-  // a simple water at rest state with constant tracer as a background state.
-  template <int dim, int n_vars>  
-  class ExactSolution : public Function<dim>
-  {
-  public:
-    ExactSolution(const double          time,
-                  IO::ParameterHandler &/*prm*/)
-      : Function<dim>(n_vars, time)
-    {}
-
-    virtual double value(const Point<dim> & p,
-                         const unsigned int component = 0) const override;
-  };  
-
-  template <int dim, int n_vars>
-  double ExactSolution<dim, n_vars>::value(const Point<dim> & /*x*/,
-                                           const unsigned int component) const
-  {
-    if (component > dim)
-      return 1.;
-    else
-      return 0.;
   }
 
 

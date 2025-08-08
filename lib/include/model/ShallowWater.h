@@ -196,7 +196,7 @@ namespace Model
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Number>
       source_nonstiff(const Number                    height,
-                      const Tensor<1, dim, Number>   &discharge,
+                      const Tensor<1, dim, Number>   &velocity,
                       const Tensor<1, dim, Number>   &gradient_height,
                       const Tensor<1, dim+3, Number> &parameters) const;
 
@@ -204,7 +204,7 @@ namespace Model
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Number>
       source_stiff(const Number                  height,
-                   const Tensor<1, dim, Number> &discharge,
+                   const Tensor<1, dim, Number> &velocity,
                    const Number                  bathymetry,
                    const Number                  drag_coefficient) const;
 
@@ -223,7 +223,7 @@ namespace Model
       Number
       riemann_invariant_p(
         const Number                  height,
-        const Tensor<1, dim, Number> &discharge,
+        const Tensor<1, dim, Number> &velocity,
         const Tensor<1, dim, Number> &normal,
         const Number                  bathymetry) const;
 
@@ -232,7 +232,7 @@ namespace Model
       Number
       riemann_invariant_m(
         const Number                  height,
-        const Tensor<1, dim, Number> &discharge,
+        const Tensor<1, dim, Number> &velocity,
         const Tensor<1, dim, Number> &normal,
         const Number                  bathymetry) const;
 
@@ -285,7 +285,7 @@ namespace Model
   {
     vars_name.push_back("free_surface");
     for (unsigned int d = 0; d < dim; ++d)
-      vars_name.push_back("hu");
+      vars_name.push_back("u");
     for (unsigned int d = 0; d < dim; ++d)
       postproc_vars_name.push_back("velocity");
     postproc_vars_name.push_back("depth");
@@ -379,7 +379,7 @@ namespace Model
     const Tensor<1, dim, Number> windstress =
       wind_stress.source<dim, Number>(&parameters[2]);
     const Tensor<1, dim, Number> coriolis =
-      coriolis_force.source<dim, Number>(velocity, parameters[4]);
+      coriolis_force.source<dim, Number>(velocity*depth, parameters[4]);
 
     Tensor<1, dim, Number> source =
         - g * depth * gradient_height
@@ -395,7 +395,7 @@ namespace Model
     Tensor<1, dim, Number>
     ShallowWater::source_nonstiff(
       const Number                    height,
-      const Tensor<1, dim, Number>   &discharge,
+      const Tensor<1, dim, Number>   &velocity,
       const Tensor<1, dim, Number>   &gradient_height,
       const Tensor<1, dim+3, Number> &parameters) const
   {
@@ -404,7 +404,7 @@ namespace Model
     const Tensor<1, dim, Number> windstress =
       wind_stress.source<dim, Number>(&parameters[2]);
     const Tensor<1, dim, Number> coriolis =
-      coriolis_force.source<dim, Number>(discharge, parameters[4]);
+      coriolis_force.source<dim, Number>(velocity*depth, parameters[4]);
 
     Tensor<1, dim, Number> source =
         - g * depth * gradient_height
@@ -419,15 +419,13 @@ namespace Model
     Tensor<1, dim, Number>
     ShallowWater::source_stiff(
       const Number                  height,
-      const Tensor<1, dim, Number> &discharge,
+      const Tensor<1, dim, Number> &velocity,
       const Number                  bathymetry,
       const Number                  drag_coefficient) const
   {
-    const Tensor<1, dim, Number> v =
-      velocity<dim>(height, discharge, bathymetry);
     const Number depth = height + bathymetry;
 
-    return -bottom_friction.source<dim, Number>(v, drag_coefficient, depth);
+    return -bottom_friction.source<dim, Number>(velocity, drag_coefficient, depth);
   }
 
   template <typename Number>
@@ -445,14 +443,13 @@ namespace Model
     Number
     ShallowWater::riemann_invariant_p(
       const Number                  height,
-      const Tensor<1, dim, Number> &discharge,
+      const Tensor<1, dim, Number> &velocity,
       const Tensor<1, dim, Number> &normal,
       const Number                  bathymetry) const
   {
-    const auto v = velocity<dim>(height, discharge, bathymetry);
     const auto c = std::sqrt(
       square_wavespeed(height, bathymetry));
-    Number u = v * normal;
+    Number u = velocity * normal;
 
     return u + 2. * c;
   }
@@ -462,14 +459,13 @@ namespace Model
     Number
     ShallowWater::riemann_invariant_m(
       const Number                  height,
-      const Tensor<1, dim, Number> &discharge,
+      const Tensor<1, dim, Number> &velocity,
       const Tensor<1, dim, Number> &normal,
       const Number                  bathymetry) const
   {
-    const auto v = velocity<dim>(height, discharge, bathymetry);
     const auto c = std::sqrt(
       square_wavespeed(height, bathymetry));
-    Number u = v * normal;
+    Number u = velocity * normal;
 
     return u - 2. * c;
   }

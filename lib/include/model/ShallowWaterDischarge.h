@@ -389,10 +389,11 @@ namespace Model
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
-    ShallowWaterDischarge::source(const Number                    height,
-                         const Tensor<1, dim, Number>   &discharge,
-                         const Tensor<1, dim, Number>   &gradient_height,
-                         const Tensor<1, dim+3, Number> &parameters) const
+    ShallowWaterDischarge::source(
+      const Number                    height,
+      const Tensor<1, dim, Number>   &discharge,
+      const Tensor<1, dim, Number>   &gradient_height,
+      const Tensor<1, dim+3, Number> &parameters) const
   {
     const Tensor<1, dim, Number> v =
       velocity<dim>(height, discharge, parameters[0]);

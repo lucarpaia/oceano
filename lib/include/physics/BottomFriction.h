@@ -192,9 +192,9 @@ namespace Physics
     Tensor<1, dim, Number> source;
     Number inv_depth = 1. / ( std::exp( std::log(depth) * 0.33333333333 ) );
     Number velocity_norm = velocity.norm();
+    Number hcf = g * manning * manning * inv_depth * velocity_norm;
     for (unsigned int d = 0; d < dim; ++d)
-      source[d] = g * manning * manning * inv_depth * velocity_norm
-        * velocity[d];
+      source[d] =  hcf * velocity[d];
 
     return source;
   }
@@ -207,7 +207,7 @@ namespace Physics
       const Number                  manning,
       const Number                  depth) const
   {
-    Number inv_depth = 1. / ( std::exp( std::log(depth) * 1.33333333333 ) );
+    Number inv_depth = 1. / ( std::exp( std::log(depth) * 1.33333333333 ) ); //lrp: if we take out q, put 0.33333 to avoid multiple h comput + factorize Jacobian
     Number velocity_norm = velocity.norm();
 
     return g * manning * manning * inv_depth * velocity_norm;
