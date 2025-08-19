@@ -372,7 +372,7 @@ namespace SpaceDiscretization
             const auto zb_q = data_quadrature_cell_0.get_data(cell, q)[0];
 
             phi_tracer.submit_gradient(
-              model.tracer_adv_diff_flux(q_q, t_q, du_q, (z_q+zb_q)*dt_q, area_cell),
+              model.tracer_adv_diff_flux(q_q, t_q, du_q, model.depth(z_q, zb_q)*dt_q, area_cell),
               q);
           }
 
@@ -406,7 +406,7 @@ namespace SpaceDiscretization
             const auto t_q = phi_tracer.get_value(q);
             const auto zb_q = data_quadrature_cell_1.get_data(cell, q)[0];
 
-            phi_tracer.submit_value((z_q+zb_q)*t_q, q);
+            phi_tracer.submit_value(model.depth(z_q, zb_q)*t_q, q);
           }
 
         phi_tracer.integrate_scatter(EvaluationFlags::values,
@@ -748,7 +748,7 @@ namespace SpaceDiscretization
             const auto z_q = phi_height_ri.get_value(q);
             const auto zb_q = data_quadrature_cell_1.get_data(cell, q)[0];
 
-            inverse_jxw[q] *= 1. / (z_q+zb_q);
+            inverse_jxw[q] *= 1. / model.depth(z_q, zb_q);
           }
 
         inverse.apply(inverse_jxw, n_tra, phi_tracer.begin_dof_values(),

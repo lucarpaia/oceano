@@ -706,7 +706,7 @@ namespace SpaceDiscretization
 
             phi_discharge.submit_gradient(
               model.momentum_adv_diff_flux<dim>(
-                z_q, q_q, (z_q+data_q[0])*du_q, data_q[0], area_cell),
+                z_q, q_q, model.depth(z_q, data_q[0])*du_q, data_q[0], area_cell),
               q);
 
             phi_discharge.submit_value(
@@ -756,7 +756,7 @@ namespace SpaceDiscretization
 
             phi_discharge.submit_gradient(
               model.momentum_adv_diff_flux<dim>(
-                z_q, q_q, (z_q+data_q[0])*du_q, data_q[0], area_cell),
+                z_q, q_q, model.depth(z_q, data_q[0])*du_q, data_q[0], area_cell),
               q);
 
             phi_discharge.submit_value(
@@ -1428,7 +1428,7 @@ namespace SpaceDiscretization
               factor_matrix * model.bottom_friction.jacobian<dim>(
                 model.velocity<dim>(z_q, q_q, zb_q),
                 cf_q,
-                z_q+zb_q) )        );
+                model.depth(z_q, zb_q)) )        );
           }
 
         inverse.apply(inverse_jxw, dim, phi_discharge.begin_dof_values(),
@@ -1462,7 +1462,7 @@ namespace SpaceDiscretization
             const auto z_q = phi_height.get_value(q);
             const auto zb_q = data_quadrature_cell_1.get_data(cell, q)[0];
 
-            phi_height.submit_value(z_q+zb_q, q);
+            phi_height.submit_value(model.depth(z_q, zb_q), q);
           }
 
         phi_height.integrate_scatter(EvaluationFlags::values,
@@ -2448,7 +2448,7 @@ namespace SpaceDiscretization
               computed_scalar_quantities[v](*index) =
                 model.pressure(height, zb);
             else if (postproc_names[v+dim] == "depth")
-              computed_scalar_quantities[v](*index) = height + zb;
+              computed_scalar_quantities[v](*index) = model.depth(height, zb);
             else if (postproc_names[v+dim] == "speed_of_sound")
               computed_scalar_quantities[v](*index) =
                 std::sqrt(model.square_wavespeed(height, zb));

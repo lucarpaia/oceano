@@ -158,8 +158,11 @@ namespace NumericalFlux
     const auto flux_m = model.mass_flux<dim>(z_m, q_m, data_m);
     const auto flux_p = model.mass_flux<dim>(z_p, q_p, data_p);
 
+    const auto zcorr_m = std::max(z_m, -data_m);
+    const auto zcorr_p = std::max(z_p, -data_p);
+
     return 0.5 * (flux_m * normal + flux_p * normal) +
-           0.5 * lambda * (z_m - z_p);
+           0.5 * lambda * (zcorr_m - zcorr_p);
   }
 
   template <int dim, typename Number>

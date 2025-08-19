@@ -123,6 +123,14 @@ namespace Model
       void
       set_vars_name();
 
+    // The next function computes the depth from the vector of conserved
+    // variables
+    template <typename Number>
+    inline DEAL_II_ALWAYS_INLINE //
+      Number
+      depth(const Number height,
+            const Number bathymetry) const;
+
     // The next function computes the velocity from the vector of conserved
     // variables
     template <int dim, typename Number>
@@ -291,6 +299,15 @@ namespace Model
     postproc_vars_name.push_back("depth");
   }
 
+  template <typename Number>
+  inline DEAL_II_ALWAYS_INLINE //
+    Number
+    ShallowWater::depth(const Number height,
+                        const Number bathymetry) const
+  {
+    return std::max(height + bathymetry, Number(5.e-3));
+  }
+
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
@@ -307,8 +324,8 @@ namespace Model
     ShallowWater::pressure(const Number height,
                            const Number bathymetry) const
   {
-    const Number depth = height + bathymetry;
-    return 0.5 * g * depth*depth;
+    const Number h = depth(height, bathymetry);
+    return 0.5 * g * h*h;
   }
 
   template <int dim, typename Number>
@@ -318,7 +335,7 @@ namespace Model
                             const Tensor<1, dim, Number> &velocity,
                             const Number                  bathymetry) const
   {
-    return (height + bathymetry) * velocity;
+    return depth(height, bathymetry) * velocity;
   }
 
   template <int dim, typename Number>
@@ -328,12 +345,12 @@ namespace Model
                                     const Tensor<1, dim, Number> &velocity,
                                     const Number                  bathymetry) const
   {
-    const Number depth = height + bathymetry;
+    const Number h = depth(height, bathymetry);
 
     Tensor<1, dim, Tensor<1, dim, Number>> flux;
     for (unsigned int d = 0; d < dim; ++d)
       for (unsigned int e = 0; e < dim; ++e)
-        flux[e][d] = depth * velocity[e] * velocity[d];
+        flux[e][d] = h * velocity[e] * velocity[d];
 
     return flux;
   }
@@ -348,7 +365,7 @@ namespace Model
       const Number                    bathymetry,
       const Number                    area) const
   {
-    const Number depth = height + bathymetry;
+    const Number h = depth(height, bathymetry);
 
     const Number nu = viscosity_coefficient.value<dim, Number>(gradient_velocity, area);
     const Number div = gradient_velocity[0][0] + gradient_velocity[1][1];
@@ -356,7 +373,7 @@ namespace Model
     Tensor<1, dim, Tensor<1, dim, Number>> flux;
     for (unsigned int d = 0; d < dim; ++d)
       for (unsigned int e = 0; e < dim; ++e)
-        flux[e][d] = depth * velocity[e] * velocity[d]
+        flux[e][d] = h * velocity[e] * velocity[d]
           - nu * (gradient_velocity[e][d] + gradient_velocity[d][e]);
     for (unsigned int e = 0; e < dim; ++e)
       flux[e][e] += nu * div;
@@ -372,17 +389,17 @@ namespace Model
                          const Tensor<1, dim, Number>   &gradient_height,
                          const Tensor<1, dim+3, Number> &parameters) const
   {
-    const Number depth = height + parameters[0];
+    const Number h = depth(height, parameters[0]);
 
     const Tensor<1, dim, Number> bottomfric =
-      bottom_friction.source<dim, Number>(velocity, parameters[1], depth);
+      bottom_friction.source<dim, Number>(velocity, parameters[1], h);
     const Tensor<1, dim, Number> windstress =
       wind_stress.source<dim, Number>(&parameters[2]);
     const Tensor<1, dim, Number> coriolis =
-      coriolis_force.source<dim, Number>(velocity*depth, parameters[4]);
+      coriolis_force.source<dim, Number>(h*velocity, parameters[4]);
 
     Tensor<1, dim, Number> source =
-        - g * depth * gradient_height
+        - g * h * gradient_height
 	- bottomfric
         + windstress
         + coriolis;
@@ -399,15 +416,15 @@ namespace Model
       const Tensor<1, dim, Number>   &gradient_height,
       const Tensor<1, dim+3, Number> &parameters) const
   {
-    const Number depth = height + parameters[0];
+    const Number h = depth(height, parameters[0]);
 
     const Tensor<1, dim, Number> windstress =
       wind_stress.source<dim, Number>(&parameters[2]);
     const Tensor<1, dim, Number> coriolis =
-      coriolis_force.source<dim, Number>(velocity*depth, parameters[4]);
+      coriolis_force.source<dim, Number>(h*velocity, parameters[4]);
 
     Tensor<1, dim, Number> source =
-        - g * depth * gradient_height
+        - g * h * gradient_height
         + windstress
         + coriolis;
 
@@ -423,9 +440,9 @@ namespace Model
       const Number                  bathymetry,
       const Number                  drag_coefficient) const
   {
-    const Number depth = height + bathymetry;
+    const Number h = depth(height, bathymetry);
 
-    return -bottom_friction.source<dim, Number>(velocity, drag_coefficient, depth);
+    return -bottom_friction.source<dim, Number>(velocity, drag_coefficient, h);
   }
 
   template <typename Number>
@@ -435,7 +452,7 @@ namespace Model
       const Number                  height,
       const Number                  bathymetry) const
   {
-    return g * (height + bathymetry);
+    return g * depth(height, bathymetry);
   }
 
   template <int dim, typename Number>
@@ -477,7 +494,7 @@ namespace Model
       const Number height,
       const Number bathymetry) const
   {
-    return height + bathymetry;
+    return depth(height, bathymetry);
   }
 
   template <typename Number>
