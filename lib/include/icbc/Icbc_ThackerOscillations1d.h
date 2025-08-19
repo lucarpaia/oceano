@@ -178,7 +178,7 @@ namespace ICBC
     if (component == 0)
       return h + zb;
     else if (component == 1)
-      return std::max(h, 0.) * u;
+      return u;
     else
       return 0.;
   }

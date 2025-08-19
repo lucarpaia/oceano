@@ -309,7 +309,7 @@ namespace Model
       vars_name.push_back("hu");
     for (unsigned int d = 0; d < dim; ++d)
       postproc_vars_name.push_back("velocity");
-    postproc_vars_name.push_back("depth");
+    postproc_vars_name.push_back("bathymetry");
   }
 
   template <typename Number>
@@ -319,7 +319,7 @@ namespace Model
       const Number height,
       const Number bathymetry) const
   {
-    return std::max(height + bathymetry, Number(5.e-3));
+    return std::max(height + bathymetry, Number(1.e-4));
   }
 
   template <int dim, typename Number>

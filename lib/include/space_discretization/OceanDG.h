@@ -2449,6 +2449,8 @@ namespace SpaceDiscretization
                 model.pressure(height, zb);
             else if (postproc_names[v+dim] == "depth")
               computed_scalar_quantities[v](*index) = model.depth(height, zb);
+            else if (postproc_names[v+dim] == "bathymetry")
+              computed_scalar_quantities[v](*index) = zb;
             else if (postproc_names[v+dim] == "speed_of_sound")
               computed_scalar_quantities[v](*index) =
                 std::sqrt(model.square_wavespeed(height, zb));
