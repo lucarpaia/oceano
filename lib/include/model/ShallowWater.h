@@ -305,7 +305,7 @@ namespace Model
     ShallowWater::depth(const Number height,
                         const Number bathymetry) const
   {
-    return std::max(height + bathymetry, Number(5.e-3));
+    return std::max(height + bathymetry, Number(3.e-2));
   }
 
   template <int dim, typename Number>

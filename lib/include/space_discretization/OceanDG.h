@@ -51,9 +51,9 @@
 #include <iostream>
 
 // The following file includes the CellwiseInverseMassMatrix data structure
-// that we will use for the mass matrix inversion, the only new include
-// file for this tutorial program:
+// that we will use for the mass matrix inversion:
 #include <deal.II/matrix_free/operators.h>
+#include <deal.II_oceano/operators.h>
 
 // The following files include the oceano libraries
 #if defined MODEL_EULER
@@ -68,7 +68,7 @@
 #include <numerical_flux/LaxFriedrichsModified.h>
 #include <numerical_flux/HartenVanLeer.h>
 #include <icbc/IcbcBase.h>
-#include <base/CellDataStorage.h>
+#include <deal.II_oceano/CellDataStorage.h>
 
 /**
  * Namespace containing the spatial Operator
@@ -251,9 +251,10 @@ namespace SpaceDiscretization
     ICBC::BcBase<dim, 1+dim+n_tra> *bc;
 
     CellDataStorage<Tensor<1, dim+3, VectorizedArray<Number>>> data_quadrature_cell_0;
-    CellDataStorage<Tensor<1, 2, VectorizedArray<Number>>> data_quadrature_cell_1;
-    CellDataStorage<VectorizedArray<Number>> data_quadrature_face;
-    CellDataStorage<VectorizedArray<Number>> data_quadrature_boundary;
+    CellDataStorage<VectorizedArray<Number>>                   data_quadrature_cell_1;
+    CellDataStorage<Tensor<1, 2, VectorizedArray<Number>>>     data_quadrature_cell_2;
+    CellDataStorage<VectorizedArray<Number>>                   data_quadrature_face;
+    CellDataStorage<VectorizedArray<Number>>                   data_quadrature_boundary;
     CellDataStorage<Number> data_dofs;
 
     // The switch between the different models is realized with
@@ -292,10 +293,10 @@ namespace SpaceDiscretization
 
   private:
     void local_apply_inverse_mass_matrix_height(
-      const MatrixFree<dim, Number>                    &data,
-      LinearAlgebra::distributed::Vector<Number>       &dst,
-      const LinearAlgebra::distributed::Vector<Number> &src,
-      const std::pair<unsigned int, unsigned int>      &cell_range) const;
+      const MatrixFree<dim, Number>                                 &data,
+      LinearAlgebra::distributed::Vector<Number>                    &dst,
+      const LinearAlgebra::distributed::Vector<Number>              &src,
+      const std::pair<unsigned int, unsigned int>                   &cell_range) const;
 
     void local_apply_inverse_mass_matrix_discharge(
       const MatrixFree<dim, Number>                                 &data,
@@ -333,7 +334,7 @@ namespace SpaceDiscretization
       const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
       const std::pair<unsigned int, unsigned int>                   &cell_range) const;
 
-    void local_apply_cell_mass_depth(
+    void local_apply_cell_mass_height(
       const MatrixFree<dim, Number>                                 &data,
       LinearAlgebra::distributed::Vector<Number>                    &dst,
       const LinearAlgebra::distributed::Vector<Number>              &src,
@@ -369,7 +370,7 @@ namespace SpaceDiscretization
       const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
       const std::pair<unsigned int, unsigned int>                   &face_range) const;
 
-    void local_apply_fake_depth(
+    void local_apply_fake(
       const MatrixFree<dim, Number>                                 &data,
       LinearAlgebra::distributed::Vector<Number>                    &dst,
       const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
@@ -409,17 +410,24 @@ namespace SpaceDiscretization
   // discretization in this tutorial program where no constraints are imposed
   // strongly on the solution field, we do not need to pass in an
   // AffineConstraints object and rather use a dummy for the
-  // construction. With respect to quadrature, we want to select two different
-  // ways of computing the underlying integrals: The first is a flexible one,
-  // based on a template parameter `n_points_1d` (that will be assigned the
-  // `n_points_1d` value specified at the top of this file). More accurate
-  // integration is necessary to avoid the aliasing problem due to the
-  // variable coefficients in the ocean operator. The second less accurate
-  // quadrature formula is a tight one based on `degree+1` and needed for
-  // the inverse mass matrix. While that formula provides an exact inverse
-  // only on affine element shapes and not on deformed elements, it enables
-  // the fast inversion of the mass matrix by tensor product techniques,
-  // necessary to ensure optimal computational efficiency overall.
+  // construction.
+  //
+  // With respect to quadrature, we want to select three different
+  // ways of computing the underlying integrals. The first is a flexible one,
+  // based on Gaussian points and a template parameter `n_points_1d` (that will
+  // be assigned the `n_points_1d` value specified at the top of this file).
+  // More accurate integration is necessary to capture accurately the variable
+  // bathymetry inside the cell. The second formula is also accurate and based
+  // on Gauss-Lobatto with `degree+2` points. It is used to inverse the
+  // mass-matrix in the continuity and tracer equations but also for all the face
+  // integrals and guarantees a positivity proof, otherwise impossible. Finally
+  // we store a less accurate quadrature formula, a tight one based on Gauss with
+  // `degree+1` and needed for the inverse of all other mass-matrices, where exact
+  // integration is wished. For example the discharge mass matrix or a general
+  // projection matrix. While that formula provides an exact inverse only on
+  // affine element shapes and not on deformed elements, it enables the fast
+  // inversion of the mass matrix by tensor product techniques, necessary to
+  // ensure optimal computational efficiency overall.
   //
   // With the last two functions we want also to initialize lots of data that
   // we do not want to recompute at each time-step but rather store in memory
@@ -428,7 +436,7 @@ namespace SpaceDiscretization
   // many many times. We store them contiguously using the class
   // `CellDataStorage`. For each quadrature formula used in the code,
   // we store a separate class object with different data defined in it.
-  // For exmaple, for face quadratures, we must store only the bathymetry,
+  // For example, for face quadratures, we must store only the bathymetry,
   // while for high order Gauss quadrature on the cell we need to store
   // the complete data to compute the rhs. The `FEEvaluation` and `FEFaceEvaluation`
   // are used only to retrieve the quadratures rules.
@@ -446,6 +454,7 @@ namespace SpaceDiscretization
     std::vector<const AffineConstraints<double> *>
       constraints = {&dummy, &dummy};
     const std::vector<Quadrature<1>> quadratures = {QGauss<1>(n_points_1d),
+                                                    QGaussLobatto<1>(degree + 2),
                                                     QGauss<1>(degree + 1)};
 
     typename MatrixFree<dim, Number>::AdditionalData additional_data;
@@ -497,21 +506,34 @@ namespace SpaceDiscretization
           }
       }
 
-    data_quadrature_cell_1.initialize((degree + 1)*(degree + 1));
-    FEEvaluation<dim, degree, degree + 1, 1, Number> phi_cell_1(data, 0, 1);
+    data_quadrature_cell_1.initialize((degree + 2)*(degree + 2));
+    FEEvaluation<dim, degree, degree + 2, 1, Number> phi_cell_1(data, 0, 1);
     for (unsigned int cell = 0; cell < data.n_cell_batches(); ++cell)
       {
         phi_cell_1.reinit(cell);
         for (unsigned int q = 0; q < phi_cell_1.n_q_points; ++q)
           {
             data_quadrature_cell_1.submit_data(
-              evaluate_function<dim, Number, 2>(
-                *bc->problem_data, phi_cell_1.quadrature_point(q)));
+              evaluate_function<dim, Number>(
+                *bc->problem_data, phi_cell_1.quadrature_point(q), 0));
           }
       }
 
-    data_quadrature_face.initialize(2*n_points_1d);
-    FEFaceEvaluation<dim, degree, n_points_1d, 1, Number> phi_face(data, true, 0);
+    data_quadrature_cell_2.initialize((degree + 1)*(degree + 1));
+    FEEvaluation<dim, degree, degree + 1, 1, Number> phi_cell_2(data, 0, 2);
+    for (unsigned int cell = 0; cell < data.n_cell_batches(); ++cell)
+      {
+        phi_cell_2.reinit(cell);
+        for (unsigned int q = 0; q < phi_cell_2.n_q_points; ++q)
+          {
+            data_quadrature_cell_2.submit_data(
+              evaluate_function<dim, Number, 2>(
+                *bc->problem_data, phi_cell_2.quadrature_point(q)));
+          }
+      }
+
+    data_quadrature_face.initialize(2*(degree + 2));
+    FEFaceEvaluation<dim, degree, degree + 2, 1, Number> phi_face(data, true, 0, 1);
     for (unsigned int face = 0; face < data.n_inner_face_batches(); ++face)
       {
         phi_face.reinit(face);
@@ -803,6 +825,64 @@ namespace SpaceDiscretization
       }
   }
 
+#ifdef WETDRY
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_tra, degree, n_points_1d>::local_apply_cell_mass_height(
+    const MatrixFree<dim, Number> &,
+    LinearAlgebra::distributed::Vector<Number>                    &dst,
+    const LinearAlgebra::distributed::Vector<Number>              &src,
+    const std::pair<unsigned int, unsigned int>                   &cell_range) const
+  {
+    FEEvaluation<dim, degree, degree + 2, 1, Number> phi_height(data, 0, 1);
+
+    for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
+      {
+        phi_height.reinit(cell);
+        phi_height.gather_evaluate(src, EvaluationFlags::values);
+
+        for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
+          {
+            const auto z_q = phi_height.get_value(q);
+            const auto zb_q = data_quadrature_cell_1.get_data(cell, q);
+
+            phi_height.submit_value(
+              model.depth(z_q, zb_q),
+              q);
+          }
+
+        phi_height.integrate_scatter(EvaluationFlags::values,
+                                       dst);
+      }
+  }
+#else
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_tra, degree, n_points_1d>::local_apply_cell_mass_height(
+    const MatrixFree<dim, Number> &,
+    LinearAlgebra::distributed::Vector<Number>                    &dst,
+    const LinearAlgebra::distributed::Vector<Number>              &src,
+    const std::pair<unsigned int, unsigned int>                   &cell_range) const
+  {
+    FEEvaluation<dim, degree, degree + 1, 1, Number> phi_height(data, 0, 2);
+
+    for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
+      {
+        phi_height.reinit(cell);
+        phi_height.gather_evaluate(src, EvaluationFlags::values);
+
+        for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
+          {
+            const auto z_q = phi_height.get_value(q);
+            const auto zb_q = data_quadrature_cell_2.get_data(cell, q)[0];
+
+            phi_height.submit_value(model.depth(z_q, zb_q), q);
+          }
+
+        phi_height.integrate_scatter(EvaluationFlags::values,
+                                       dst);
+      }
+  }
+#endif
+
   template <int dim, int n_tra, int degree, int n_points_1d>
   void OceanoOperator<dim, n_tra, degree, n_points_1d>::local_apply_cell_mass_discharge(
     const MatrixFree<dim, Number> &,
@@ -810,8 +890,8 @@ namespace SpaceDiscretization
     const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
     const std::pair<unsigned int, unsigned int>                   &cell_range) const
   {
-    FEEvaluation<dim, degree, degree + 1, 1, Number> phi_height(data,0,1);
-    FEEvaluation<dim, degree, degree + 1, dim, Number> phi_discharge(data,1,1);
+    FEEvaluation<dim, degree, degree + 1, 1, Number> phi_height(data, 0, 2);
+    FEEvaluation<dim, degree, degree + 1, dim, Number> phi_discharge(data, 1, 2);
 
     for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
       {
@@ -824,7 +904,7 @@ namespace SpaceDiscretization
           {
             const auto z_q = phi_height.get_value(q);
             const auto q_q = phi_discharge.get_value(q);
-            const auto zb_q = data_quadrature_cell_1.get_data(cell, q)[0];
+            const auto zb_q = data_quadrature_cell_2.get_data(cell, q)[0];
 
             phi_discharge.submit_value(model.mass_flux<dim>(z_q, q_q, zb_q), q);
           }
@@ -895,14 +975,14 @@ namespace SpaceDiscretization
     const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
     const std::pair<unsigned int, unsigned int>                   &face_range) const
   {
-    FEFaceEvaluation<dim, degree, n_points_1d, 1, Number> phi_height_m(data,
-                                                                      true, 0);
-    FEFaceEvaluation<dim, degree, n_points_1d, 1, Number> phi_height_p(data,
-                                                                      false, 0);
-    FEFaceEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge_m(data,
-                                                                      true, 1);
-    FEFaceEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge_p(data,
-                                                                      false, 1);
+    FEFaceEvaluation<dim, degree, degree + 2, 1, Number> phi_height_m(data,
+                                                                      true, 0, 1);
+    FEFaceEvaluation<dim, degree, degree + 2, 1, Number> phi_height_p(data,
+                                                                      false, 0, 1);
+    FEFaceEvaluation<dim, degree, degree + 2, dim, Number> phi_discharge_m(data,
+                                                                      true, 1, 1);
+    FEFaceEvaluation<dim, degree, degree + 2, dim, Number> phi_discharge_p(data,
+                                                                      false, 1, 1);
 
     for (unsigned int face = face_range.first; face < face_range.second; ++face)
       {
@@ -943,14 +1023,14 @@ namespace SpaceDiscretization
     const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
     const std::pair<unsigned int, unsigned int>                   &face_range) const
   {
-    FEFaceEvaluation<dim, degree, n_points_1d, 1, Number> phi_height_m(data,
-                                                                      true, 0);
-    FEFaceEvaluation<dim, degree, n_points_1d, 1, Number> phi_height_p(data,
-                                                                      false, 0);
-    FEFaceEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge_m(data,
-                                                                      true, 1);
-    FEFaceEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge_p(data,
-                                                                      false, 1);
+    FEFaceEvaluation<dim, degree, degree + 2, 1, Number> phi_height_m(data,
+                                                                      true, 0, 1);
+    FEFaceEvaluation<dim, degree, degree + 2, 1, Number> phi_height_p(data,
+                                                                      false, 0, 1);
+    FEFaceEvaluation<dim, degree, degree + 2, dim, Number> phi_discharge_m(data,
+                                                                      true, 1, 1);
+    FEFaceEvaluation<dim, degree, degree + 2, dim, Number> phi_discharge_p(data,
+                                                                      false, 1, 1);
 
     for (unsigned int face = face_range.first; face < face_range.second; ++face)
       {
@@ -1064,8 +1144,8 @@ namespace SpaceDiscretization
     const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
     const std::pair<unsigned int, unsigned int>                   &face_range) const
   {
-    FEFaceEvaluation<dim, degree, n_points_1d, 1, Number> phi_height(data, true, 0);
-    FEFaceEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge(data, true, 1);
+    FEFaceEvaluation<dim, degree, degree + 2, 1, Number> phi_height(data, true, 0, 1);
+    FEFaceEvaluation<dim, degree, degree + 2, dim, Number> phi_discharge(data, true, 1, 1);
 
     const unsigned int n_vars = dim+1;
 
@@ -1176,8 +1256,8 @@ namespace SpaceDiscretization
     const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
     const std::pair<unsigned int, unsigned int>                   &face_range) const
   {
-    FEFaceEvaluation<dim, degree, n_points_1d, 1, Number> phi_height(data, true, 0);
-    FEFaceEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge(data, true, 1);
+    FEFaceEvaluation<dim, degree, degree + 2, 1, Number> phi_height(data, true, 0, 1);
+    FEFaceEvaluation<dim, degree, degree + 2, dim, Number> phi_discharge(data, true, 1, 1);
 
     const unsigned int n_vars = dim+1;
 
@@ -1295,8 +1375,183 @@ namespace SpaceDiscretization
       }
   }
 
-  // The next function implements the inverse mass matrix operation. The
-  // algorithms and rationale have been discussed extensively in the
+  // The next function implements the inverse mass matrix operation.
+  // As discussed, for the continuity-equation, this involves the solution of a
+  // non-linear system, cellwise. The implementation is thus essentially
+  // different between the continuity and discharge equations.
+  //
+  // For the continuity, we enter the Newton loop and at each iteration we have
+  // to compute the right-hand-side. One part of the right-hand-side, corresponds
+  // to the residual and it is the input `src` of this apply function. An
+  // additional cell term depends on the iterative solution and is computed
+  // inside the Newton loop. Then we can invert the mass-matrix, properly
+  // modified to take into account the last updated dry region. The first part
+  // of the code is simply a correction to the free-surface initial iteration.
+  // In dry cell the mass-matrix would be singular making impossible to flood
+  // such cells. An artificial lifting of the free-surface just an epsilon (1e-9)
+  // beyond the the bathymetry allows to start-up the Newton loop also in case of
+  // fully dry cell.
+  //
+  // One implementation detail to note is that, to check wet-dry points, an if
+  // statement is necessary and by definition, it cannot be vectorized. In that
+  // case we have no other options that unroll the lanes. Whenever possible a
+  // lane mask is used to set the dof values. The mass-matrix is inverted with
+  // the class `CellwiseInverseMassMatrix` which has been reimplemented inside
+  // the oceano code to handle a generic quadrature formula. In our case the
+  // Gauss-Lobatto quadrature is needed to guarantee the positivity of the
+  // water depth.
+#ifdef WETDRY
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_tra, degree, n_points_1d>::local_apply_inverse_mass_matrix_height(
+    const MatrixFree<dim, Number> &,
+    LinearAlgebra::distributed::Vector<Number>       &dst,
+    const LinearAlgebra::distributed::Vector<Number> &src,
+    const std::pair<unsigned int, unsigned int>      &cell_range) const
+  {
+    FEEvaluation<dim, degree, degree + 2, 1, Number> phi_height(data, 0, 1);
+    FEEvaluation<dim, degree, degree + 2, 1, Number> phi_height_inverse(data, 0, 1);
+    MatrixFreeOperatorsOceano::CellwiseInverseMassMatrix<dim, degree, degree + 2, 1, Number>
+      inverse(phi_height_inverse);
+
+    LinearAlgebra::distributed::Vector<Number> rhs;
+    rhs.reinit(dst);
+
+    for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
+      {
+        phi_height.reinit(cell);
+        phi_height.gather_evaluate(dst, EvaluationFlags::values);
+
+        // This is the lifting of the free-surface in dry cells to be able
+        // to treat also such cells. A very small epsilon is considered to not
+        // start too far from the converged solution and slow down the
+        // convergence of the iterative method. In fact, the free-surface
+        // must be very accurate here to preserve well-balancing at machine
+        // accuracy.
+        const VectorizedArray<Number> epsilon = 1e-09;
+        VectorizedArray<Number> zb_max_dry = -1000.;
+        std::bitset<phi_height.n_lanes> mask;
+        for (unsigned int v = 0; v < data.n_active_entries_per_cell_batch(cell); ++v)
+          {
+            unsigned int n_dry_points = 0;
+            for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
+              {
+                const auto z_q = phi_height.get_value(q)[v];
+                const auto zb_q = data_quadrature_cell_1.get_data(cell, q)[v];
+
+                if (z_q <= -zb_q)
+                  {
+                    zb_max_dry[v] = std::max(zb_q, zb_max_dry[v]);
+                    n_dry_points++;
+                  }
+              }
+            if (n_dry_points == phi_height.n_q_points)
+              mask[v] = 1;
+          }
+
+        if (mask.any())
+          {
+            for (unsigned int i = 0; i < phi_height.dofs_per_cell; ++i)
+              phi_height.submit_dof_value(-zb_max_dry + epsilon, i);
+            phi_height.set_dof_values(dst, 0, mask);
+          }
+
+        // Here we enter the Newton loop: in order, 1) we read the residual,
+        // 2) we sum the last term which depend on the iterative solution,
+        // 3) we check whether the free-surface is converged or not
+        // 4) finally we invert the mass-matrix. Please note that if all points
+        // are dry it means that the iterative method reached the dry state
+        // and we nullify the right-hand-side, so no need to invert the
+        // singular matrix. Since the convergence is quite fast (one or two
+        // iterations) we exit in any case the loop after maximum five iterations.
+        for (unsigned int k = 0; k < 5; ++k)
+          {
+            phi_height.read_dof_values(src);
+
+            for (unsigned int i = 0; i < phi_height.dofs_per_cell; ++i)
+              {
+                const auto vec_ki = phi_height.get_dof_value(i);
+                phi_height.submit_dof_value(vec_ki, i);
+              }
+
+            phi_height.set_dof_values(rhs);
+
+
+            phi_height.gather_evaluate(dst, EvaluationFlags::values);
+
+            for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
+              {
+                const auto z_q = phi_height.get_value(q);
+                const auto zb_q = data_quadrature_cell_1.get_data(cell, q);
+
+                phi_height.submit_value(-model.depth(z_q, zb_q), q);
+              }
+
+            phi_height.integrate_scatter(EvaluationFlags::values,
+                                       rhs);
+
+            phi_height.read_dof_values(rhs);
+
+            Number norm_rhs_in_lane = 0.;
+            for (unsigned int v = 0; v < data.n_active_entries_per_cell_batch(cell); ++v)
+              for (unsigned int i = 0; i < phi_height.dofs_per_cell; ++i)
+                norm_rhs_in_lane += std::abs(phi_height.get_dof_value(i)[v]);
+            if (norm_rhs_in_lane < 1e-16) break;
+
+            phi_height_inverse.reinit(cell);
+            phi_height_inverse.gather_evaluate(dst, EvaluationFlags::values);
+
+            AlignedVector<VectorizedArray<Number>> jxw(phi_height_inverse.n_q_points);
+            inverse.fill_JxW_values(jxw);
+            for (unsigned int v = 0; v < data.n_active_entries_per_cell_batch(cell); ++v)
+              {
+                unsigned int n_dry_points = 0;
+                for (unsigned int q = 0; q < phi_height_inverse.n_q_points; ++q)
+                  {
+                    const auto z_q = phi_height_inverse.get_value(q)[v];
+                    const auto zb_q = data_quadrature_cell_1.get_data(cell, q)[v];
+
+                    if (z_q <= -zb_q)
+                      {
+                        jxw[q][v] = 0.;
+                        n_dry_points++;
+                      }
+                  }
+                if (n_dry_points != phi_height_inverse.n_q_points)
+                  inverse.apply(jxw, phi_height.begin_dof_values(), phi_height.begin_dof_values(), v);
+                else
+                  inverse.nullify(phi_height.begin_dof_values(), v);
+              }
+
+            phi_height.distribute_local_to_global(dst);
+        }
+      }
+  }
+#else // lrp: just for testing: to be removed
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_tra, degree, n_points_1d>::local_apply_inverse_mass_matrix_height(
+    const MatrixFree<dim, Number> &,
+    LinearAlgebra::distributed::Vector<Number> &      dst,
+    const LinearAlgebra::distributed::Vector<Number> &src,
+    const std::pair<unsigned int, unsigned int> &     cell_range) const
+  {
+    FEEvaluation<dim, degree, degree + 1, 1, Number> phi_height(data, 0, 2);
+    MatrixFreeOperators::CellwiseInverseMassMatrix<dim, degree, 1, Number>
+      inverse(phi_height);
+
+    for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
+      {
+        phi_height.reinit(cell);
+        phi_height.read_dof_values(src);
+
+        inverse.apply(phi_height.begin_dof_values(), phi_height.begin_dof_values());
+
+        phi_height.set_dof_values(dst);
+      }
+  }
+#endif
+
+  // The next functions implement the inverse mass matrix operation for the
+  // discharge. The algorithms and rationale have been discussed extensively in the
   // introduction, so we here limit ourselves to the technicalities of the
   // MatrixFreeOperators::CellwiseInverseMassMatrix class. It does similar
   // operations as the forward evaluation of the mass matrix, except with a
@@ -1313,47 +1568,7 @@ namespace SpaceDiscretization
   // operate on (which we extract from the global vector by an FEEvaluation
   // object) and write the results back to the destination vector of the mass
   // matrix operation.
-  //
-  // One thing to note is that we added two integer arguments (that are
-  // optional) to the constructor of FEEvaluation, the first being 0
-  // (selecting among the DoFHandler in multi-DoFHandler systems; here, we
-  // only have one) and the second being 1 to make the quadrature formula
-  // selection. As we use the quadrature formula 0 for the over-integration of
-  // nonlinear terms, we use the formula 1 with the default $p+1$ (or
-  // `degree+1` in terms of the variable name) points for the mass-matrix
-  // For the canonical mass-matrix, this leads to square contributions
-  // that are integrated exactly.
-  //
-  // However, if we condense the water depth inside the mass-matrix, exact
-  // integration is impossible since the water depth $h=\zeta-z_b$ depends on
-  // the bathymetry which is irregular and in general it is not a polynomial.
-  // An aliasing error is introduced at this point. To limit such error we
-  // may choose the correct quadrature formula that integrates exactly the
-  // contribution coming from the water height which is a polynomial and lead
-  // to cubic contributions into the mass-matrix. A quadrature formula of degree
-  // $p+2$ would be the minimum required but this is beyond our purposes for now.
-  template <int dim, int n_tra, int degree, int n_points_1d>
-  void OceanoOperator<dim, n_tra, degree, n_points_1d>::local_apply_inverse_mass_matrix_height(
-    const MatrixFree<dim, Number> &,
-    LinearAlgebra::distributed::Vector<Number> &      dst,
-    const LinearAlgebra::distributed::Vector<Number> &src,
-    const std::pair<unsigned int, unsigned int> &     cell_range) const
-  {
-    FEEvaluation<dim, degree, degree + 1, 1, Number> phi_height(data, 0, 1);
-    MatrixFreeOperators::CellwiseInverseMassMatrix<dim, degree, 1, Number>
-      inverse(phi_height);
-
-    for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
-      {
-        phi_height.reinit(cell);
-        phi_height.read_dof_values(src);
-
-        inverse.apply(phi_height.begin_dof_values(), phi_height.begin_dof_values());
-
-        phi_height.set_dof_values(dst);
-      }
-  }
-
+#ifdef WETDRY_MOMENTUM  // lrp: just for testing: to be removed
   template <int dim, int n_tra, int degree, int n_points_1d>
   void OceanoOperator<dim, n_tra, degree, n_points_1d>::local_apply_inverse_mass_matrix_discharge(
     const MatrixFree<dim, Number> &,
@@ -1361,8 +1576,56 @@ namespace SpaceDiscretization
     const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
     const std::pair<unsigned int, unsigned int>                   &cell_range) const
   {
-    FEEvaluation<dim, degree, degree + 1, dim, Number> phi_discharge(data, 1, 1);
-    FEEvaluation<dim, degree, degree + 1, 1, Number> phi_height_ri(data, 0, 1);
+    FEEvaluation<dim, degree, degree + 2, dim, Number> phi_discharge(data, 1, 1);
+    FEEvaluation<dim, degree, degree + 2, 1, Number> phi_height_ri(data, 0, 1);
+    MatrixFreeOperatorsOceano::CellwiseInverseMassMatrix<dim, degree, degree + 2, dim, Number>
+      inverse(phi_discharge);
+
+    for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
+      {
+        phi_discharge.reinit(cell);
+        phi_discharge.read_dof_values(src[0]);
+
+        phi_height_ri.reinit(cell);
+        phi_height_ri.gather_evaluate(src[1], EvaluationFlags::values);
+
+	AlignedVector<VectorizedArray<Number>> jxw(phi_discharge.n_q_points);
+	inverse.fill_JxW_values(jxw);
+        for (unsigned int v = 0; v < data.n_active_entries_per_cell_batch(cell); ++v)
+          {
+            unsigned int n_dry_points = 0;
+            for (unsigned int q = 0; q < phi_discharge.n_q_points; ++q)
+              {
+                const auto z_q = phi_height_ri.get_value(q)[v];
+                const auto zb_q = data_quadrature_cell_1.get_data(cell, q)[v];
+
+                if (z_q <= -zb_q)
+                  {
+                    jxw[q][v] = 0.;
+                    n_dry_points++;
+                  }
+                else
+                  jxw[q][v] *= model.factor_to_discharge(z_q, zb_q);                 
+              }
+            if ( n_dry_points != phi_discharge.n_q_points)
+              inverse.apply(jxw, phi_discharge.begin_dof_values(), phi_discharge.begin_dof_values(), v);
+            else
+              inverse.nullify(phi_discharge.begin_dof_values(), v);
+          }
+
+        phi_discharge.set_dof_values(dst);
+      }
+  }
+#else
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_tra, degree, n_points_1d>::local_apply_inverse_mass_matrix_discharge(
+    const MatrixFree<dim, Number> &,
+    LinearAlgebra::distributed::Vector<Number>                    &dst,
+    const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
+    const std::pair<unsigned int, unsigned int>                   &cell_range) const
+  {
+    FEEvaluation<dim, degree, degree + 1, dim, Number> phi_discharge(data, 1, 2);
+    FEEvaluation<dim, degree, degree + 1, 1, Number> phi_height_ri(data, 0, 2);
     MatrixFreeOperators::CellwiseInverseMassMatrix<dim, degree, dim, Number>
       inverse(phi_discharge);
 
@@ -1380,7 +1643,7 @@ namespace SpaceDiscretization
         for (unsigned int q = 0; q < phi_discharge.n_q_points; ++q)
           {
             const auto z_q = phi_height_ri.get_value(q);
-            const auto zb_q = data_quadrature_cell_1.get_data(cell, q)[0];
+            const auto zb_q = data_quadrature_cell_2.get_data(cell, q)[0];
 
             inverse_jxw[q] *= 1. / model.factor_to_discharge(z_q, zb_q);
           }
@@ -1390,6 +1653,7 @@ namespace SpaceDiscretization
         phi_discharge.set_dof_values(dst);
       }
   }
+#endif
 
   template <int dim, int n_tra, int degree, int n_points_1d>
   void OceanoOperator<dim, n_tra, degree, n_points_1d>::local_apply_inverse_modified_mass_matrix_discharge(
@@ -1398,9 +1662,9 @@ namespace SpaceDiscretization
     const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
     const std::pair<unsigned int, unsigned int>                   &cell_range) const
   {
-    FEEvaluation<dim, degree, degree + 1, dim, Number> phi_discharge(data, 1, 1);
-    FEEvaluation<dim, degree, degree + 1, 1, Number> phi_height_ri(data, 0, 1);
-    FEEvaluation<dim, degree, degree + 1, dim, Number> phi_discharge_ri(data, 1, 1);
+    FEEvaluation<dim, degree, degree + 1, dim, Number> phi_discharge(data, 1, 2);
+    FEEvaluation<dim, degree, degree + 1, 1, Number> phi_height_ri(data, 0, 2);
+    FEEvaluation<dim, degree, degree + 1, dim, Number> phi_discharge_ri(data, 1, 2);
     MatrixFreeOperators::CellwiseInverseMassMatrix<dim, degree, dim, Number>
       inverse(phi_discharge);
 
@@ -1421,8 +1685,8 @@ namespace SpaceDiscretization
           {
             const auto z_q = phi_height_ri.get_value(q);
             const auto q_q = phi_discharge_ri.get_value(q);
-            const auto zb_q = data_quadrature_cell_1.get_data(cell, q)[0];
-            const auto cf_q = data_quadrature_cell_1.get_data(cell, q)[1];
+            const auto zb_q = data_quadrature_cell_2.get_data(cell, q)[0];
+            const auto cf_q = data_quadrature_cell_2.get_data(cell, q)[1];
 
             inverse_jxw[q] *= 1. / (model.factor_to_discharge(z_q, zb_q) * ( 1. +
               factor_matrix * model.bottom_friction.jacobian<dim>(
@@ -1439,46 +1703,16 @@ namespace SpaceDiscretization
       }
   }
 
-#ifdef OCEANO_WITH_MASSCONSERVATIONCHECK
-  // The next two functions are local operations that are used to compute
-  // the mass conservation balance. The next function computes the
-  // mass contained at each degree of freedom.
+  // The next function is a 'do nothing' operation used only to compute
+  // the mass conservation diagnostics.
   template <int dim, int n_tra, int degree, int n_points_1d>
-  void OceanoOperator<dim, n_tra, degree, n_points_1d>::local_apply_cell_mass_depth(
-    const MatrixFree<dim, Number> &,
-    LinearAlgebra::distributed::Vector<Number>                    &dst,
-    const LinearAlgebra::distributed::Vector<Number>              &src,
-    const std::pair<unsigned int, unsigned int>                   &cell_range) const
-  {
-    FEEvaluation<dim, degree, degree+1, 1, Number> phi_height(data, 0, 1);
-
-    for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
-      {
-        phi_height.reinit(cell);
-        phi_height.gather_evaluate(src, EvaluationFlags::values);
-
-        for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
-          {
-            const auto z_q = phi_height.get_value(q);
-            const auto zb_q = data_quadrature_cell_1.get_data(cell, q)[0];
-
-            phi_height.submit_value(model.depth(z_q, zb_q), q);
-          }
-
-        phi_height.integrate_scatter(EvaluationFlags::values,
-                                       dst);
-      }
-  }
-
-  template <int dim, int n_tra, int degree, int n_points_1d>
-  void OceanoOperator<dim, n_tra, degree, n_points_1d>::local_apply_fake_depth(
+  void OceanoOperator<dim, n_tra, degree, n_points_1d>::local_apply_fake(
     const MatrixFree<dim, Number> &,
     LinearAlgebra::distributed::Vector<Number>                    &/*dst*/,
     const std::vector<LinearAlgebra::distributed::Vector<Number>> &/*src*/,
     const std::pair<unsigned int, unsigned int>                   &/*face_range*/) const
   {
   }
-#endif
 
   // @sect4{The apply() and related functions}
 
@@ -1658,7 +1892,11 @@ namespace SpaceDiscretization
                 &OceanoOperator::local_apply_face_height,
                 &OceanoOperator::local_apply_boundary_face_height,
                 this,
+#ifdef WETDRY
+                vec_ki_height[current_stage+1],
+#else
                 vec_ki_height.front(),
+#endif
                 current_ri,
                 true,
                 MatrixFree<dim, Number>::DataAccessOnFaces::values,
@@ -1701,6 +1939,48 @@ namespace SpaceDiscretization
         1);
 
 
+#ifdef WETDRY
+      data.cell_loop(
+        &OceanoOperator::local_apply_cell_mass_height,
+        this,
+        vec_ki_height.front(),
+        solution_height,
+        [&](const unsigned int start_range, const unsigned int end_range) {
+          /* DEAL_II_OPENMP_SIMD_PRAGMA */
+          for (unsigned int i = start_range; i < end_range; ++i)
+            {
+              Number k_i           = vec_ki_height[1].local_element(i);
+              vec_ki_height.front().local_element(i)  = factor_residual[0]  * k_i;
+              for (unsigned int j = 1; j < current_stage+1; ++j)
+		{
+		  k_i              = vec_ki_height[j+1].local_element(i);
+		  vec_ki_height.front().local_element(i) += factor_residual[j]  * k_i;
+		}
+            }
+	},
+        std::function<void(const unsigned int, const unsigned int)>(),
+        0);
+
+      if (current_stage == n_stages-1)
+        {
+          solution_height.zero_out_ghost_values(); //lrp: works only serial this is potentially dangerous in // runs
+          data.cell_loop(
+            &OceanoOperator::local_apply_inverse_mass_matrix_height,
+            this,
+            solution_height,
+            vec_ki_height.front());
+        }
+      else
+        {
+          next_ri_height = solution_height;
+          next_ri_height.zero_out_ghost_values(); //lrp: works only serial this is potentially dangerous in // runs
+          data.cell_loop(
+            &OceanoOperator::local_apply_inverse_mass_matrix_height,
+            this,
+            next_ri_height,
+            vec_ki_height.front());
+        }
+#else
       data.cell_loop(
         &OceanoOperator::local_apply_inverse_mass_matrix_height,
         this,
@@ -1740,6 +2020,7 @@ namespace SpaceDiscretization
             }
         },
         0);
+#endif
 
 
       if (current_stage == n_stages-1)
@@ -1835,7 +2116,11 @@ namespace SpaceDiscretization
                 &OceanoOperator::local_apply_face_height,
                 &OceanoOperator::local_apply_boundary_face_height,
                 this,
+#ifdef WETDRY
+                vec_ki_height[current_stage+1],
+#else
                 vec_ki_height.front(),
+#endif
                 current_ri,
                 true,
                 MatrixFree<dim, Number>::DataAccessOnFaces::values,
@@ -1922,6 +2207,48 @@ namespace SpaceDiscretization
         std::function<void(const unsigned int, const unsigned int)>(),
         1);
 
+#ifdef WETDRY
+      data.cell_loop(
+        &OceanoOperator::local_apply_cell_mass_height,
+        this,
+        vec_ki_height.front(),
+        solution_height,
+        [&](const unsigned int start_range, const unsigned int end_range) {
+          /* DEAL_II_OPENMP_SIMD_PRAGMA */
+          for (unsigned int i = start_range; i < end_range; ++i)
+            {
+              Number k_i           = vec_ki_height[1].local_element(i);
+              vec_ki_height.front().local_element(i)  = factor_residual[0]  * k_i;
+              for (unsigned int j = 1; j < current_stage+1; ++j)
+		{
+		  k_i              = vec_ki_height[j+1].local_element(i);
+		  vec_ki_height.front().local_element(i) += factor_residual[j]  * k_i;
+		}
+            }
+	},
+        std::function<void(const unsigned int, const unsigned int)>(),
+        0);
+
+      if (current_stage == n_stages-1)
+        {
+          solution_height.zero_out_ghost_values(); //lrp: works only serial this is potentially dangerous in // runs
+          data.cell_loop(
+            &OceanoOperator::local_apply_inverse_mass_matrix_height,
+            this,
+            solution_height,
+            vec_ki_height.front());
+        }
+      else
+        {
+          next_ri_height = solution_height;
+          next_ri_height.zero_out_ghost_values(); //lrp: works only serial this is potentially dangerous in // runs
+          data.cell_loop(
+            &OceanoOperator::local_apply_inverse_mass_matrix_height,
+            this,
+            next_ri_height,
+            vec_ki_height.front());
+        }
+#else
       data.cell_loop(
         &OceanoOperator::local_apply_inverse_mass_matrix_height,
         this,
@@ -1961,6 +2288,8 @@ namespace SpaceDiscretization
             }
         },
         0);
+#endif
+
 
       if (current_stage == n_stages-1)
         {
@@ -2017,8 +2346,8 @@ namespace SpaceDiscretization
 
       double local_integrals[2] = {0., 0.};
 
-      data.loop(&OceanoOperator::local_apply_fake_depth,
-                &OceanoOperator::local_apply_fake_depth,
+      data.loop(&OceanoOperator::local_apply_fake,
+                &OceanoOperator::local_apply_fake,
                 &OceanoOperator::local_apply_boundary_face_height,
                 this,
                 vec_ki_depth,
@@ -2026,7 +2355,7 @@ namespace SpaceDiscretization
                 true,
                 MatrixFree<dim, Number>::DataAccessOnFaces::values,
                 MatrixFree<dim, Number>::DataAccessOnFaces::values);
-      data.cell_loop(&OceanoOperator::local_apply_cell_mass_depth,
+      data.cell_loop(&OceanoOperator::local_apply_cell_mass_height,
                      this,
                      integral_depth,
                      solution_height,
@@ -2104,7 +2433,7 @@ namespace SpaceDiscretization
     LinearAlgebra::distributed::Vector<Number> &solution_height,
     LinearAlgebra::distributed::Vector<Number> &solution_discharge) const
   {
-    FEEvaluation<dim, degree, degree + 1, 1, Number> phi_height(data, 0, 1);
+    FEEvaluation<dim, degree, degree + 1, 1, Number> phi_height(data, 0, 2);
     MatrixFreeOperators::CellwiseInverseMassMatrix<dim, degree, 1, Number>
       inverse_height(phi_height);
     solution_height.zero_out_ghost_values();
@@ -2123,7 +2452,7 @@ namespace SpaceDiscretization
         phi_height.set_dof_values(solution_height);
       }
 
-    FEEvaluation<dim, degree, degree + 1, dim, Number> phi_discharge(data, 1, 1);
+    FEEvaluation<dim, degree, degree + 1, dim, Number> phi_discharge(data, 1, 2);
     MatrixFreeOperators::CellwiseInverseMassMatrix<dim, degree, dim, Number>
       inverse_discharge(phi_discharge);
     solution_discharge.zero_out_ghost_values();
@@ -2139,7 +2468,7 @@ namespace SpaceDiscretization
                              evaluate_function<dim, Number>(function,
                                                 phi_discharge.quadrature_point(q),
                                                 0),
-                             data_quadrature_cell_1.get_data(cell, q)[0]);
+                             data_quadrature_cell_2.get_data(cell, q)[0]);
             for (unsigned int d = 0; d < dim; ++d)
               discharge[d] = evaluate_function<dim, Number>(function,
                                                 phi_discharge.quadrature_point(q),
@@ -2203,11 +2532,15 @@ namespace SpaceDiscretization
         Tensor<1, 1+dim, VectorizedArray<Number>> error;
         for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
           {
-            error[0] = evaluate_function<dim, Number>(  //lrp: if there is no ref solution why evaluate a function?
+            error[0] = model.depth(
+                         evaluate_function<dim, Number>(  //lrp: if there is no ref solution why evaluate a function?
                               function, 
               		      phi_height.quadrature_point(q),
-              		      0) - 
-              	       phi_height.get_value(q);
+              		      0),
+              		 data_quadrature_cell_0.get_data(cell, q)[0]) -
+                       model.depth(
+              	         phi_height.get_value(q),
+                         data_quadrature_cell_0.get_data(cell, q)[0]);
             const auto JxW = phi_height.JxW(q);
             local_errors_squared[0] += error[0] * error[0] * JxW;
           }
@@ -2291,8 +2624,8 @@ namespace SpaceDiscretization
   {
     TimerOutput::Scope t(timer, "compute transport speed");
     Number             max_transport = 0;
-    FEEvaluation<dim, degree, degree + 1, 1, Number> phi_height(data, 0, 1);
-    FEEvaluation<dim, degree, degree + 1, dim, Number> phi_discharge(data, 1, 1);
+    FEEvaluation<dim, degree, degree + 2, 1, Number> phi_height(data, 0, 1);
+    FEEvaluation<dim, degree, degree + 2, dim, Number> phi_discharge(data, 1, 1);
 
     for (unsigned int cell = 0; cell < data.n_cell_batches(); ++cell)
       {
@@ -2305,7 +2638,7 @@ namespace SpaceDiscretization
           {
             const auto zq = phi_height.get_value(q);
             const auto qq = phi_discharge.get_value(q);
-            const auto zb_q = data_quadrature_cell_1.get_data(cell, q)[0];
+            const auto zb_q = data_quadrature_cell_1.get_data(cell, q);
             const auto velocity = model.velocity<dim>(zq, qq, zb_q);
 
             const auto inverse_jacobian = phi_height.inverse_jacobian(q);
@@ -2341,10 +2674,8 @@ namespace SpaceDiscretization
 
         // Similarly to the previous function, we must make sure to accumulate
         // speed only on the valid cells of a cell batch.
-        for (unsigned int v = 0; v < data.n_active_entries_per_cell_batch(cell);
-             ++v)
-          for (unsigned int d = 0; d < 3; ++d)
-            max_transport = std::max(max_transport, local_max[v]);
+        for (unsigned int v = 0; v < data.n_active_entries_per_cell_batch(cell);++v)
+          max_transport = std::max(max_transport, local_max[v]);
       }
 
     max_transport = Utilities::MPI::max(max_transport, MPI_COMM_WORLD);
@@ -2375,9 +2706,9 @@ namespace SpaceDiscretization
     const LinearAlgebra::distributed::Vector<Number>        &solution_discharge,
     LinearAlgebra::distributed::Vector<Number>              &postprocess_velocity) const
   {
-    FEEvaluation<dim, degree, degree + 1, 1, Number> phi_height(data, 0, 1);
-    FEEvaluation<dim, degree, degree + 1, dim, Number> phi_discharge(data, 1, 1);
-    FEEvaluation<dim, degree, degree + 1, dim, Number> phi_velocity(data, 1, 1);
+    FEEvaluation<dim, degree, degree + 1, 1, Number> phi_height(data, 0, 2);
+    FEEvaluation<dim, degree, degree + 1, dim, Number> phi_discharge(data, 1, 2);
+    FEEvaluation<dim, degree, degree + 1, dim, Number> phi_velocity(data, 1, 2);
     MatrixFreeOperators::CellwiseInverseMassMatrix<dim, degree, dim, Number>
       inverse_velocity(phi_velocity);
 
@@ -2393,7 +2724,7 @@ namespace SpaceDiscretization
           {
             const auto z_q = phi_height.get_value(q);
             const auto q_q = phi_discharge.get_value(q);
-            const auto zb_q = data_quadrature_cell_1.get_data(cell, q)[0];
+            const auto zb_q = data_quadrature_cell_2.get_data(cell, q)[0];
 
             phi_velocity.submit_dof_value(model.velocity<dim>(z_q, q_q, zb_q), q);
           }

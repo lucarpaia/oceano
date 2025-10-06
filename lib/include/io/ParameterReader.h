@@ -204,6 +204,13 @@ namespace IO
                         "0.",
                         Patterns::Double(0),
                         "Horizontal diffusion coefficient");
+
+      prm.declare_entry("Threshold_for_wetdry",
+                        "0.1",
+                        Patterns::Double(0),
+                        "Depth threshold used in the de-singularizing of"
+                        "the velocity computation: below the threshold"
+                        "the division the division is avoided.");
     }
     prm.leave_subsection();
 

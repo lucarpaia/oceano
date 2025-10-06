@@ -30,17 +30,22 @@
 namespace ICBC
 {
 
-  // Thacker in 1981 found an exact solutions of the Shallow Water equations
-  // with moving boundaries, that is with wetting and drying. He found an analytic
-  // periodic solutions (there is no damping) with Coriolis effect that here is
-  // neglected. The test implemented is the one-dimensional simplification of the
-  // Thacker solution with a planar surface, proposed in the SWASH test-suite of
-  // Delestre,2016. The bathymetry is a parabola.
+  // Thacker in 1981 found an exact solutions of the shallow water equations
+  // with moving boundaries, that is with wetting and drying. The shallow water
+  // equations admit analytic periodic solutions (there is no damping) with Coriolis
+  // effect that here is neglected. The test implemented is the one-dimensional
+  // simplification of the Thacker solution with a planar surface, that is proposed
+  // in the SWASH test-suite of (Delestre,2016). The bathymetry is a parabola.
+  // We have added an option to compare the solution with a true Finite Volume.
+  // In that case we have to read a piecewice constant bathymetry per cell and the
+  // code must be slightly changed.
+#define  ICBC_THACKEROSCILLATIONS1D_FINITEVOLUME
 
   using namespace dealii;
   
   // We define constant parameters that help in the definition of the initial
-  // and boundary conditions. We use the same parameter of the SWASH test case:
+  // and boundary conditions. We use the same notation and parameter value of the
+  // SWASH test case.
   constexpr double h0      = 0.5;
   constexpr double a       = 1.0;
   constexpr double L       = 4.0;
@@ -74,15 +79,31 @@ namespace ICBC
     ProblemData(IO::ParameterHandler &prm);
     ~ProblemData(){};
 
-   inline double thackerOscillations1d_bathymetry(const Point<dim> & p) const;
+    inline double thackerOscillations1d_bathymetry(const Point<dim> & p) const;
 
     virtual double value(const Point<dim> & p,
                          const unsigned int component = 0) const override;
+
+#ifdef ICBC_THACKEROSCILLATIONS1D_FINITEVOLUME
+  private:
+    std::string bathymetry_filename(IO::ParameterHandler &prm) const;
+    IO::TxtDataReader<dim> bathymetry_data_reader;
+    const Functions::InterpolatedUniformGridData<dim> bathymetry_data;
+#endif
   };
 
   template <int dim>
-  ProblemData<dim>::ProblemData(IO::ParameterHandler &/*prm*/)
+  ProblemData<dim>::ProblemData(IO::ParameterHandler &prm)
     : Function<dim>(dim+3)
+#ifdef ICBC_THACKEROSCILLATIONS1D_FINITEVOLUME
+    , bathymetry_data_reader(bathymetry_filename(prm))
+    , bathymetry_data(
+        bathymetry_data_reader.endpoints,
+        bathymetry_data_reader.n_intervals,
+        Table<dim, double>(bathymetry_data_reader.n_intervals.front()+1,
+                           bathymetry_data_reader.n_intervals.back()+1,
+                           bathymetry_data_reader.get_data(bathymetry_data_reader.filename).begin()))
+#endif
   {}
 
 
@@ -95,13 +116,28 @@ namespace ICBC
     const double inv_a = 1./a;
     return -h0 * (inv_a*inv_a * x_half*x_half - 1.);
   }
+#ifdef ICBC_THACKEROSCILLATIONS1D_FINITEVOLUME
+  template <int dim>
+  std::string ProblemData<dim>::bathymetry_filename(IO::ParameterHandler &prm) const
+  {
+    prm.enter_subsection("Input data files");
+    std::string filename = prm.get("Bathymetry_filename");
+    prm.leave_subsection();
+
+    return filename;
+  }
+#endif
 
   template <int dim>
   double ProblemData<dim>::value(const Point<dim> & x,
                                  const unsigned int component) const
   {
     if (component == 0)
+#ifdef ICBC_THACKEROSCILLATIONS1D_FINITEVOLUME
+      return bathymetry_data.value(x);
+#else
       return thackerOscillations1d_bathymetry(x);
+#endif
     else
       return 0.0;
   }
@@ -155,6 +191,7 @@ namespace ICBC
     if (x[0] < x1)
       {
         const double x_half = x1-0.5*L;
+        //const double x_half = x[0]-0.5*L;
         zb = h0 * (inv_a*inv_a * x_half*x_half - 1.);
         h = 0.;
         u = 0.;
@@ -162,6 +199,7 @@ namespace ICBC
     else if (x[0] > x2)
       {
         const double x_half = x2-0.5*L;
+        //const double x_half = x[0]-0.5*L;   //lrp: check which line is the best one.
         zb = h0 * (inv_a*inv_a * x_half*x_half - 1.);        
         h = 0.;
         u = 0.;

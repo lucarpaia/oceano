@@ -96,6 +96,7 @@ namespace Model
     ~ShallowWaterDischarge(){};
  
     double g;
+    double cu4;
 
     std::vector<std::string> vars_name;
     std::vector<std::string> postproc_vars_name;
@@ -296,6 +297,8 @@ namespace Model
   {
     prm.enter_subsection("Physical constants");
     g = prm.get_double("g");
+    double cu = prm.get_double("Threshold_for_wetdry");
+    cu4 = cu*cu*cu*cu;
     prm.leave_subsection();
   }
 
@@ -319,7 +322,7 @@ namespace Model
       const Number height,
       const Number bathymetry) const
   {
-    return std::max(height + bathymetry, Number(1.e-4));
+    return std::max(height + bathymetry, Number(1e-12));
   }
 
   template <int dim, typename Number>
@@ -330,10 +333,9 @@ namespace Model
       const Tensor<1, dim, Number> &discharge,
       const Number                  bathymetry) const
   {
-    const Number cu = 1.e-2;
     const Number h = depth(height, bathymetry);
     const Number h4 = h*h*h*h;
-    const Number inverse_depth = sqrt(2.) * h / sqrt(h4 + std::max(h4, cu*cu*cu*cu));
+    const Number inverse_depth = sqrt(2.) * h / sqrt(h4 + std::max(h4, Number(cu4)));
 
     return discharge * inverse_depth;
   }
@@ -353,11 +355,12 @@ namespace Model
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
     ShallowWaterDischarge::mass_flux(
-      const Number                  /*height*/,
+      const Number                  height,
       const Tensor<1, dim, Number> &discharge,
-      const Number                  /*bathymetry*/) const
+      const Number                  bathymetry) const
   {
-    return discharge;
+    return depth(height, bathymetry) * velocity<dim>(height, discharge, bathymetry);
+
   }
 
   template <int dim, typename Number>
