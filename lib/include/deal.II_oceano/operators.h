@@ -46,7 +46,6 @@ namespace MatrixFreeOperatorsOceano
 
   template <int dim,
             int fe_degree,
-            int n_q_points_1d,
             int n_components             = 1,
             typename Number              = double,
             typename VectorizedArrayType = VectorizedArray<Number>>
@@ -64,23 +63,6 @@ namespace MatrixFreeOperatorsOceano
                              VectorizedArrayType> &fe_eval);
 
     /**
-     * Applies the inverse @ref GlossMassMatrix "mass matrix" operation on an input array, using the
-     * inverse of the JxW values provided by the `fe_eval` argument passed to
-     * the constructor of this class. Note that the user code must call
-     * FEEvaluation::reinit() on the underlying evaluator to make the
-     * FEEvaluationBase::JxW() method return the information of the correct
-     * cell. It is assumed that the pointers of the input and output arrays
-     * are valid over the length FEEvaluation::dofs_per_cell, which is the
-     * number of entries processed by this function. The @p in_array and
-     * @p out_array arguments may point to the same memory position. The `apply` uses
-     * the `FullMatrix` that is not vectorized so you have to pass the cell index in
-     * the lane too.
-     */
-    void apply(const VectorizedArrayType               *in_array,
-               VectorizedArrayType                     *out_array,
-               const unsigned int                       cell_in_lane) const;
-
-    /**
      * Applies the inverse @ref GlossMassMatrix "mass matrix" operation on an input array. It is
      * assumed that the passed input and output arrays are of correct size,
      * namely FEEvaluation::dofs_per_cell long. The inverse of the
@@ -91,7 +73,7 @@ namespace MatrixFreeOperatorsOceano
      * will implemented, the coefficients will be interpreted as scalar in each
      * component
      */
-    void apply(const AlignedVector<VectorizedArrayType> &coefficient,
+    void apply(const AlignedVector<VectorizedArrayType> &mass_array,
                const VectorizedArrayType                *in_array,
                VectorizedArrayType                      *out_array,
                const unsigned int                        cell_in_lane) const;
@@ -102,13 +84,6 @@ namespace MatrixFreeOperatorsOceano
     */
     void nullify(VectorizedArrayType                     *out_array,
                  const unsigned int                       cell_in_lane) const;
-
-    /**
-     * Fills the given array with JxW values, i.e., a mass
-     * matrix with coefficient 1. Non-unit coefficients must be multiplied
-     * to this array.
-     */
-    void fill_JxW_values(AlignedVector<VectorizedArrayType> &jxw) const;
 
   private:
     /**
@@ -125,14 +100,12 @@ namespace MatrixFreeOperatorsOceano
 
   template <int dim,
             int fe_degree,
-            int n_q_points_1d,
             int n_components,
             typename Number,
             typename VectorizedArrayType>
   CellwiseInverseMassMatrix<
     dim,
     fe_degree,
-    n_q_points_1d,
     n_components,
     Number,
     VectorizedArrayType>::CellwiseInverseMassMatrix(const FEEvaluationBase<dim,
@@ -147,7 +120,6 @@ namespace MatrixFreeOperatorsOceano
 
   template <int dim,
             int fe_degree,
-            int n_q_points_1d,
             int n_components,
             typename Number,
             typename VectorizedArrayType>
@@ -155,11 +127,11 @@ namespace MatrixFreeOperatorsOceano
   CellwiseInverseMassMatrix<
     dim,
     fe_degree,
-    n_q_points_1d,
     n_components,
     Number,
     VectorizedArrayType>::
-      apply(const VectorizedArrayType *in_array,
+      apply(const AlignedVector<VectorizedArrayType> &mass_array,
+            const VectorizedArrayType *in_array,
             VectorizedArrayType       *out_array,
             const unsigned int         cell_in_lane) const
   {
@@ -170,41 +142,15 @@ namespace MatrixFreeOperatorsOceano
     const unsigned int dofs_per_component =
         Utilities::pow(given_degree + 1, dim);
 
-    const unsigned int n_q_points =
-        Utilities::pow(n_q_points_1d, dim);
-
     FullMatrix<Number> cell_matrix(dofs_per_component, dofs_per_component);
     Vector<Number> cell_src(dofs_per_component),
                    cell_dst(dofs_per_component);
 
-    AlignedVector<VectorizedArrayType> shape_values =
-      fe_eval.get_shape_info().data.front().shape_values;
-    std::array<std::array<Number, n_q_points>, dofs_per_component> fe_shape_values;
+    for (unsigned int j=0; j<dofs_per_component; ++j)
+      for (unsigned int i=0; i<dofs_per_component; ++i)
+        cell_matrix(i,j) = mass_array[i + j * dofs_per_component][cell_in_lane];
 
-    unsigned int dof_index = 0;
-    for (unsigned int i = 0; i < given_degree + 1; ++i)
-      for (unsigned int j = 0; j < given_degree + 1; ++j)
-        {
-          unsigned int point_index = 0;
-          for (unsigned int q1 = 0; q1 < n_q_points_1d; ++q1)
-            for (unsigned int q2 = 0; q2 < n_q_points_1d; ++q2)
-              {
-                fe_shape_values[dof_index][point_index] =
-                  shape_values[i * n_q_points_1d + q1][cell_in_lane] *
-                    shape_values[j * n_q_points_1d + q2][cell_in_lane];
-                point_index++;
-              }
-          dof_index++;
-        }
-
-    for (unsigned int i=0; i<dofs_per_component; ++i)
-      for (unsigned int j=0; j<dofs_per_component; ++j)
-        for (unsigned int q=0; q<n_q_points; ++q)
-          cell_matrix(i,j) += fe_shape_values[i][q] *
-                                fe_shape_values[j][q] *
-                                  fe_eval.JxW(q)[cell_in_lane];
     cell_matrix.gauss_jordan();
-
     for (unsigned int d = 0; d < n_components; ++d)
       {
         for (unsigned int i = 0; i < dofs_per_component; ++i)
@@ -221,7 +167,6 @@ namespace MatrixFreeOperatorsOceano
 
   template <int dim,
             int fe_degree,
-            int n_q_points_1d,
             int n_components,
             typename Number,
             typename VectorizedArrayType>
@@ -229,82 +174,6 @@ namespace MatrixFreeOperatorsOceano
   CellwiseInverseMassMatrix<
     dim,
     fe_degree,
-    n_q_points_1d,
-    n_components,
-    Number,
-    VectorizedArrayType>::
-      apply(const AlignedVector<VectorizedArrayType> &coefficient,
-            const VectorizedArrayType                *in_array,
-            VectorizedArrayType                      *out_array,
-            const unsigned int                        cell_in_lane) const
-  {
-    const unsigned int given_degree =
-        (fe_degree > -1) ? fe_degree :
-                           fe_eval.get_shape_info().data.front().fe_degree;
-
-    const unsigned int dofs_per_component =
-        Utilities::pow(given_degree + 1, dim);
-
-    const unsigned int n_q_points =
-        Utilities::pow(n_q_points_1d, dim);
-
-    FullMatrix<Number> cell_matrix(dofs_per_component, dofs_per_component);
-    Vector<Number> cell_src(dofs_per_component),
-                   cell_dst(dofs_per_component);
-
-    AlignedVector<VectorizedArrayType> shape_values =
-      fe_eval.get_shape_info().data.front().shape_values;
-    std::array<std::array<Number, n_q_points>, dofs_per_component> fe_shape_values;
-
-    unsigned int dof_index = 0;
-    for (unsigned int i = 0; i < given_degree + 1; ++i)
-      for (unsigned int j = 0; j < given_degree + 1; ++j)
-        {
-          unsigned int point_index = 0;
-          for (unsigned int q1 = 0; q1 < n_q_points_1d; ++q1)
-            for (unsigned int q2 = 0; q2 < n_q_points_1d; ++q2)
-              {
-                fe_shape_values[dof_index][point_index] =
-                  shape_values[i * n_q_points_1d + q1][cell_in_lane] *
-                    shape_values[j * n_q_points_1d + q2][cell_in_lane];
-                point_index++;
-              }
-          dof_index++;
-        }
-
-    for (unsigned int i=0; i<dofs_per_component; ++i)
-      for (unsigned int j=0; j<dofs_per_component; ++j)
-        for (unsigned int q=0; q<n_q_points; ++q)
-          cell_matrix(i,j) += fe_shape_values[i][q] *
-                                fe_shape_values[j][q] *
-                                  coefficient[q][cell_in_lane];
-    cell_matrix.gauss_jordan();
-
-    for (unsigned int d = 0; d < n_components; ++d)
-      {
-        for (unsigned int i = 0; i < dofs_per_component; ++i)
-          cell_src[i] = in_array[i + d * dofs_per_component][cell_in_lane];
-
-        cell_matrix.vmult(cell_dst, cell_src);
-
-        for (unsigned int i = 0; i < dofs_per_component; ++i)
-          out_array[i + d * dofs_per_component][cell_in_lane] = cell_dst(i);
-      }
-  }
-
-
-
-  template <int dim,
-            int fe_degree,
-            int n_q_points_1d,
-            int n_components,
-            typename Number,
-            typename VectorizedArrayType>
-  void
-  CellwiseInverseMassMatrix<
-    dim,
-    fe_degree,
-    n_q_points_1d,
     n_components,
     Number,
     VectorizedArrayType>::
@@ -321,35 +190,6 @@ namespace MatrixFreeOperatorsOceano
     for (unsigned int d = 0; d < n_components; ++d)
       for (unsigned int i = 0; i < dofs_per_component; ++i)
         out_array[i + d * dofs_per_component][cell_in_lane] = 0.;
-  }
-
-
-
-  template <int dim,
-            int fe_degree,
-            int n_q_points_1d,
-            int n_components,
-            typename Number,
-            typename VectorizedArrayType>
-  inline void
-  CellwiseInverseMassMatrix<dim,
-                            fe_degree,
-                            n_q_points_1d,
-                            n_components,
-                            Number,
-                            VectorizedArrayType>::
-    fill_JxW_values(
-      AlignedVector<VectorizedArrayType> &jxw) const
-  {
-    const unsigned int n_q_points =
-        Utilities::pow(n_q_points_1d, dim);
-
-    Assert(jxw.size() > 0 && jxw.size() % n_q_points == 0,
-           ExcMessage(
-             "Expected diagonal to be a multiple of scalar dof per cells"));
-
-    for (unsigned int q = 0; q < n_q_points; ++q)
-      jxw[q] = fe_eval.JxW(q);
   }
 } // namespace MatrixFreeOperatorsOceano
 

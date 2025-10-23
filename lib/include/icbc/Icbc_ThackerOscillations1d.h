@@ -190,16 +190,22 @@ namespace ICBC
     double u;
     if (x[0] < x1)
       {
-        const double x_half = x1-0.5*L;
-        //const double x_half = x[0]-0.5*L;
+//#ifdef ICBC_THACKEROSCILLATIONS1D_FINITEVOLUME
+        const double x_half = x[0]-0.5*L;
+//#else
+//        const double x_half = x1-0.5*L;
+//#endif
         zb = h0 * (inv_a*inv_a * x_half*x_half - 1.);
         h = 0.;
         u = 0.;
       }
     else if (x[0] > x2)
       {
-        const double x_half = x2-0.5*L;
-        //const double x_half = x[0]-0.5*L;   //lrp: check which line is the best one.
+//#ifdef ICBC_THACKEROSCILLATIONS1D_FINITEVOLUME
+        const double x_half = x[0]-0.5*L;   //lrp: check which line is the best one.
+//#else
+//        const double x_half = x2-0.5*L;
+//#endif
         zb = h0 * (inv_a*inv_a * x_half*x_half - 1.);        
         h = 0.;
         u = 0.;

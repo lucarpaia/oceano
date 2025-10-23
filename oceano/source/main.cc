@@ -109,7 +109,6 @@
 #endif
 #undef  OCEANO_WITH_MASSCONSERVATIONCHECK
 #define WETDRY           // lrp: just for testing: to be removed
-#undef  WETDRY_MOMENTUM  // lrp: just for testing: to be removed
 
 // The include files are similar to the previous matrix-free tutorial programs
 // step-37, step-48, and step-59

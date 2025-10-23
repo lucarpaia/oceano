@@ -548,7 +548,7 @@ namespace SpaceDiscretization
           }
       }
 
-    data_quadrature_boundary.initialize(n_points_1d);
+    data_quadrature_boundary.initialize(degree + 2);
     for (unsigned int face = data.n_inner_face_batches();
       face < data.n_inner_face_batches()+data.n_boundary_face_batches(); ++face)
       {
@@ -1410,7 +1410,7 @@ namespace SpaceDiscretization
   {
     FEEvaluation<dim, degree, degree + 2, 1, Number> phi_height(data, 0, 1);
     FEEvaluation<dim, degree, degree + 2, 1, Number> phi_height_inverse(data, 0, 1);
-    MatrixFreeOperatorsOceano::CellwiseInverseMassMatrix<dim, degree, degree + 2, 1, Number>
+    MatrixFreeOperatorsOceano::CellwiseInverseMassMatrix<dim, degree, 1, Number>
       inverse(phi_height_inverse);
 
     LinearAlgebra::distributed::Vector<Number> rhs;
@@ -1420,6 +1420,7 @@ namespace SpaceDiscretization
       {
         phi_height.reinit(cell);
         phi_height.gather_evaluate(dst, EvaluationFlags::values);
+        const auto dofs_per_cell = phi_height.dofs_per_cell;
 
         // This is the lifting of the free-surface in dry cells to be able
         // to treat also such cells. A very small epsilon is considered to not
@@ -1429,28 +1430,26 @@ namespace SpaceDiscretization
         // accuracy.
         const VectorizedArray<Number> epsilon = 1e-09;
         VectorizedArray<Number> zb_max_dry = -1000.;
+        VectorizedArray<Number> n_dry_points = 0;
         std::bitset<phi_height.n_lanes> mask;
-        for (unsigned int v = 0; v < data.n_active_entries_per_cell_batch(cell); ++v)
-          {
-            unsigned int n_dry_points = 0;
-            for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
-              {
-                const auto z_q = phi_height.get_value(q)[v];
-                const auto zb_q = data_quadrature_cell_1.get_data(cell, q)[v];
 
-                if (z_q <= -zb_q)
-                  {
-                    zb_max_dry[v] = std::max(zb_q, zb_max_dry[v]);
-                    n_dry_points++;
-                  }
-              }
-            if (n_dry_points == phi_height.n_q_points)
-              mask[v] = 1;
+        for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
+          {
+            const auto z_q = phi_height.get_value(q);
+            const auto zb_q = data_quadrature_cell_1.get_data(cell, q);
+
+            zb_max_dry = compare_and_apply_mask<SIMDComparison::less_than_or_equal>
+              (z_q, -zb_q, std::max(zb_q, zb_max_dry), zb_max_dry);
+            n_dry_points += compare_and_apply_mask<SIMDComparison::less_than_or_equal>
+              (z_q, -zb_q, 1, 0);
           }
+        for (unsigned int v = 0; v < data.n_active_entries_per_cell_batch(cell); ++v)
+          if ((unsigned int) n_dry_points[v] == phi_height.n_q_points)
+            mask[v] = 1;
 
         if (mask.any())
           {
-            for (unsigned int i = 0; i < phi_height.dofs_per_cell; ++i)
+            for (unsigned int i = 0; i < dofs_per_cell; ++i)
               phi_height.submit_dof_value(-zb_max_dry + epsilon, i);
             phi_height.set_dof_values(dst, 0, mask);
           }
@@ -1467,7 +1466,7 @@ namespace SpaceDiscretization
           {
             phi_height.read_dof_values(src);
 
-            for (unsigned int i = 0; i < phi_height.dofs_per_cell; ++i)
+            for (unsigned int i = 0; i < dofs_per_cell; ++i)
               {
                 const auto vec_ki = phi_height.get_dof_value(i);
                 phi_height.submit_dof_value(vec_ki, i);
@@ -1493,34 +1492,53 @@ namespace SpaceDiscretization
 
             Number norm_rhs_in_lane = 0.;
             for (unsigned int v = 0; v < data.n_active_entries_per_cell_batch(cell); ++v)
-              for (unsigned int i = 0; i < phi_height.dofs_per_cell; ++i)
+              for (unsigned int i = 0; i < dofs_per_cell; ++i)
                 norm_rhs_in_lane += std::abs(phi_height.get_dof_value(i)[v]);
             if (norm_rhs_in_lane < 1e-16) break;
+
 
             phi_height_inverse.reinit(cell);
             phi_height_inverse.gather_evaluate(dst, EvaluationFlags::values);
 
-            AlignedVector<VectorizedArray<Number>> jxw(phi_height_inverse.n_q_points);
-            inverse.fill_JxW_values(jxw);
-            for (unsigned int v = 0; v < data.n_active_entries_per_cell_batch(cell); ++v)
+            VectorizedArray<Number> n_dry_points = 0;
+            AlignedVector<VectorizedArray<Number>> maskq(phi_height_inverse.n_q_points);
+            for (unsigned int q = 0; q < phi_height_inverse.n_q_points; ++q)
               {
-                unsigned int n_dry_points = 0;
+                const auto z_q = phi_height_inverse.get_value(q);
+                const auto zb_q = data_quadrature_cell_1.get_data(cell, q);
+                maskq[q] = compare_and_apply_mask<SIMDComparison::less_than_or_equal>
+                  (z_q, -zb_q, 0., 1.);
+                n_dry_points += 1.-maskq[q];
+              }
+
+            AlignedVector<VectorizedArray<Number>>
+              cell_matrix(dofs_per_cell*dofs_per_cell);
+            for (unsigned int i = 0; i < dofs_per_cell; ++i)
+              {
+                for (unsigned int j = 0; j < dofs_per_cell; ++j)
+                  phi_height_inverse.submit_dof_value(VectorizedArray<double>(), j);
+                phi_height_inverse.submit_dof_value(1., i);
+
+                phi_height_inverse.evaluate(EvaluationFlags::values);
+
                 for (unsigned int q = 0; q < phi_height_inverse.n_q_points; ++q)
                   {
-                    const auto z_q = phi_height_inverse.get_value(q)[v];
-                    const auto zb_q = data_quadrature_cell_1.get_data(cell, q)[v];
-
-                    if (z_q <= -zb_q)
-                      {
-                        jxw[q][v] = 0.;
-                        n_dry_points++;
-                      }
+                    phi_height_inverse.submit_value(
+                      phi_height_inverse.get_value(q) * maskq[q], q);
                   }
-                if (n_dry_points != phi_height_inverse.n_q_points)
-                  inverse.apply(jxw, phi_height.begin_dof_values(), phi_height.begin_dof_values(), v);
-                else
-                  inverse.nullify(phi_height.begin_dof_values(), v);
+
+                 phi_height_inverse.integrate(EvaluationFlags::values);
+
+                 for (unsigned int j = 0; j < dofs_per_cell; ++j)
+                   cell_matrix[phi_height_inverse.get_internal_dof_numbering()[j]
+                     + phi_height_inverse.get_internal_dof_numbering()[i] * dofs_per_cell]
+                       = phi_height_inverse.get_dof_value(j);
               }
+            for (unsigned int v = 0; v < data.n_active_entries_per_cell_batch(cell); ++v)
+              if ((unsigned int) n_dry_points[v] != phi_height_inverse.n_q_points)
+                inverse.apply(cell_matrix, phi_height.begin_dof_values(), phi_height.begin_dof_values(), v);
+              else
+                inverse.nullify(phi_height.begin_dof_values(), v);
 
             phi_height.distribute_local_to_global(dst);
         }
@@ -1568,55 +1586,6 @@ namespace SpaceDiscretization
   // operate on (which we extract from the global vector by an FEEvaluation
   // object) and write the results back to the destination vector of the mass
   // matrix operation.
-#ifdef WETDRY_MOMENTUM  // lrp: just for testing: to be removed
-  template <int dim, int n_tra, int degree, int n_points_1d>
-  void OceanoOperator<dim, n_tra, degree, n_points_1d>::local_apply_inverse_mass_matrix_discharge(
-    const MatrixFree<dim, Number> &,
-    LinearAlgebra::distributed::Vector<Number>                    &dst,
-    const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
-    const std::pair<unsigned int, unsigned int>                   &cell_range) const
-  {
-    FEEvaluation<dim, degree, degree + 2, dim, Number> phi_discharge(data, 1, 1);
-    FEEvaluation<dim, degree, degree + 2, 1, Number> phi_height_ri(data, 0, 1);
-    MatrixFreeOperatorsOceano::CellwiseInverseMassMatrix<dim, degree, degree + 2, dim, Number>
-      inverse(phi_discharge);
-
-    for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
-      {
-        phi_discharge.reinit(cell);
-        phi_discharge.read_dof_values(src[0]);
-
-        phi_height_ri.reinit(cell);
-        phi_height_ri.gather_evaluate(src[1], EvaluationFlags::values);
-
-	AlignedVector<VectorizedArray<Number>> jxw(phi_discharge.n_q_points);
-	inverse.fill_JxW_values(jxw);
-        for (unsigned int v = 0; v < data.n_active_entries_per_cell_batch(cell); ++v)
-          {
-            unsigned int n_dry_points = 0;
-            for (unsigned int q = 0; q < phi_discharge.n_q_points; ++q)
-              {
-                const auto z_q = phi_height_ri.get_value(q)[v];
-                const auto zb_q = data_quadrature_cell_1.get_data(cell, q)[v];
-
-                if (z_q <= -zb_q)
-                  {
-                    jxw[q][v] = 0.;
-                    n_dry_points++;
-                  }
-                else
-                  jxw[q][v] *= model.factor_to_discharge(z_q, zb_q);                 
-              }
-            if ( n_dry_points != phi_discharge.n_q_points)
-              inverse.apply(jxw, phi_discharge.begin_dof_values(), phi_discharge.begin_dof_values(), v);
-            else
-              inverse.nullify(phi_discharge.begin_dof_values(), v);
-          }
-
-        phi_discharge.set_dof_values(dst);
-      }
-  }
-#else
   template <int dim, int n_tra, int degree, int n_points_1d>
   void OceanoOperator<dim, n_tra, degree, n_points_1d>::local_apply_inverse_mass_matrix_discharge(
     const MatrixFree<dim, Number> &,
@@ -1653,7 +1622,6 @@ namespace SpaceDiscretization
         phi_discharge.set_dof_values(dst);
       }
   }
-#endif
 
   template <int dim, int n_tra, int degree, int n_points_1d>
   void OceanoOperator<dim, n_tra, degree, n_points_1d>::local_apply_inverse_modified_mass_matrix_discharge(

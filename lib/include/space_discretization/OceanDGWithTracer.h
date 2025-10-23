@@ -636,7 +636,7 @@ namespace SpaceDiscretization
                         phi_tracer.quadrature_point(q),
                         t_m) * (1.-mask_outflow) + mask_outflow*t_m;
 
-                check_absorbing_outflow<Number, n_tra>(t_m, t_p);
+                check_absorbing_outflow<Number, n_tra>(t_m, t_p); //lrp: replace with compare_and_apply_mask
 
               }
             else if (bc->discharge_inflow_boundaries.find(boundary_id) !=
@@ -669,7 +669,7 @@ namespace SpaceDiscretization
                   t_p = evaluate_function_tracer<dim, Number, n_tra>(
                         *bc->discharge_inflow_boundaries.find(boundary_id)->second,
                         phi_tracer.quadrature_point(q),
-                        t_m) * (1.-mask_outflow) + mask_outflow*t_m;
+                        t_m) * (1.-mask_outflow) + mask_outflow*t_m; //lrp: replace with compare_and_apply_mask
 
               }
             else if (bc->absorbing_outflow_boundaries.find(boundary_id) !=
