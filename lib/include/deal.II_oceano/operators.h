@@ -22,21 +22,15 @@
 #include <deal.II/matrix_free/fe_evaluation.h>
 
 /**
- * This class implements the operation of the action of the inverse of a
- * @ref GlossMassMatrix "mass matrix" on an element for a general case.
- * It is useful because the original class provided by the library is
- * valid only for the special case of an evaluation object with as many quadrature
- * points as there are cell degrees of freedom. Here you can use a generic 
- * quadrature formula. This is more flexible but leads to a noticeble overhead.
- * As the original class it uses algorithms from FEEvaluation and produces
- * the exact mass matrix for DGQ elements. This algorithm uses tensor products of
- * 1d mass matrices and than a LU factorization.
+ * The following classes implement the operation of the action of the inverse of a
+ * @ref GlossMassMatrix "mass matrix" for a DGQ element.
+ * It is useful because the original class `CellwiseInverseMassMatrix` provided by
+ * the library is valid only for the special case of an evaluation object with as
+ * many quadrature points as there are cell degrees of freedom. Here you can use a
+ * generic quadrature formula. It is thus more flexible. Moreover we tailor the
+ * singular case specificly to wet-dry applications. That is track fully dry cells
+ * and we set the output array to zero (nothing moves in fully dry cells).
  *
- * The equation may contain variable coefficients, so the user is required
- * to provide an array for the inverse of the local coefficient (this class
- * provide a helper method 'fill_inverse_JxW_values' to get the inverse of a
- * constant-coefficient operator). By now, the local coefficient are scalar
- * equally applied in each component.
 */
 
 namespace MatrixFreeOperatorsOceano
@@ -44,6 +38,15 @@ namespace MatrixFreeOperatorsOceano
 
   using namespace dealii;
 
+ /**
+  * The first class produces the exact mass matrix for DGQ elements. This algorithm
+  * uses a LU factorization, implemented by the deal.ii Gauss-Jordan algorithm. For
+  * the small matrices needed in Discontinuous Galerkin, the inversion cost is totally
+  * acceptable. Indeed, the main problem is that the Gauss-Jordan routine does not
+  * support vectorization and, at the end, it gives a noticeable overhead with respect
+  * to the original deal.ii `CellwiseInverseMassMatrix`.
+  *
+  */
   template <int dim,
             int fe_degree,
             int n_components             = 1,
@@ -63,31 +66,24 @@ namespace MatrixFreeOperatorsOceano
                              VectorizedArrayType> &fe_eval);
 
     /**
-     * Applies the inverse @ref GlossMassMatrix "mass matrix" operation on an input array. It is
-     * assumed that the passed input and output arrays are of correct size,
-     * namely FEEvaluation::dofs_per_cell long. The inverse of the
-     * local coefficient (also containing the inverse JxW values) must be
-     * passed as first argument. Passing more than one component in the
-     * coefficient is not allowed, by now. This means that each component
-     * has the same coefficient. When different coefficients for each component
-     * will implemented, the coefficients will be interpreted as scalar in each
-     * component
+     * Applies the inverse @ref GlossMassMatrix "mass matrix" operation on an input array and
+     * assign it to an output array. It is assumed that the passed input and output pointers are
+     * of correct size, namely FEEvaluation::dofs_per_cell long for input/output and
+     * FEEvaluation::dofs_per_cell power two for the mass matrix. We track the singular case
+     * with a simple if statement that checks a mask passed as argument. The default behaviour
+     * does not check the mask.
+     * To call this function vectorized lanes must be unrolled, as we pass the cell index in the
+     * batch lane in the last argument.
      */
-    void apply(const AlignedVector<VectorizedArrayType> &mass_array,
-               const VectorizedArrayType                *in_array,
-               VectorizedArrayType                      *out_array,
-               const unsigned int                        cell_in_lane) const;
-
-    /**
-    * Applies zero to an input array. Useful to handle the case of
-    * singular matrix.
-    */
-    void nullify(VectorizedArrayType                     *out_array,
-                 const unsigned int                       cell_in_lane) const;
+    void apply(const VectorizedArrayType *mass_array,
+               const VectorizedArrayType *in_array,
+               VectorizedArrayType       *out_array,
+               const unsigned int         cell_in_lane,
+               const VectorizedArrayType  mask = 100) const;
 
   private:
     /**
-     * A reference to the FEEvaluation object for getting the JxW_values.
+     * A reference to the FEEvaluation object for getting info on the cell.
      */
     const FEEvaluationBase<dim,
                            n_components,
@@ -130,10 +126,11 @@ namespace MatrixFreeOperatorsOceano
     n_components,
     Number,
     VectorizedArrayType>::
-      apply(const AlignedVector<VectorizedArrayType> &mass_array,
+      apply(const VectorizedArrayType *mass_array,
             const VectorizedArrayType *in_array,
             VectorizedArrayType       *out_array,
-            const unsigned int         cell_in_lane) const
+            const unsigned int         cell_in_lane,
+            const VectorizedArrayType  mask) const
   {
     const unsigned int given_degree =
         (fe_degree > -1) ? fe_degree :
@@ -142,26 +139,110 @@ namespace MatrixFreeOperatorsOceano
     const unsigned int dofs_per_component =
         Utilities::pow(given_degree + 1, dim);
 
+    const unsigned int n_q_points =
+        fe_eval.get_shape_info().n_q_points;
+
     FullMatrix<Number> cell_matrix(dofs_per_component, dofs_per_component);
     Vector<Number> cell_src(dofs_per_component),
                    cell_dst(dofs_per_component);
 
-    for (unsigned int j=0; j<dofs_per_component; ++j)
-      for (unsigned int i=0; i<dofs_per_component; ++i)
-        cell_matrix(i,j) = mass_array[i + j * dofs_per_component][cell_in_lane];
-
-    cell_matrix.gauss_jordan();
-    for (unsigned int d = 0; d < n_components; ++d)
+    if (mask[cell_in_lane] < n_q_points)
       {
-        for (unsigned int i = 0; i < dofs_per_component; ++i)
-          cell_src[i] = in_array[i + d * dofs_per_component][cell_in_lane];
+        for (unsigned int j=0; j<dofs_per_component; ++j)
+          for (unsigned int i=0; i<dofs_per_component; ++i)
+            cell_matrix(i,j) = mass_array[i + j * dofs_per_component][cell_in_lane];
 
-        cell_matrix.vmult(cell_dst, cell_src);
+        cell_matrix.gauss_jordan();
+        for (unsigned int d = 0; d < n_components; ++d)
+          {
+            for (unsigned int i = 0; i < dofs_per_component; ++i)
+              cell_src[i] = in_array[i + d * dofs_per_component][cell_in_lane];
 
-        for (unsigned int i = 0; i < dofs_per_component; ++i)
-          out_array[i + d * dofs_per_component][cell_in_lane] = cell_dst(i);
+            cell_matrix.vmult(cell_dst, cell_src);
+
+            for (unsigned int i = 0; i < dofs_per_component; ++i)
+              out_array[i + d * dofs_per_component][cell_in_lane] = cell_dst(i);
+          }
+      }
+    else
+      {
+        for (unsigned int d = 0; d < n_components; ++d)
+          for (unsigned int i = 0; i < dofs_per_component; ++i)
+            out_array[i + d * dofs_per_component][cell_in_lane] = 0.;
       }
   }
+
+
+
+ /**
+  * The second class, instead of an exact matrix, it produces the lumped mass matrix for
+  * DGQ elements. This algorithm simply inverts the diagonal. Note that it is only first
+  * order accurate. However vectorization is supported and enables faster inversion with
+  * respect to the first class `CellwiseInverseMassMatrix`.
+  *
+  */
+  template <int dim,
+            int fe_degree,
+            int n_components             = 1,
+            typename Number              = double,
+            typename VectorizedArrayType = VectorizedArray<Number>>
+  class CellwiseInverseMassMatrixLumped
+  {
+  public:
+    /**
+     * Default constructor.
+     */
+    CellwiseInverseMassMatrixLumped(
+      const FEEvaluationBase<dim,
+                             n_components,
+                             Number,
+                             false,
+                             VectorizedArrayType> &fe_eval);
+
+    /**
+     * Applies the inverse @ref GlossMassMatrix "mass matrix" operation on an input array and
+     * assign it to an output array. It is assumed that the passed input and output pointers are
+     * of correct size, namely FEEvaluation::dofs_per_cell long. Note that for the mass matrix
+     * we store only the diagonal. We track the singular case
+     * with a `compare_and_apply_mask<SIMDComparison::less_than>` that check if the cell has
+     * been masked. The default behaviour does not check the mask.
+     */
+    void apply(const VectorizedArrayType *mass_array,
+               const VectorizedArrayType *in_array,
+               VectorizedArrayType       *out_array,
+               const VectorizedArrayType  mask = 100) const;
+
+  private:
+    /**
+     * A reference to the FEEvaluation object for getting info on the cell.
+     */
+    const FEEvaluationBase<dim,
+                           n_components,
+                           Number,
+                           false,
+                           VectorizedArrayType> &fe_eval;
+  };
+
+
+
+  template <int dim,
+            int fe_degree,
+            int n_components,
+            typename Number,
+            typename VectorizedArrayType>
+  CellwiseInverseMassMatrixLumped<
+    dim,
+    fe_degree,
+    n_components,
+    Number,
+    VectorizedArrayType>::CellwiseInverseMassMatrixLumped(
+      const FEEvaluationBase<dim,
+      n_components,
+      Number,
+      false,
+      VectorizedArrayType> &fe_eval)
+    : fe_eval(fe_eval)
+  {}
 
 
 
@@ -171,14 +252,16 @@ namespace MatrixFreeOperatorsOceano
             typename Number,
             typename VectorizedArrayType>
   void
-  CellwiseInverseMassMatrix<
+  CellwiseInverseMassMatrixLumped<
     dim,
     fe_degree,
     n_components,
     Number,
     VectorizedArrayType>::
-      nullify(VectorizedArrayType       *out_array,
-              const unsigned int         cell_in_lane) const
+      apply(const VectorizedArrayType *mass_array,
+            const VectorizedArrayType *in_array,
+            VectorizedArrayType       *out_array,
+            const VectorizedArrayType  mask) const
   {
     const unsigned int given_degree =
         (fe_degree > -1) ? fe_degree :
@@ -187,9 +270,16 @@ namespace MatrixFreeOperatorsOceano
     const unsigned int dofs_per_component =
         Utilities::pow(given_degree + 1, dim);
 
+    const unsigned int n_q_points =
+        fe_eval.get_shape_info().n_q_points;
+
     for (unsigned int d = 0; d < n_components; ++d)
       for (unsigned int i = 0; i < dofs_per_component; ++i)
-        out_array[i + d * dofs_per_component][cell_in_lane] = 0.;
+        out_array[i + d * dofs_per_component] =
+          compare_and_apply_mask<SIMDComparison::less_than>(
+            mask, n_q_points,
+            1./mass_array[i] * in_array[i + d * dofs_per_component],
+            0.);
   }
 } // namespace MatrixFreeOperatorsOceano
 

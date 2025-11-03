@@ -1393,13 +1393,12 @@ namespace SpaceDiscretization
   // fully dry cell.
   //
   // One implementation detail to note is that, to check wet-dry points, an if
-  // statement is necessary and by definition, it cannot be vectorized. In that
-  // case we have no other options that unroll the lanes. Whenever possible a
-  // lane mask is used to set the dof values. The mass-matrix is inverted with
-  // the class `CellwiseInverseMassMatrix` which has been reimplemented inside
-  // the oceano code to handle a generic quadrature formula. In our case the
-  // Gauss-Lobatto quadrature is needed to guarantee the positivity of the
-  // water depth.
+  // statement is necessary and by definition, it cannot be vectorized. Deal.ii
+  // replace if statement with a mask.
+  // The mass-matrix is inverted with the class `CellwiseInverseMassMatrix` which
+  // has been reimplemented inside the oceano code to handle a generic quadrature
+  // formula. In our case the Gauss-Lobatto quadrature is needed to guarantee the
+  // positivity of the water depth.
 #ifdef WETDRY
   template <int dim, int n_tra, int degree, int n_points_1d>
   void OceanoOperator<dim, n_tra, degree, n_points_1d>::local_apply_inverse_mass_matrix_height(
@@ -1410,7 +1409,7 @@ namespace SpaceDiscretization
   {
     FEEvaluation<dim, degree, degree + 2, 1, Number> phi_height(data, 0, 1);
     FEEvaluation<dim, degree, degree + 2, 1, Number> phi_height_inverse(data, 0, 1);
-    MatrixFreeOperatorsOceano::CellwiseInverseMassMatrix<dim, degree, 1, Number>
+    MatrixFreeOperatorsOceano::CellwiseInverseMassMatrixLumped<dim, degree, 1, Number>
       inverse(phi_height_inverse);
 
     LinearAlgebra::distributed::Vector<Number> rhs;
@@ -1501,44 +1500,27 @@ namespace SpaceDiscretization
             phi_height_inverse.gather_evaluate(dst, EvaluationFlags::values);
 
             VectorizedArray<Number> n_dry_points = 0;
-            AlignedVector<VectorizedArray<Number>> maskq(phi_height_inverse.n_q_points);
             for (unsigned int q = 0; q < phi_height_inverse.n_q_points; ++q)
               {
                 const auto z_q = phi_height_inverse.get_value(q);
                 const auto zb_q = data_quadrature_cell_1.get_data(cell, q);
-                maskq[q] = compare_and_apply_mask<SIMDComparison::less_than_or_equal>
-                  (z_q, -zb_q, 0., 1.);
-                n_dry_points += 1.-maskq[q];
+                const auto mask_q =
+                  compare_and_apply_mask<SIMDComparison::less_than_or_equal>(
+                    z_q, -zb_q, 0., 1.);
+                n_dry_points += 1.-mask_q;
+
+                phi_height_inverse.submit_value(mask_q, q);
               }
 
-            AlignedVector<VectorizedArray<Number>>
-              cell_matrix(dofs_per_cell*dofs_per_cell);
+             phi_height_inverse.integrate(EvaluationFlags::values);
+
+            AlignedVector<VectorizedArray<Number>> cell_matrix(dofs_per_cell);
             for (unsigned int i = 0; i < dofs_per_cell; ++i)
-              {
-                for (unsigned int j = 0; j < dofs_per_cell; ++j)
-                  phi_height_inverse.submit_dof_value(VectorizedArray<double>(), j);
-                phi_height_inverse.submit_dof_value(1., i);
+              cell_matrix[phi_height_inverse.get_internal_dof_numbering()[i]]
+                = phi_height_inverse.get_dof_value(i);
 
-                phi_height_inverse.evaluate(EvaluationFlags::values);
-
-                for (unsigned int q = 0; q < phi_height_inverse.n_q_points; ++q)
-                  {
-                    phi_height_inverse.submit_value(
-                      phi_height_inverse.get_value(q) * maskq[q], q);
-                  }
-
-                 phi_height_inverse.integrate(EvaluationFlags::values);
-
-                 for (unsigned int j = 0; j < dofs_per_cell; ++j)
-                   cell_matrix[phi_height_inverse.get_internal_dof_numbering()[j]
-                     + phi_height_inverse.get_internal_dof_numbering()[i] * dofs_per_cell]
-                       = phi_height_inverse.get_dof_value(j);
-              }
-            for (unsigned int v = 0; v < data.n_active_entries_per_cell_batch(cell); ++v)
-              if ((unsigned int) n_dry_points[v] != phi_height_inverse.n_q_points)
-                inverse.apply(cell_matrix, phi_height.begin_dof_values(), phi_height.begin_dof_values(), v);
-              else
-                inverse.nullify(phi_height.begin_dof_values(), v);
+            inverse.apply(&cell_matrix[0], phi_height.begin_dof_values(),
+              phi_height.begin_dof_values(), n_dry_points);
 
             phi_height.distribute_local_to_global(dst);
         }
