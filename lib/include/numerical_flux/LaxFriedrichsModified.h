@@ -149,11 +149,12 @@ namespace NumericalFlux
     const auto v_m = model.velocity<dim>(z_m, q_m, data_m);
     const auto v_p = model.velocity<dim>(z_p, q_p, data_p);
 
-    const auto lambda_m = v_m.norm() + std::sqrt(model.square_wavespeed(z_m, data_m));
-    const auto lambda_p = v_p.norm() + std::sqrt(model.square_wavespeed(z_p, data_p));
+    const auto lambda_m = std::abs(v_m * normal)
+      + std::sqrt(model.square_wavespeed(z_m, data_m));
+    const auto lambda_p = std::abs(v_p * normal)
+      + std::sqrt(model.square_wavespeed(z_p, data_p));
 
-    const auto lambda =
-      0.5 * std::max(lambda_p, lambda_m);
+    const auto lambda = std::max(lambda_p, lambda_m);
 
     const auto flux_m = model.mass_flux<dim>(z_m, q_m, data_m);
     const auto flux_p = model.mass_flux<dim>(z_p, q_p, data_p);
@@ -180,11 +181,12 @@ namespace NumericalFlux
     const auto v_m = model.velocity<dim>(z_m, q_m, data_m);
     const auto v_p = model.velocity<dim>(z_p, q_p, data_p);
 
-    const auto lambda_m = v_m.norm() + std::sqrt(model.square_wavespeed(z_m, data_m));
-    const auto lambda_p = v_p.norm() + std::sqrt(model.square_wavespeed(z_p, data_p));
+    const auto lambda_m = std::abs(v_m * normal)
+      + std::sqrt(model.square_wavespeed(z_m, data_m));
+    const auto lambda_p = std::abs(v_p * normal)
+      + std::sqrt(model.square_wavespeed(z_p, data_p));
 
-    const auto lambda =
-      0.5 * std::max(lambda_p, lambda_m);
+    const auto lambda = std::max(lambda_p, lambda_m);
 
     const auto flux_m = model.momentum_adv_flux<dim>(z_m, q_m, data_m);
     const auto flux_p = model.momentum_adv_flux<dim>(z_p, q_p, data_p);
@@ -196,6 +198,18 @@ namespace NumericalFlux
   }
 
 #ifdef OCEANO_WITH_TRACERS
+  // The tracer numerical flux follows similarly. We add a comment
+  // on the presence of an averaged bathymetry in the upwind part where
+  // jumps have to be computed. Instead of considering, as it would be more
+  // natural, a jump in the bathymetry as well, we use an average value. The
+  // reason is to verify, on all bathyemtries even discontinuous ones, the
+  // consistency with the continuity. If you consider a constant tracer, the
+  // numerical flux collapses to the numerical mass flux where the upwind part
+  // is proportional to the jump in the water height and not to the jump in the
+  // bathymetry that would cause a violation of well-balancing. To summarize,
+  // using a simple bathyemtry average in the jump term, make the
+  // depth-integrated tracer jump dimensionally consistent and preserve the
+  // consistency with the continuity.
   template <int dim, int n_tra, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, n_tra, Number>
@@ -213,19 +227,21 @@ namespace NumericalFlux
     const auto v_m = model.velocity<dim>(z_m, q_m, data_m);
     const auto v_p = model.velocity<dim>(z_p, q_p, data_p);
 
-    const auto lambda_m = v_m.norm() + std::sqrt(model.square_wavespeed(z_m, data_m));
-    const auto lambda_p = v_p.norm() + std::sqrt(model.square_wavespeed(z_p, data_p));
+    const auto lambda_m = std::abs(v_m * normal)
+      + std::sqrt(model.square_wavespeed(z_m, data_m));
+    const auto lambda_p = std::abs(v_p * normal)
+      + std::sqrt(model.square_wavespeed(z_p, data_p));
 
-    const auto lambda =
-      0.5 * std::max(lambda_p, lambda_m);
+    const auto lambda = std::max(lambda_p, lambda_m);
 
     const auto flux_m = model.tracer_adv_flux<dim, n_tra>(q_m, t_m);
     const auto flux_p = model.tracer_adv_flux<dim, n_tra>(q_p, t_p);
+    const auto data = 0.5 * (data_m+data_p);
 
     Tensor<1, n_tra, Number> numflux;
     for (unsigned int t = 0; t < n_tra; ++t)
       numflux[t] = 0.5 * (flux_m[t] * normal + flux_p[t] * normal) +
-                   0.5 * lambda * (z_m * t_m[t] - z_p * t_p[t]);
+                   0.5 * lambda * ((z_m+data) * t_m[t] - (z_p+data) * t_p[t]);
 
      return numflux;
   }
@@ -247,17 +263,19 @@ namespace NumericalFlux
     const auto v_m = model.velocity<dim>(z_m, q_m, data_m);
     const auto v_p = model.velocity<dim>(z_p, q_p, data_p);
 
-    const auto lambda_m = v_m.norm() + std::sqrt(model.square_wavespeed(z_m, data_m));
-    const auto lambda_p = v_p.norm() + std::sqrt(model.square_wavespeed(z_p, data_p));
+    const auto lambda_m = std::abs(v_m * normal)
+      + std::sqrt(model.square_wavespeed(z_m, data_m));
+    const auto lambda_p = std::abs(v_p * normal)
+      + std::sqrt(model.square_wavespeed(z_p, data_p));
 
-    const auto lambda =
-      0.5 * std::max(lambda_p, lambda_m);
+    const auto lambda = std::max(lambda_p, lambda_m);
 
     const auto flux_m = model.tracer_adv_flux(q_m, t_m);
     const auto flux_p = model.tracer_adv_flux(q_p, t_p);
+    const auto data = 0.5 * (data_m+data_p);
 
     return 0.5 * (flux_m * normal + flux_p * normal) +
-           0.5 * lambda * (z_m * t_m - z_p * t_p);
+           0.5 * lambda * ((z_m+data) * t_m - (z_p+data) * t_p);
   }
 #endif
 } // namespace NumericalFlux
