@@ -1460,9 +1460,10 @@ namespace SpaceDiscretization
         // and we nullify the right-hand-side, so no need to invert the
         // singular matrix. Since the convergence is quite fast (one or two
         // iterations) we exit in any case the loop after maximum five iterations.
+        Number norm_rhs_in_lane = 1.;
         AlignedVector<VectorizedArray<Number>> rhs_cell(dofs_per_cell);
 
-        for (unsigned int k = 0; k < 5; ++k)
+        for (unsigned int k = 0; (k < 5) && (norm_rhs_in_lane > 1e-16); ++k)
           {
             phi_height.read_dof_values(src);
 
@@ -1485,11 +1486,10 @@ namespace SpaceDiscretization
                                        true);
 
 
-            Number norm_rhs_in_lane = 0.;
+            norm_rhs_in_lane = 0.;
             for (unsigned int v = 0; v < data.n_active_entries_per_cell_batch(cell); ++v)
               for (unsigned int i = 0; i < dofs_per_cell; ++i)
                 norm_rhs_in_lane += std::abs(rhs_cell[i][v]);
-            if (norm_rhs_in_lane < 1e-16) break;
 
 
             phi_height.gather_evaluate(dst, EvaluationFlags::values);
