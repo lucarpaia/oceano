@@ -1143,10 +1143,22 @@ namespace Problem
             << " = " << n_vect_bits << " bits ("
             << Utilities::System::get_current_vectorization_level() << ')'
             << std::endl;
-      pcout << "Number of quadrature points along a line: " << std::setw(4)
+#if defined WETDRY
+      pcout << "Number of quadrature points along a line   : " << std::setw(4)
+            << fe_degree + 2 << std::endl;
+#else
+      pcout << "Number of quadrature points along a line   : " << std::setw(4)
             << n_q_points_1d << std::endl;
-      pcout << "Number of quadrature points in a cell   : " << std::setw(4)
+#endif
+      pcout << "Number of quadrature points in a cell      : " << std::setw(4)
             << n_q_points_1d * n_q_points_1d  << std::endl;
+#if defined WETDRY
+      pcout << "Number of quadrature points for mass-matrix: " << std::setw(4)
+            << (fe_degree + 2) * (fe_degree + 2) << std::endl;
+#else
+      pcout << "Number of quadrature points for mass-matrix: " << std::setw(4)
+            << (fe_degree + 1) * (fe_degree + 1) << std::endl;
+#endif
     }
 
     make_grid();

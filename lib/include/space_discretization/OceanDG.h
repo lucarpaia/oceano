@@ -1398,9 +1398,7 @@ namespace SpaceDiscretization
   // The mass-matrix is inverted with the class `CellwiseInverseMassMatrix` which
   // has been reimplemented inside the oceano code to handle a generic quadrature
   // formula. In our case the Gauss-Lobatto quadrature is needed to guarantee the
-  // positivity of the water depth. Different options are available for the
-  // inversion, for now we prefer efficiency over accuracy and we proceed with mass
-  // lumping.
+  // positivity of the water depth.
 #ifdef WETDRY
   template <int dim, int n_tra, int degree, int n_points_1d>
   void OceanoOperator<dim, n_tra, degree, n_points_1d>::local_apply_inverse_mass_matrix_height(
@@ -1410,7 +1408,8 @@ namespace SpaceDiscretization
     const std::pair<unsigned int, unsigned int>      &cell_range) const
   {
     FEEvaluation<dim, degree, degree + 2, 1, Number> phi_height(data, 0, 1);
-    MatrixFreeOperatorsOceano::CellwiseInverseMassMatrixLumped<dim, degree, 1, Number>
+    FEEvaluation<dim, degree, degree + 2, 1, Number> phi_height_inverse(data, 0, 1);
+    MatrixFreeOperatorsOceano::CellwiseInverseMassMatrix<dim, degree, 1, Number>
       inverse(phi_height);
 
     for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
@@ -1429,7 +1428,7 @@ namespace SpaceDiscretization
         const VectorizedArray<Number> epsilon = 1e-09;
         VectorizedArray<Number> zb_max_dry = -1000.;
         VectorizedArray<Number> n_dry_points = 0;
-        std::bitset<phi_height.n_lanes> mask;
+        std::bitset<phi_height.n_lanes> mask_cell;
 
         for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
           {
@@ -1443,28 +1442,103 @@ namespace SpaceDiscretization
           }
         for (unsigned int v = 0; v < data.n_active_entries_per_cell_batch(cell); ++v)
           if ((unsigned int) n_dry_points[v] == phi_height.n_q_points)
-            mask[v] = 1;
+            mask_cell[v] = 1;
 
-        if (mask.any())
+        if (mask_cell.any())
           {
             for (unsigned int i = 0; i < dofs_per_cell; ++i)
               phi_height.submit_dof_value(-zb_max_dry + epsilon, i);
-            phi_height.set_dof_values(dst, 0, mask);
+            phi_height.set_dof_values(dst, 0, mask_cell);
           }
 
-        // Here we enter the Newton loop: in order, 1) we read the residual,
-        // 2) we sum the last term which depend on the iterative solution,
-        // 3) we check whether the free-surface is converged or not
-        // 4) finally we invert the mass-matrix. Please note that if all points
-        // are dry it means that the iterative method reached the dry state
-        // and we nullify the right-hand-side, so no need to invert the
-        // singular matrix. Since the convergence is quite fast (one or two
-        // iterations) we exit in any case the loop after maximum five iterations.
+        // Here we enter the Newton loop: first we read the residual,
+        // and we sum the water mass term which depend on the iterative solution.
+        // Note that to reduce the operation at a minimum these two operations
+        // are implemented twice: outside the Newtoon loop and inside.
+        phi_height.read_dof_values(src);
+
         Number norm_rhs_in_lane = 1.;
         AlignedVector<VectorizedArray<Number>> rhs_cell(dofs_per_cell);
 
+        for (unsigned int i = 0; i < dofs_per_cell; ++i)
+          rhs_cell[i] = phi_height.get_dof_value(i);
+
+
+        phi_height.gather_evaluate(dst, EvaluationFlags::values);
+
+        for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
+              {
+                const auto z_q = phi_height.get_value(q);
+                const auto zb_q = data_quadrature_cell_1.get_data(cell, q);
+
+                phi_height.submit_value(-model.depth(z_q, zb_q), q);
+              }
+
+        phi_height.integrate(EvaluationFlags::values,
+                                   &rhs_cell[0],
+                                   true);
+
+        // The Newton loop is essentially the inversion of the mass-matrix.
+        // Please note that if all points are dry it means that the iterative
+        // method reached the dry state and we nullify the right-hand-side,
+        // so no need to invert the singular matrix. The variable `n_dry_points`
+        // is to flag such singular situation in the inversion function.
+        // As you may see, we manage to vectorize all the code (avoiding if and break
+        // statement) except the matrix inversion which is not SIMD vectorized.
+        // When producing this code in late 2025, neither gcc nor the Intel compiler
+        // manage to produce useful vectorized code for the FullMatrix::mmult
+        // function. We are thus obliged to unroll the innermost loop, associated to
+        // vectorization, and live with a significant degradation of the performance.
+        // Since the convergence is quite fast (one or two iterations) we exit in
+        // any case the loop after maximum five iterations.
         for (unsigned int k = 0; (k < 5) && (norm_rhs_in_lane > 1e-16); ++k)
           {
+            phi_height_inverse.reinit(cell);
+            phi_height.gather_evaluate(dst, EvaluationFlags::values);
+
+            VectorizedArray<Number> n_dry_points = 0;
+            AlignedVector<VectorizedArray<Number>> mask(phi_height.n_q_points);
+
+            for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
+              {
+                const auto z_q = phi_height.get_value(q);
+                const auto zb_q = data_quadrature_cell_1.get_data(cell, q);
+                mask[q] =
+                  compare_and_apply_mask<SIMDComparison::less_than_or_equal>(
+                    z_q, -zb_q, 0., 1.);
+                n_dry_points += 1.-mask[q];
+              }
+
+            AlignedVector<VectorizedArray<Number>> cell_matrix(dofs_per_cell*dofs_per_cell);
+
+            for (unsigned int i = 0; i < dofs_per_cell; ++i)
+              {
+                for (unsigned int j = 0; j < dofs_per_cell; ++j)
+                  phi_height_inverse.submit_dof_value(VectorizedArray<double>(), j);
+                phi_height_inverse.submit_dof_value(1., i);
+
+                phi_height_inverse.evaluate(EvaluationFlags::values);
+
+                for (unsigned int q = 0; q < phi_height_inverse.n_q_points; ++q)
+                  {
+                    phi_height_inverse.submit_value(
+                      phi_height_inverse.get_value(q) * mask[q], q);
+                  }
+
+                 phi_height_inverse.integrate(EvaluationFlags::values);
+
+                for (unsigned int j = 0; j < dofs_per_cell; ++j)
+                  cell_matrix[phi_height.get_internal_dof_numbering()[j]
+                    + phi_height_inverse.get_internal_dof_numbering()[i] * dofs_per_cell]
+                      = phi_height_inverse.get_dof_value(j);
+              }
+            for (unsigned int v = 0; v < data.n_active_entries_per_cell_batch(cell); ++v)
+              inverse.apply(&cell_matrix[0], &rhs_cell[0],
+                phi_height.begin_dof_values(), v, 0);
+
+            phi_height.distribute_local_to_global(dst);
+
+
             phi_height.read_dof_values(src);
 
             for (unsigned int i = 0; i < dofs_per_cell; ++i)
@@ -1485,39 +1559,10 @@ namespace SpaceDiscretization
                                        &rhs_cell[0],
                                        true);
 
-
             norm_rhs_in_lane = 0.;
             for (unsigned int v = 0; v < data.n_active_entries_per_cell_batch(cell); ++v)
               for (unsigned int i = 0; i < dofs_per_cell; ++i)
                 norm_rhs_in_lane += std::abs(rhs_cell[i][v]);
-
-
-            phi_height.gather_evaluate(dst, EvaluationFlags::values);
-
-            VectorizedArray<Number> n_dry_points = 0;
-            for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
-              {
-                const auto z_q = phi_height.get_value(q);
-                const auto zb_q = data_quadrature_cell_1.get_data(cell, q);
-                const auto mask_q =
-                  compare_and_apply_mask<SIMDComparison::less_than_or_equal>(
-                    z_q, -zb_q, 0., 1.);
-                n_dry_points += 1.-mask_q;
-
-                phi_height.submit_value(mask_q, q);
-              }
-
-            phi_height.integrate(EvaluationFlags::values);
-
-            AlignedVector<VectorizedArray<Number>> cell_matrix(dofs_per_cell);
-            for (unsigned int i = 0; i < dofs_per_cell; ++i)
-              cell_matrix[phi_height.get_internal_dof_numbering()[i]]
-                = phi_height.get_dof_value(i);
-
-            inverse.apply(&cell_matrix[0], &rhs_cell[0],
-              phi_height.begin_dof_values(), n_dry_points);
-
-            phi_height.distribute_local_to_global(dst);
         }
       }
   }
