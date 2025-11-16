@@ -257,23 +257,6 @@ namespace Model
         const Tensor<1, dim, Number> &discharge,
         const Tensor<1, dim, Number> &normal,
         const Number                  bathymetry) const;
-
-    // The next function computes the weights that multiply the prognostic variable in
-    // the momentum equation, to obtain a transformation between conservative and
-    // non-conservative variables (discharge/velocity). Since we use the discharge as
-    // prognostic variable, the weight that brings to the conservative discharge is the
-    // water depth.
-    template <typename Number>
-    inline DEAL_II_ALWAYS_INLINE //
-      Number
-      factor_to_discharge(const Number height,
-                          const Number bathymetry) const;
-
-    template <typename Number>
-    inline DEAL_II_ALWAYS_INLINE //
-      Number
-      factor_from_velocity(const Number height,
-                           const Number bathymetry) const;
   };
 
 
@@ -520,26 +503,6 @@ namespace Model
     Number u = v * normal;
 
     return u - 2. * c;
-  }
-
-  template <typename Number>
-  inline DEAL_II_ALWAYS_INLINE //
-    Number
-    ShallowWaterDischarge::factor_to_discharge(
-      const Number /*height*/,
-      const Number /*bathymetry*/) const
-  {
-    return Number(1.);
-  }
-
-  template <typename Number>
-  inline DEAL_II_ALWAYS_INLINE //
-    Number
-    ShallowWaterDischarge::factor_from_velocity(
-      const Number height,
-      const Number bathymetry) const
-  {
-    return depth(height, bathymetry);
   }
 } // namespace Model
 #endif //SHALLOWWATERDISCHARGE_HPP

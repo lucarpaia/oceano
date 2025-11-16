@@ -37,8 +37,8 @@
 
 // First come the numerics. The following preprocessor select the time integrator. For
 // now we have coded general explicit schemes that belong to the family of Runge-Kutta scheme.
-#define TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
-#undef  TIMEINTEGRATOR_ADDITIVERUNGEKUTTA
+#undef  TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
+#define TIMEINTEGRATOR_ADDITIVERUNGEKUTTA
 // The numerical flux (Riemann solver) at the faces between cells. For this
 // program, we have implemented a modified variant of the Lax--Friedrichs
 // flux and the Harten--Lax--van Leer (HLL) flux:
@@ -63,7 +63,6 @@
 // is only used for debugging, to check consistency with the original deal.II example and
 // it's not working in the present version.
 // Additionally we can add tracers to the shallow water model.
-#undef  MODEL_SHALLOWWATER
 #define MODEL_SHALLOWWATERDISCHARGE
 #undef  MODEL_SHALLOWWATERWITHTRACER
 #undef  MODEL_EULER
@@ -232,7 +231,7 @@ namespace Problem
   // also known at compile time:
 #if defined MODEL_EULER
   constexpr unsigned int n_tracers            = 1;
-#elif defined MODEL_SHALLOWWATER || defined MODEL_SHALLOWWATERDISCHARGE
+#elif defined MODEL_SHALLOWWATERDISCHARGE
   constexpr unsigned int n_tracers            = 0;
 #endif
   constexpr unsigned int n_variables          = dimension + 1 + n_tracers;
