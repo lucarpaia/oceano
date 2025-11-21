@@ -1522,7 +1522,7 @@ namespace SpaceDiscretization
               }
             for (unsigned int v = 0; v < data.n_active_entries_per_cell_batch(cell); ++v)
               inverse.apply(&cell_matrix[0], &rhs_cell[0],
-                phi_height.begin_dof_values(), v, 0);
+                phi_height.begin_dof_values(), v, n_dry_points);
 
             phi_height.distribute_local_to_global(dst);
 
