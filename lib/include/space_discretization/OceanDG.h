@@ -415,8 +415,10 @@ namespace SpaceDiscretization
   // More accurate integration is necessary to capture accurately the variable
   // bathymetry inside the cell. The second formula is also accurate and based
   // on Gauss-Lobatto with `degree+2` points. It is used to inverse the
-  // mass-matrix in the continuity and tracer equations but also for all the face
-  // integrals and guarantees a positivity proof, otherwise impossible. Finally
+  // mass-matrix in the continuity and tracer equations but also for the face
+  // integrals and it guarantees a positivity, otherwise impossible. For
+  // boundary faces we go back to the accurate `n_points_1d` formula to avoid
+  // a double imposition of the boundary condition at corners. Finally
   // we store a less accurate quadrature formula, a tight one based on Gauss with
   // `degree+1` and needed for the inverse of all other mass-matrices, where exact
   // integration is wished. For example the discharge mass matrix or a general
@@ -528,32 +530,33 @@ namespace SpaceDiscretization
           }
       }
 
-    data_quadrature_face.initialize(2*n_points_1d);
-    FEFaceEvaluation<dim, degree, n_points_1d, 1, Number> phi_face(data, true, 0);
+    data_quadrature_face.initialize(2*(degree + 2));
+    FEFaceEvaluation<dim, degree, degree + 2, 1, Number> phi_face_1(data, true, 0, 1);
     for (unsigned int face = 0; face < data.n_inner_face_batches(); ++face)
       {
-        phi_face.reinit(face);
-        for (unsigned int q = 0; q < phi_face.n_q_points; ++q)
+        phi_face_1.reinit(face);
+        for (unsigned int q = 0; q < phi_face_1.n_q_points; ++q)
           {
             data_quadrature_face.submit_data(
               evaluate_function<dim, Number>(*bc->problem_data,
-                phi_face.quadrature_point(q)-1e-12*phi_face.normal_vector(q), 0));
+                phi_face_1.quadrature_point(q)-1e-12*phi_face_1.normal_vector(q), 0));
             data_quadrature_face.submit_data(
               evaluate_function<dim, Number>(*bc->problem_data,
-                phi_face.quadrature_point(q)+1e-12*phi_face.normal_vector(q), 0));
+                phi_face_1.quadrature_point(q)+1e-12*phi_face_1.normal_vector(q), 0));
           }
       }
 
     data_quadrature_boundary.initialize(n_points_1d);
+    FEFaceEvaluation<dim, degree, n_points_1d, 1, Number> phi_face_0(data, true, 0);
     for (unsigned int face = data.n_inner_face_batches();
       face < data.n_inner_face_batches()+data.n_boundary_face_batches(); ++face)
       {
-        phi_face.reinit(face);
-        for (unsigned int q = 0; q < phi_face.n_q_points; ++q)
+        phi_face_0.reinit(face);
+        for (unsigned int q = 0; q < phi_face_0.n_q_points; ++q)
           {
             data_quadrature_boundary.submit_data(
               evaluate_function<dim, Number>(*bc->problem_data,
-                phi_face.quadrature_point(q), 0));
+                phi_face_0.quadrature_point(q), 0));
           }
       }
   }
@@ -965,14 +968,14 @@ namespace SpaceDiscretization
     const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
     const std::pair<unsigned int, unsigned int>                   &face_range) const
   {
-    FEFaceEvaluation<dim, degree, n_points_1d, 1, Number> phi_height_m(data,
-                                                                      true, 0);
-    FEFaceEvaluation<dim, degree, n_points_1d, 1, Number> phi_height_p(data,
-                                                                      false, 0);
-    FEFaceEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge_m(data,
-                                                                      true, 1);
-    FEFaceEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge_p(data,
-                                                                      false, 1);
+    FEFaceEvaluation<dim, degree, degree + 2, 1, Number> phi_height_m(data,
+                                                                      true, 0, 1);
+    FEFaceEvaluation<dim, degree, degree + 2, 1, Number> phi_height_p(data,
+                                                                      false, 0, 1);
+    FEFaceEvaluation<dim, degree, degree + 2, dim, Number> phi_discharge_m(data,
+                                                                      true, 1, 1);
+    FEFaceEvaluation<dim, degree, degree + 2, dim, Number> phi_discharge_p(data,
+                                                                      false, 1, 1);
 
     for (unsigned int face = face_range.first; face < face_range.second; ++face)
       {
@@ -1013,14 +1016,14 @@ namespace SpaceDiscretization
     const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
     const std::pair<unsigned int, unsigned int>                   &face_range) const
   {
-    FEFaceEvaluation<dim, degree, n_points_1d, 1, Number> phi_height_m(data,
-                                                                      true, 0);
-    FEFaceEvaluation<dim, degree, n_points_1d, 1, Number> phi_height_p(data,
-                                                                      false, 0);
-    FEFaceEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge_m(data,
-                                                                      true, 1);
-    FEFaceEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge_p(data,
-                                                                      false, 1);
+    FEFaceEvaluation<dim, degree, degree + 2, 1, Number> phi_height_m(data,
+                                                                      true, 0, 1);
+    FEFaceEvaluation<dim, degree, degree + 2, 1, Number> phi_height_p(data,
+                                                                      false, 0, 1);
+    FEFaceEvaluation<dim, degree, degree + 2, dim, Number> phi_discharge_m(data,
+                                                                      true, 1, 1);
+    FEFaceEvaluation<dim, degree, degree + 2, dim, Number> phi_discharge_p(data,
+                                                                      false, 1, 1);
 
     for (unsigned int face = face_range.first; face < face_range.second; ++face)
       {
@@ -2522,6 +2525,12 @@ namespace SpaceDiscretization
   // are close to the maximal value anyway. In all other cases, convergence
   // will be quick. Thus, we can merely hardcode 5 iterations here and be
   // confident that the result is good.
+  //
+  // Strictly speaking we should use the same quadrature used for the mass
+  // matrix, the Gauss-Lobatto $r+2$ points. This would compute the CFL
+  // condition that assure positivity of the water depth. Here we use the
+  // less accurate one, Gauss $r+2$ points which is more efficient and lead
+  // to larger time step
   template <int dim, int n_tra, int degree, int n_points_1d>
   double OceanoOperator<dim, n_tra, degree, n_points_1d>::compute_cell_transport_speed(
     const LinearAlgebra::distributed::Vector<Number> &solution_height,
@@ -2529,8 +2538,8 @@ namespace SpaceDiscretization
   {
     TimerOutput::Scope t(timer, "compute transport speed");
     Number             max_transport = 0;
-    FEEvaluation<dim, degree, n_points_1d, 1, Number> phi_height(data, 0);
-    FEEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge(data, 1);
+    FEEvaluation<dim, degree, degree + 1, 1, Number> phi_height(data, 0, 2);
+    FEEvaluation<dim, degree, degree + 1, dim, Number> phi_discharge(data, 1, 2);
 
     for (unsigned int cell = 0; cell < data.n_cell_batches(); ++cell)
       {
@@ -2543,7 +2552,7 @@ namespace SpaceDiscretization
           {
             const auto zq = phi_height.get_value(q);
             const auto qq = phi_discharge.get_value(q);
-            const auto zb_q = data_quadrature_cell_0.get_data(cell, q)[0];
+            const auto zb_q = data_quadrature_cell_2.get_data(cell, q)[0];
             const auto velocity = model.velocity<dim>(zq, qq, zb_q);
 
             const auto inverse_jacobian = phi_height.inverse_jacobian(q);
