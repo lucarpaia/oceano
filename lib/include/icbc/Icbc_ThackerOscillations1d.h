@@ -30,16 +30,18 @@
 namespace ICBC
 {
 
-  // Thacker in 1981 found an exact solutions of the shallow water equations
-  // with moving boundaries, that is with wetting and drying. The shallow water
-  // equations admit analytic periodic solutions (there is no damping) with Coriolis
+  // Thacker in 1981 found an exact solution of the shallow water equations
+  // with wetting and drying. In fact, the shallow water equations admit analytic
+  // periodic solutions (there is no damping) of a flood wave, eventually with Coriolis
   // effect that here is neglected. The test implemented is the one-dimensional
-  // simplification of the Thacker solution with a planar surface, that is proposed
-  // in the SWASH test-suite of (Delestre,2016). The bathymetry is a parabola.
-  // We have added an option to compare the solution with a true Finite Volume.
+  // simplification of the Thacker solution with a planar surface, proposed
+  // in the SWASH test suite (Delestre,2016). The bathymetry is a parabola.
+  // We have added an option to compare the solution of our code with variable
+  // bathyemtry at the grid level with a standard Finite Volume with piecewice
+  // constant bathymetry.
   // In that case we have to read a piecewice constant bathymetry per cell and the
-  // code must be slightly changed.
-#define  ICBC_THACKEROSCILLATIONS1D_FINITEVOLUME
+  // code must be slightly changed. You should activate the following preprocessor:
+#undef  ICBC_THACKEROSCILLATIONS1D_FINITEVOLUME
 
   using namespace dealii;
   
@@ -59,19 +61,14 @@ namespace ICBC
   // both time and space. Deal.II has a class `Function` which returns function
   // of space and time, thus we simply create a derived class. The size of the data is 
   // fixed to `dim+3=5` scalar quantities. The first component is the bathymetry. 
-  // The second is the bottom friction coefficient. The third and fourth components 
-  // are the cartesian components of the wind velocity (in order, eastward and northward).
-  // The fifth one is the Coriolis parameter. The test-dependent functions `stommelGyre_wind()`
-  // and `stommelGyre_coriolis()` contain the definition of analytical functions for the 
-  // different data. The call to `value()` returns all the external data necessary to 
-  // complete the computation. 
+  // The second is the bottom friction coefficient. The call to `value()` returns all the
+  // external data necessary to complete the computation.
   //
   // Finally the parameter handler class allows to read constants from the prm file.
   // The parameter handler class may seems redundant but it is not! Constants that appears
   // in you data may be easily recovered from the configuration file. More important file 
   // names which contains the may be imported too. 
-  //
-  // We do not have any source term and no associated data values.
+#ifndef ICBC_THACKEROSCILLATIONS1D_FINITEVOLUME
   template <int dim>  
   class ProblemData : public Function<dim>
   {
@@ -83,29 +80,12 @@ namespace ICBC
 
     virtual double value(const Point<dim> & p,
                          const unsigned int component = 0) const override;
-
-#ifdef ICBC_THACKEROSCILLATIONS1D_FINITEVOLUME
-  private:
-    std::string bathymetry_filename(IO::ParameterHandler &prm) const;
-    IO::TxtDataReader<dim> bathymetry_data_reader;
-    const Functions::InterpolatedUniformGridData<dim> bathymetry_data;
-#endif
   };
 
   template <int dim>
-  ProblemData<dim>::ProblemData(IO::ParameterHandler &prm)
+  ProblemData<dim>::ProblemData(IO::ParameterHandler &/*prm*/)
     : Function<dim>(dim+3)
-#ifdef ICBC_THACKEROSCILLATIONS1D_FINITEVOLUME
-    , bathymetry_data_reader(bathymetry_filename(prm))
-    , bathymetry_data(
-        bathymetry_data_reader.endpoints,
-        bathymetry_data_reader.n_intervals,
-        Table<dim, double>(bathymetry_data_reader.n_intervals.front()+1,
-                           bathymetry_data_reader.n_intervals.back()+1,
-                           bathymetry_data_reader.get_data(bathymetry_data_reader.filename).begin()))
-#endif
   {}
-
 
 
   template <int dim>
@@ -116,7 +96,37 @@ namespace ICBC
     const double inv_a = 1./a;
     return -h0 * (inv_a*inv_a * x_half*x_half - 1.);
   }
-#ifdef ICBC_THACKEROSCILLATIONS1D_FINITEVOLUME
+
+#else
+  template <int dim>
+  class ProblemData : public Function<dim>
+  {
+  public:
+    ProblemData(IO::ParameterHandler &prm);
+    ~ProblemData(){};
+
+    virtual double value(const Point<dim> & p,
+                         const unsigned int component = 0) const override;
+
+  private:
+    std::string bathymetry_filename(IO::ParameterHandler &prm) const;
+    IO::TxtDataReader<dim> bathymetry_data_reader;
+    const Functions::InterpolatedUniformGridData<dim> bathymetry_data;
+  };
+
+  template <int dim>
+  ProblemData<dim>::ProblemData(IO::ParameterHandler &prm)
+    : Function<dim>(dim+3)
+    , bathymetry_data_reader(bathymetry_filename(prm))
+    , bathymetry_data(
+        bathymetry_data_reader.endpoints,
+        bathymetry_data_reader.n_intervals,
+        Table<dim, double>(bathymetry_data_reader.n_intervals.front()+1,
+                           bathymetry_data_reader.n_intervals.back()+1,
+                           bathymetry_data_reader.get_data(bathymetry_data_reader.filename).begin()))
+  {}
+
+
   template <int dim>
   std::string ProblemData<dim>::bathymetry_filename(IO::ParameterHandler &prm) const
   {
@@ -127,6 +137,7 @@ namespace ICBC
     return filename;
   }
 #endif
+
 
   template <int dim>
   double ProblemData<dim>::value(const Point<dim> & x,
@@ -169,7 +180,14 @@ namespace ICBC
   };  
 
   // We return either the water depth or the momentum
-  // depending on which component is requested.
+  // depending on which component is requested. The initialization
+  // is different if the Finite Volume method is chosen. In that
+  // case, dry cells must be initialized at the bathymetry level,
+  // in order to start to flood from that level.
+  // For our non-linear approach with variable bathymetry we initialize
+  // dry cells with a virtual free-surface under the bathymetry level
+  // and it is up to the non-linear algorithm to find the "good" water
+  // level.
   template <int dim, int n_vars>
   double ExactSolution<dim, n_vars>::value(const Point<dim> & x,
                                            const unsigned int component) const
@@ -190,22 +208,22 @@ namespace ICBC
     double u;
     if (x[0] < x1)
       {
-//#ifdef ICBC_THACKEROSCILLATIONS1D_FINITEVOLUME
+#ifdef ICBC_THACKEROSCILLATIONS1D_FINITEVOLUME
         const double x_half = x[0]-0.5*L;
-//#else
-//        const double x_half = x1-0.5*L;
-//#endif
+#else
+        const double x_half = x1-0.5*L;
+#endif
         zb = h0 * (inv_a*inv_a * x_half*x_half - 1.);
         h = 0.;
         u = 0.;
       }
     else if (x[0] > x2)
       {
-//#ifdef ICBC_THACKEROSCILLATIONS1D_FINITEVOLUME
-        const double x_half = x[0]-0.5*L;   //lrp: check which line is the best one.
-//#else
-//        const double x_half = x2-0.5*L;
-//#endif
+#ifdef ICBC_THACKEROSCILLATIONS1D_FINITEVOLUME
+        const double x_half = x[0]-0.5*L;
+#else
+        const double x_half = x2-0.5*L;
+#endif
         zb = h0 * (inv_a*inv_a * x_half*x_half - 1.);        
         h = 0.;
         u = 0.;

@@ -1645,7 +1645,7 @@ namespace SpaceDiscretization
             inverse_jxw[q] *= 1. / ( 1. + factor_matrix
               * model.bottom_friction.jacobian<dim>(model.velocity<dim>(z_q, q_q, zb_q),
                                                     cf_q,
-                                                    z_q+zb_q)
+                                                    model.depth(z_q, zb_q))
                                    );
           }
 
