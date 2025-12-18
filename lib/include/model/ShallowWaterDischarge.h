@@ -356,7 +356,7 @@ namespace Model
   {
     const Tensor<1, dim, Number> v =
       velocity<dim>(height, discharge, bathymetry);
-    
+
     Tensor<1, dim, Tensor<1, dim, Number>> flux;
     for (unsigned int d = 0; d < dim; ++d)
       for (unsigned int e = 0; e < dim; ++e)
