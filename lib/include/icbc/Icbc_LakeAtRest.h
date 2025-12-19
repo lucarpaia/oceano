@@ -46,8 +46,10 @@ namespace ICBC
   // cpp key:
 #undef  ICBC_LAKEATREST_BATHYMETRYDISCONTINUOUS
   // You can also check the well-balanced property of the scheme with respect to the
-  // "water-at-rest" state, without the perturbation. Define the following cpp key:
-#undef  ICBC_LAKEATREST_WATERATREST
+  // "water-at-rest" state, without the perturbation. Define one of the following cpp key,
+  // depending if you want to test the wet or the dry lake at rest test.
+#undef  ICBC_LAKEATREST_WATERATRESTWET
+#undef  ICBC_LAKEATREST_WATERATRESTDRY
 
   using namespace dealii;
   
@@ -56,13 +58,22 @@ namespace ICBC
   // the bassin depth far from the hill:
   constexpr double h0      = 1.0;
   // the amplitude of the perturbation:
+#if defined ICBC_LAKEATREST_WATERATRESTWET || defined ICBC_LAKEATREST_WATERATRESTDRY
+  constexpr double a0      = 0.0;
+#else
   constexpr double a0      = 0.01;
+#endif
+  // and the height of the hill:
+#if defined ICBC_LAKEATREST_WATERATRESTWET
 #if defined ICBC_LAKEATREST_BATHYMETRYDISCONTINUOUS
   constexpr double b0      = 0.65;
 #else
   constexpr double b0      = 0.80;
 #endif
-  // The initial set specify a non trivial initial state
+#else
+  constexpr double b0      = 1.3;
+#endif
+  // We specify a non trivial initial state
   // (a water height level different from zero). This is realized thanks to the
   // following offset:
   constexpr double z0      = 1.0;
@@ -224,11 +235,7 @@ namespace ICBC
 
     if (component == 0)
       if ((0.05 <= x[0]) && (x[0] <= 0.15))
-#ifndef ICBC_LAKEATREST_WATERATREST
         return z0 + a0;
-#else
-        return z0;
-#endif
       else
         return z0;
     else
@@ -256,13 +263,13 @@ namespace ICBC
   template <int dim, int n_vars>
   void BcLakeAtRest<dim, n_vars>::set_boundary_conditions()
   {
-#ifndef ICBC_LAKEATREST_WATERATREST
+    this->set_wall_boundary(0);
+#if defined ICBC_LAKEATREST_WATERATRESTWET || defined ICBC_LAKEATREST_WATERATRESTDRY
+    this->set_wall_boundary(1);
+#else
     this->set_absorbing_outflow_boundary(
       1, std::make_unique<ExactSolution<dim, n_vars>>(0, prm));
-#else
-    this->set_wall_boundary(1);
 #endif
-    this->set_wall_boundary(0);
   }
 } // namespace ICBC
 
