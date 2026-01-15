@@ -79,7 +79,7 @@ namespace MatrixFreeOperatorsOceano
                const VectorizedArrayType *in_array,
                VectorizedArrayType       *out_array,
                const unsigned int         cell_in_lane,
-               const VectorizedArrayType  mask = 100) const;
+               const VectorizedArrayType  mask = 0) const;
 
   private:
     /**
@@ -210,7 +210,7 @@ namespace MatrixFreeOperatorsOceano
     void apply(const VectorizedArrayType *mass_array,
                const VectorizedArrayType *in_array,
                VectorizedArrayType       *out_array,
-               const VectorizedArrayType  mask = 100) const;
+               const VectorizedArrayType  mask = 0) const;
 
   private:
     /**
