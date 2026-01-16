@@ -64,14 +64,14 @@ namespace ICBC
   constexpr double a0      = 0.01;
 #endif
   // and the height of the hill:
-#if defined ICBC_LAKEATREST_WATERATRESTWET
+#if defined ICBC_LAKEATREST_WATERATRESTDRY
+  constexpr double b0      = 1.3;
+#else
 #if defined ICBC_LAKEATREST_BATHYMETRYDISCONTINUOUS
   constexpr double b0      = 0.65;
 #else
   constexpr double b0      = 0.80;
 #endif
-#else
-  constexpr double b0      = 1.3;
 #endif
   // We specify a non trivial initial state
   // (a water height level different from zero). This is realized thanks to the
