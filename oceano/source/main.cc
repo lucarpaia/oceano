@@ -636,10 +636,10 @@ namespace Problem
 
     for (const auto &cell : dof_handler_height.active_cell_iterators())
       if (cell->is_locally_owned())
-        cell->set_active_fe_index(0);
+        cell->set_active_fe_index(1);
     for (const auto &cell : dof_handler_discharge.active_cell_iterators())
       if (cell->is_locally_owned())
-        cell->set_active_fe_index(0);
+        cell->set_active_fe_index(1);
   }
 
 
