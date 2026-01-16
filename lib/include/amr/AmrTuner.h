@@ -20,6 +20,7 @@
 #define AMR_HPP
 
 #include <deal.II/meshworker/mesh_loop.h>
+#include <deal.II/hp/fe_values.h>
 #include <io/TxtDataReader.h>
 /**
  * Namespace containing the AMR options.
@@ -64,7 +65,7 @@ namespace Amr
   // computing local quantities associated to the finite element solution.
   // The computation of the error estimate is done within a lambda function
   // and it is the only part that really changes between the different
-  // indicators.
+  // indicators. This class is hp-compatible.
   class AmrTuner
   {
   public:
@@ -81,7 +82,7 @@ namespace Amr
 
     template <int dim, typename Number>
     void estimate_error(
-      const std::vector<FESystem<dim>*>                             &fe,
+      const std::vector<hp::FECollection<dim>*>                     &fe,
       const std::vector<DoFHandler<dim>*>                           &dof,
       const std::vector<LinearAlgebra::distributed::Vector<Number>> &solution,
       const Function<dim>                                           &data,
@@ -92,18 +93,18 @@ namespace Amr
     struct ScratchData
     {
       ScratchData(
-          const FESystem<dim>      &fe,
-          const unsigned int        quadrature_degree,
-          const UpdateFlags         update_flags)
-        : fe_values(fe, QGauss<dim>(quadrature_degree), update_flags)
+          const hp::FECollection<dim> &fe,
+          const hp::QCollection<dim>  &quadrature,
+          const UpdateFlags            update_flags)
+        : hp_fe_values(fe, quadrature, update_flags)
       {}
 
       ScratchData(const ScratchData<dim> &scratch_data)
-      : fe_values(scratch_data.fe_values.get_fe(),
-                  scratch_data.fe_values.get_quadrature(),
-                  scratch_data.fe_values.get_update_flags()) {}
+      : hp_fe_values(scratch_data.hp_fe_values.get_fe_collection(),
+                     scratch_data.hp_fe_values.get_quadrature_collection(),
+                     scratch_data.hp_fe_values.get_update_flags()) {}
 
-      FEValues<dim> fe_values;
+      hp::FEValues<dim> hp_fe_values;
     };
 
     struct CopyData
@@ -151,20 +152,21 @@ namespace Amr
   // point it is enough to evaluate it, etc ...
   template <int dim, typename Number>
     void AmrTuner::estimate_error(
-      const std::vector<FESystem<dim>*>                             &fe,
+      const std::vector<hp::FECollection<dim>*>                     &fe,
       const std::vector<DoFHandler<dim>*>                           &dof,
       const std::vector<LinearAlgebra::distributed::Vector<Number>> &solution,
       const Function<dim>                                           &/*data*/,
       Vector<float>                                                 &error_estimate) const
   {
-    const unsigned int n_q_points_amr_1d        = fe[0]->degree;
+    const unsigned int n_q_points_amr_1d        = fe[0]->max_degree();
     using Iterator = typename DoFHandler<dim>::active_cell_iterator;
 
     auto cell_worker = [&](const Iterator   &cell,
                            ScratchData<dim> &scratch_data,
                            CopyData&         copy_data) {
-      FEValues<dim>& fe_values = scratch_data.fe_values;
-      fe_values.reinit(cell);
+      hp::FEValues<dim>& hp_fe_values = scratch_data.hp_fe_values;
+      hp_fe_values.reinit(cell);
+      const FEValues<dim>& fe_values = hp_fe_values.get_present_fe_values();
 
       std::vector<Tensor<1, dim>> gradients(fe_values.n_quadrature_points);
       fe_values.get_function_gradients(solution[0], gradients);
@@ -187,7 +189,9 @@ namespace Amr
     };
 
     const UpdateFlags cell_flags = update_gradients | update_quadrature_points | update_JxW_values;
-    ScratchData<dim> scratch_data(*fe[0], n_q_points_amr_1d, cell_flags);
+    hp::QCollection<dim> quadrature;
+    quadrature.push_back(QGauss<dim>(n_q_points_amr_1d));
+    ScratchData<dim> scratch_data(*fe[0], quadrature, cell_flags);
     CopyData copy_data;
     MeshWorker::mesh_loop(dof[0]->begin_active(),
                           dof[0]->end(),
@@ -207,20 +211,21 @@ namespace Amr
   // along the lines and the dim-components along the columns.
   template <int dim, typename Number>
     void AmrTuner::estimate_error(
-      const std::vector<FESystem<dim>*>                             &fe,
+      const std::vector<hp::FECollection<dim>*>                     &fe,
       const std::vector<DoFHandler<dim>*>                           &dof,
       const std::vector<LinearAlgebra::distributed::Vector<Number>> &solution,
       const Function<dim>                                           &/*data*/,
       Vector<float>                                                 &error_estimate) const
   {
-    const unsigned int n_q_points_amr_1d        = fe[1]->degree;
+    const unsigned int n_q_points_amr_1d        = fe[1]->max_degree();
     using Iterator = typename DoFHandler<dim>::active_cell_iterator;
 
     auto cell_worker = [&](const Iterator   &cell,
                            ScratchData<dim> &scratch_data,
                            CopyData&         copy_data) {
-      FEValues<dim>& fe_values = scratch_data.fe_values;
-      fe_values.reinit(cell);
+      hp::FEValues<dim>& hp_fe_values = scratch_data.hp_fe_values;
+      hp_fe_values.reinit(cell);
+      const FEValues<dim>& fe_values = hp_fe_values.get_present_fe_values();
 
       std::vector<std::vector<Tensor<1, dim>>>
         gradients(fe_values.n_quadrature_points, std::vector<Tensor<1, dim>>(dim));
@@ -244,7 +249,9 @@ namespace Amr
     };
 
     const UpdateFlags cell_flags = update_gradients | update_quadrature_points | update_JxW_values;
-    ScratchData<dim> scratch_data(*fe[1], n_q_points_amr_1d, cell_flags);
+    hp::QCollection<dim> quadrature;
+    quadrature.push_back(QGauss<dim>(n_q_points_amr_1d));
+    ScratchData<dim> scratch_data(*fe[1], quadrature, cell_flags);
     CopyData copy_data;
     MeshWorker::mesh_loop(dof[1]->begin_active(),
                           dof[1]->end(),
@@ -269,20 +276,21 @@ namespace Amr
   // structure.
   template <int dim, typename Number>
     void AmrTuner::estimate_error(
-      const std::vector<FESystem<dim>*>                             &fe,
+      const std::vector<hp::FECollection<dim>*>                     &fe,
       const std::vector<DoFHandler<dim>*>                           &dof,
       const std::vector<LinearAlgebra::distributed::Vector<Number>> &solution,
       const Function<dim>                                           &/*data*/,
       Vector<float>                                                 &error_estimate) const
   {
-    const unsigned int n_q_points_amr_1d        = fe[0]->degree;
+    const unsigned int n_q_points_amr_1d        = fe[0]->max_degree();
     using Iterator = typename DoFHandler<dim>::active_cell_iterator;
 
     auto cell_worker = [&](const Iterator   &cell,
                            ScratchData<dim> &scratch_data,
                            CopyData&         copy_data) {
-      FEValues<dim>& fe_values = scratch_data.fe_values;
-      fe_values.reinit(cell);
+      hp::FEValues<dim>& hp_fe_values = scratch_data.hp_fe_values;
+      hp_fe_values.reinit(cell);
+      const FEValues<dim>& fe_values = hp_fe_values.get_present_fe_values();
 
       std::vector<Tensor<1, dim>> gradients(fe_values.n_quadrature_points);
       fe_values.get_function_gradients(solution[2], gradients);
@@ -305,7 +313,9 @@ namespace Amr
     };
 
     const UpdateFlags cell_flags = update_gradients | update_quadrature_points | update_JxW_values;
-    ScratchData<dim> scratch_data(*fe[0], n_q_points_amr_1d, cell_flags);
+    hp::QCollection<dim> quadrature;
+    quadrature.push_back(QGauss<dim>(n_q_points_amr_1d));
+    ScratchData<dim> scratch_data(*fe[0], quadrature, cell_flags);
     CopyData copy_data;
     MeshWorker::mesh_loop(dof[0]->begin_active(),
                           dof[0]->end(),
@@ -332,7 +342,7 @@ namespace Amr
   // to not impact much the final computational time.
   template <int dim, typename Number>
     void AmrTuner::estimate_error(
-      const std::vector<FESystem<dim>*>                             &fe,
+      const std::vector<hp::FECollection<dim>*>                     &fe,
       const std::vector<DoFHandler<dim>*>                           &dof,
       const std::vector<LinearAlgebra::distributed::Vector<Number>> &/*solution*/,
       const Function<dim>                                           &data,
@@ -344,8 +354,9 @@ namespace Amr
     auto cell_worker = [&](const Iterator   &cell,
                            ScratchData<dim> &scratch_data,
                            CopyData&         copy_data) {
-      FEValues<dim>& fe_values = scratch_data.fe_values;
-      fe_values.reinit(cell);
+      hp::FEValues<dim>& hp_fe_values = scratch_data.hp_fe_values;
+      hp_fe_values.reinit(cell);
+      const FEValues<dim>& fe_values = hp_fe_values.get_present_fe_values();
 
       copy_data.cell_index = cell->active_cell_index();
 
@@ -364,7 +375,9 @@ namespace Amr
     };
 
     const UpdateFlags cell_flags = update_quadrature_points;
-    ScratchData<dim> scratch_data(*fe[0], n_q_points_amr_1d, cell_flags);
+    hp::QCollection<dim> quadrature;
+    quadrature.push_back(QGauss<dim>(n_q_points_amr_1d));
+    ScratchData<dim> scratch_data(*fe[0], quadrature, cell_flags);
     CopyData copy_data;
     MeshWorker::mesh_loop(dof[0]->begin_active(),
                           dof[0]->end(),
@@ -390,7 +403,7 @@ namespace Amr
   // very coarse mesh.
   template <int dim, typename Number>
     void AmrTuner::estimate_error(
-      const std::vector<FESystem<dim>*>                             &fe,
+      const std::vector<hp::FECollection<dim>*>                     &fe,
       const std::vector<DoFHandler<dim>*>                           &dof,
       const std::vector<LinearAlgebra::distributed::Vector<Number>> &/*solution*/,
       const Function<dim>                                           &/*data*/,
@@ -410,8 +423,9 @@ namespace Amr
     auto cell_worker = [&](const Iterator   &cell,
                            ScratchData<dim> &scratch_data,
                            CopyData&         copy_data) {
-      FEValues<dim>& fe_values = scratch_data.fe_values;
-      fe_values.reinit(cell);
+      hp::FEValues<dim>& hp_fe_values = scratch_data.hp_fe_values;
+      hp_fe_values.reinit(cell);
+      const FEValues<dim>& fe_values = hp_fe_values.get_present_fe_values();
 
       copy_data.cell_index = cell->active_cell_index();
 
@@ -430,7 +444,9 @@ namespace Amr
     };
 
     const UpdateFlags cell_flags = update_quadrature_points;
-    ScratchData<dim> scratch_data(*fe[0], n_q_points_amr_1d, cell_flags);
+    hp::QCollection<dim> quadrature;
+    quadrature.push_back(QGauss<dim>(n_q_points_amr_1d));
+    ScratchData<dim> scratch_data(*fe[0], quadrature, cell_flags);
     CopyData copy_data;
     MeshWorker::mesh_loop(dof[0]->begin_active(),
                           dof[0]->end(),
@@ -441,6 +457,5 @@ namespace Amr
                           MeshWorker::assemble_own_cells);
   }
 #endif
-
 } // namespace Amr
 #endif //AMR_HPP

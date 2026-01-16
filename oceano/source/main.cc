@@ -719,7 +719,7 @@ namespace Problem
       dof_handlers.push_back(&dof_handler_height);
       dof_handlers.push_back(&dof_handler_discharge);
 
-      /*std::vector<hp::FECollection<dim>*> fe_collections;
+      std::vector<hp::FECollection<dim>*> fe_collections;
       fe_collections.push_back(&fe_collection_height);
       fe_collections.push_back(&fe_collection_discharge);
 
@@ -729,7 +729,7 @@ namespace Problem
                                            postprocess_velocity,
                                            solution_tracer},
                                            *oceano_operator.bc->problem_data,
-                                           estimated_error_per_cell);*/
+                                           estimated_error_per_cell);
 
       float max_error = estimated_error_per_cell.linfty_norm();
       max_error = Utilities::MPI::max(max_error, MPI_COMM_WORLD);
