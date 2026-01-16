@@ -89,12 +89,12 @@
 // of course related and it is recommended to use the same model for both:
 #define PHYSICS_DIFFUSIONCOEFFICIENTCONSTANT
 #undef  PHYSICS_DIFFUSIONCOEFFICIENTSMAGORINSKY
-// We end with a tuner class for the AMR:
-#undef  AMR_HEIGHTGRADIENT
-#define AMR_VORTICITY
-#undef  AMR_TRACERGRADIENT
-#undef  AMR_BATHYMETRY
-#undef  AMR_FROMFILE
+// We end with the error estimate for AMR:
+#undef  HPOCEANO_ERRORHEIGHTGRADIENT
+#define HPOCEANO_ERRORVORTICITY
+#undef  HPOCEANO_ERRORTRACERGRADIENT
+#undef  HPOCEANO_ERRORBATHYMETRY
+#undef  HPOCEANO_ERRORFROMFILE
 //
 //
 //
@@ -167,7 +167,7 @@
 #include <space_discretization/OceanDG.h>
 #include <space_discretization/OceanDGWithTracer.h>
 #include <io/CommandLineParser.h>
-#include <amr/AmrTuner.h>
+#include <deal.II_oceano/hpTuner.h>
 // The following files are included depending on
 // the Preprocessor keys. This is necessary because 
 // we have done a limited use of virtual classes; on the contrary 
@@ -291,10 +291,10 @@ namespace Problem
       const ICBC::Ic<dim, 1+dim+n_tra>            ic,
       LinearAlgebra::distributed::Vector<Number> &postprocess_velocity);
     void refine_grid(
-      const Amr::AmrTuner                        &amr_tuner,
+      const hpOceano::hpTuner                    &hp_tuner,
       LinearAlgebra::distributed::Vector<Number> &postprocess_velocity);
     /*void refine_degree(
-      const Amr::AmrTuner                        &amr_tuner,
+      const hpOceano::hpTuner                    &hp_tuner,
       LinearAlgebra::distributed::Vector<Number> &postprocess_velocity);*/
 
     LinearAlgebra::distributed::Vector<Number> solution_height;
@@ -700,7 +700,7 @@ namespace Problem
   // We have a look to each task into more details.
   template <int dim, int n_tra>
   void OceanoProblem<dim, n_tra>::refine_grid(
-    const Amr::AmrTuner                        &amr_tuner,
+    const hpOceano::hpTuner                    &hp_tuner,
     LinearAlgebra::distributed::Vector<Number> &postprocess_velocity)
   {
     {
@@ -723,13 +723,13 @@ namespace Problem
       fe_collections.push_back(&fe_collection_height);
       fe_collections.push_back(&fe_collection_discharge);
 
-      amr_tuner.estimate_error<dim,Number>(fe_collections,
-                                           dof_handlers,
-                                           {solution_height,
-                                           postprocess_velocity,
-                                           solution_tracer},
-                                           *oceano_operator.bc->problem_data,
-                                           estimated_error_per_cell);
+      hp_tuner.estimate_error<dim,Number>(fe_collections,
+                                          dof_handlers,
+                                          {solution_height,
+                                          postprocess_velocity,
+                                          solution_tracer},
+                                          *oceano_operator.bc->problem_data,
+                                          estimated_error_per_cell);
 
       float max_error = estimated_error_per_cell.linfty_norm();
       max_error = Utilities::MPI::max(max_error, MPI_COMM_WORLD);
@@ -745,16 +745,16 @@ namespace Problem
       // necessary to make sure that no two cells are adjacent with a refinement level
       // differing with more than one.
       GridRefinement::refine(
-        triangulation, estimated_error_per_cell, amr_tuner.threshold_refinement * max_error);
+        triangulation, estimated_error_per_cell, hp_tuner.threshold_refinement * max_error);
       GridRefinement::coarsen(
-        triangulation, estimated_error_per_cell, amr_tuner.threshold_coarsening * max_error);
+        triangulation, estimated_error_per_cell, hp_tuner.threshold_coarsening * max_error);
 
       // We enforce bounds on maximum and minimum mesh levels with the following lines.
       // The minimum mesh level is the number of global refinement while the maximum
       // is related both by a user provided value and a minimum target mesh size.
-      const unsigned int min_grid_level = amr_tuner.min_level_refinement;
-      const unsigned int max_grid_level = amr_tuner.max_level_refinement;
-      const unsigned int min_grid_size = amr_tuner.min_mesh_size;
+      const unsigned int min_grid_level = hp_tuner.min_level_refinement;
+      const unsigned int max_grid_level = hp_tuner.max_level_refinement;
+      const unsigned int min_grid_size = hp_tuner.min_mesh_size;
       if (min_grid_level > 0)
         for (const auto &cell :
              triangulation.active_cell_iterators_on_level(min_grid_level))
@@ -829,8 +829,8 @@ namespace Problem
                                               solution_discharge,
                                               postprocess_velocity);
 #else
-    Assert(amr_tuner.max_level_refinement > 0
-            || amr_tuner.remesh_tick < 10000000000.,
+    Assert(hp_tuner.max_level_refinement > 0
+            || hp_tuner.remesh_tick < 10000000000.,
            ExcInternalError());
 #endif
     }
@@ -845,7 +845,7 @@ namespace Problem
   // onto the new grid.
   /*template <int dim, int n_tra>
   void OceanoProblem<dim, n_tra>::refine_degree(
-    const Amr::AmrTuner                        &amr_tuner,
+    const hpOceano::hpTuner                    &hp_tuner,
     LinearAlgebra::distributed::Vector<Number> &postprocess_velocity)
   {
     {
@@ -864,7 +864,7 @@ namespace Problem
       fe_collections.push_back(&fe_collection_height);
       fe_collections.push_back(&fe_collection_discharge);
 
-      amr_tuner.estimate_error<dim,Number>(fe_collections,
+      hp_tuner.estimate_error<dim,Number>(fe_collections,
                                            dof_handlers,
                                            {solution_height,
                                            postprocess_velocity,
@@ -879,9 +879,9 @@ namespace Problem
       // smoothness is below another minimal threshold. The next functions simply enforce
       // polynomial refinement over grid grid refinement.
       GridRefinement::refine(
-        triangulation, estimated_error_per_cell, amr_tuner.threshold_refinement);
+        triangulation, estimated_error_per_cell, hp_tuner.threshold_refinement);
       GridRefinement::coarsen(
-        triangulation, estimated_error_per_cell, amr_tuner.threshold_coarsening);
+        triangulation, estimated_error_per_cell, hp_tuner.threshold_coarsening);
 
       hp::Refinement::full_p_adaptivity(dof_handler_height);
       hp::Refinement::full_p_adaptivity(dof_handler_discharge);
@@ -1296,11 +1296,11 @@ namespace Problem
     make_grid();
     make_dofs();
 
-    // It is the turn of the constructor of the AmrTuner. We have collected
-    // all the  tuning parameters for the AMR in a separate class in order
+    // It is the turn of the constructor of the hpTuner. We have collected
+    // all the  tuning parameters for hp-adaptivity in a separate class in order
     // to keep things in order. This class is controlled via a preprocessor
     // for the choice of the error estimate.
-    Amr::AmrTuner amr_tuner(prm);
+    hpOceano::hpTuner hp_tuner(prm);
 
     // We introduce an auxiliary vector to store the velocity. Velocities are derived
     // from discharges and are ubiquious (output, grid refinement, eddy viscosity/diffusivity).
@@ -1321,11 +1321,11 @@ namespace Problem
       TimerOutput::Scope t(timer, "compute initial solution");
       ICBC::Ic<dimension, n_variables> ic(prm);
       make_ic(ic, postprocess_velocity);
-      //refine_degree(amr_tuner, postprocess_velocity);
+      //refine_degree(hp_tuner, postprocess_velocity);
 
-      for (unsigned int lev = 0; lev < amr_tuner.max_level_refinement; ++lev)
+      for (unsigned int lev = 0; lev < hp_tuner.max_level_refinement; ++lev)
         {
-          refine_grid(amr_tuner, postprocess_velocity);
+          refine_grid(hp_tuner, postprocess_velocity);
           make_ic(ic, postprocess_velocity);
         }
     }
@@ -1496,7 +1496,7 @@ namespace Problem
 
         /*if (timestep_number % 5 == 0)
           {
-            refine_degree(amr_tuner, postprocess_velocity);
+            refine_degree(hp_tuner, postprocess_velocity);
 
             integrator.reinit(solution_height, solution_discharge, solution_tracer,
               rk_register_height_1,
@@ -1509,10 +1509,10 @@ namespace Problem
             postprocessor.do_reinit_data = true;
           }*/
 
-        if (static_cast<int>(time / amr_tuner.remesh_tick) !=
-             static_cast<int>((time - time_step) / amr_tuner.remesh_tick))
+        if (static_cast<int>(time / hp_tuner.remesh_tick) !=
+             static_cast<int>((time - time_step) / hp_tuner.remesh_tick))
           {
-            refine_grid(amr_tuner, postprocess_velocity);
+            refine_grid(hp_tuner, postprocess_velocity);
 
             integrator.reinit(solution_height, solution_discharge, solution_tracer,
               rk_register_height_1,

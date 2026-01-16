@@ -132,7 +132,7 @@ namespace IO
                         "It controls the maximum resolution");
 
       // A static refinement indicator can be read read from file, if the
-      // preprocessing `AMR_FROMFILE` is defined. Otherwise this parameter
+      // preprocessing `HPOCEANO_ERRORFROMFILE` is defined. Otherwise this parameter
       // is ignored.
       prm.declare_entry("Static_refinement_indicator_filename",
                         "refinement_indicator.tzt.gz",
