@@ -64,7 +64,7 @@ namespace IO
     // Parameters for mesh include the mesh file and the
     // number of global refinement steps that are applied to the initial
     // coarse mesh.
-    prm.enter_subsection("Mesh & geometry parameters");
+    prm.enter_subsection("Mesh & hp parameters");
     {
     
       prm.declare_entry("Mesh_filename",
@@ -76,7 +76,7 @@ namespace IO
       // For the number of refinement steps, we allow integer values 
       // in the range $[0,\infty)$, where the omitted second argument to the 
       // `Patterns::Integer` object denotes the half-open interval.    
-      prm.declare_entry("Number_of_refinements",
+      prm.declare_entry("Global_level_of_mesh_refinement",
                         "6", Patterns::Integer(0),
                         "Number of global mesh refinement steps "
                         "applied to initial coarse grid");
@@ -93,12 +93,12 @@ namespace IO
       // This are the two tresholds for the normalized cellwise error after/below which
       // the cell is marked for refinement/coarsening. The remesh thick is the frequency
       // for performing remeshing.
-      prm.declare_entry("Threshold_for_refinement",
+      prm.declare_entry("Threshold_for_mesh_refinement",
                         "0.50", Patterns::Double(0,1),
                         "Normalized error threshold after which a cell "
                         "is marked for refinement");
 
-      prm.declare_entry("Threshold_for_coarsening",
+      prm.declare_entry("Threshold_for_mesh_coarsening",
                         "0.25", Patterns::Double(0,1),
                         "Normalized error threshold below which a cell "
                         "is marked for coarsening");
@@ -110,7 +110,7 @@ namespace IO
       // 100 which means that the most refined cell can be "only" $2^10$ times
       // smaller then the initial one, e.g. if you start with a resolution of 100 km
       // you can can have cells as smaller as 100 m.
-      prm.declare_entry("Max_level_of_refinement",
+      prm.declare_entry("Max_level_of_mesh_refinement",
                         "0", Patterns::Integer(0,100),
                         "Maximum level of grid refinement. "
                         "A value of one means that the grid, at maximum, "

@@ -16,8 +16,8 @@
  *
  * Author: Luca Arpaia,        2023
  */
-#ifndef HP_HPP
-#define HP_HPP
+#ifndef HPOCEANO_HPP
+#define HPOCEANO_HPP
 
 #include <deal.II/meshworker/mesh_loop.h>
 #include <deal.II/hp/fe_values.h>
@@ -55,10 +55,10 @@ namespace hpOceano
   // computation: from evalution of finite element solutions to generic
   // data evaluation.
   //
-  // The error estimates are computed with the `MeshWorker` interface.
-  // This is a collection of functions and classes for the mesh loops.
-  // The workhorse of this namespace is the `mesh_loop()` function, which
-  // implements a completely generic loop over all mesh cells.
+  // The error and smoothness estimates are computed with the `MeshWorker`
+  // interface. This is a collection of functions and classes for the mesh
+  // loops. The workhorse of this namespace is the `mesh_loop()` function,
+  // which implements a completely generic loop over all mesh cells.
   // The loop() function depends on certain objects handed to it as arguments.
   // These objects are of two types, info objects like `ScratchData` and
   // function objects ("workers") that perform the local operations on cells.
@@ -131,12 +131,12 @@ namespace hpOceano
   hpTuner::hpTuner(
     IO::ParameterHandler &prm)
   {
-    prm.enter_subsection("Mesh & geometry parameters");
+    prm.enter_subsection("Mesh & hp parameters");
     remesh_tick = prm.get_double("Remesh_tick");
-    threshold_refinement = prm.get_double("Threshold_for_refinement");
-    threshold_coarsening = prm.get_double("Threshold_for_coarsening");
-    max_level_refinement = prm.get_integer("Max_level_of_refinement");
-    min_level_refinement = prm.get_integer("Number_of_refinements");
+    threshold_refinement = prm.get_double("Threshold_for_mesh_refinement");
+    threshold_coarsening = prm.get_double("Threshold_for_mesh_coarsening");
+    max_level_refinement = prm.get_integer("Max_level_of_mesh_refinement");
+    min_level_refinement = prm.get_integer("Global_level_of_mesh_refinement");
     min_mesh_size = prm.get_double("Min_mesh_size");
     refinement_filename = prm.get("Static_refinement_indicator_filename");
     prm.leave_subsection();
@@ -461,4 +461,4 @@ namespace hpOceano
   }
 #endif
 } // namespace hpOceano
-#endif //HP_HPP
+#endif //HP_HPPOCEANO

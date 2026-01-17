@@ -612,9 +612,9 @@ namespace Problem
     std::string current_working_directory(cwd);
     std::string slash("/");
 
-    prm.enter_subsection("Mesh & geometry parameters");
+    prm.enter_subsection("Mesh & hp parameters");
     const std::string file_msh = prm.get("Mesh_filename");
-    const unsigned int n_global_refinements = prm.get_integer("Number_of_refinements");
+    const unsigned int n_global_refinements = prm.get_integer("Global_level_of_mesh_refinement");
     prm.leave_subsection();
 
     std::ifstream f(current_working_directory+slash+file_msh);
@@ -841,8 +841,8 @@ namespace Problem
   // This function takes care of the p-refinement. Where the solution lacks regularity
   // we decrease the polynomial order. The tasks this function performs are similar to
   // the AMR analogue function: estimate the solution smoothness, mark
-  // the cells for refinement/coarsening, execute the remeshing and transfer the solution
-  // onto the new grid.
+  // the cells for refinement/coarsening, set the new active fe index and transfer the solution
+  // onto the new basis.
   /*template <int dim, int n_tra>
   void OceanoProblem<dim, n_tra>::refine_degree(
     const hpOceano::hpTuner                    &hp_tuner,
@@ -854,23 +854,13 @@ namespace Problem
       // We estimate the solution smoothness. Since this operation is case-dependent it
       // is left to the specific class and to its member function `estimate_smoothness`.
       // This computes a cellwise smoothness indicator based on the solution.
-      Vector<float> estimated_error_per_cell(triangulation.n_active_cells());
+      Vector<float> estimated_smoothness_per_cell(triangulation.n_active_cells());
 
-      std::vector<DoFHandler<dim>*> dof_handlers;
-      dof_handlers.push_back(&dof_handler_height);
-      dof_handlers.push_back(&dof_handler_discharge);
-
-      std::vector<hp::FECollection<dim>*> fe_collections;
-      fe_collections.push_back(&fe_collection_height);
-      fe_collections.push_back(&fe_collection_discharge);
-
-      hp_tuner.estimate_error<dim,Number>(fe_collections,
-                                           dof_handlers,
-                                           {solution_height,
-                                           postprocess_velocity,
-                                           solution_tracer},
-                                           *oceano_operator.bc->problem_data,
-                                           estimated_error_per_cell); //lrp-hp: replace with hp_tuner
+      hp_tuner.estimate_smoothness<dim,Number>(&fe_collection_height,
+                                               &dof_handler_height,
+                                                solution_height,
+                                               *oceano_operator.bc->problem_data,
+                                                estimated_smoothness_per_cell);
 
       // Next we find out which cells to refine/coarsen: we use two functions from
       // a class that implements several different algorithms to refine a triangulation
@@ -879,9 +869,9 @@ namespace Problem
       // smoothness is below another minimal threshold. The next functions simply enforce
       // polynomial refinement over grid grid refinement.
       GridRefinement::refine(
-        triangulation, estimated_error_per_cell, hp_tuner.threshold_refinement);
+        triangulation, estimated_smoothness_per_cell, hp_tuner.threshold_refinement);
       GridRefinement::coarsen(
-        triangulation, estimated_error_per_cell, hp_tuner.threshold_coarsening);
+        triangulation, estimated_smoothness_per_cell, hp_tuner.threshold_coarsening);
 
       hp::Refinement::full_p_adaptivity(dof_handler_height);
       hp::Refinement::full_p_adaptivity(dof_handler_discharge);
