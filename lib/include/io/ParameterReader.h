@@ -90,18 +90,18 @@ namespace IO
                         "10000000000.", Patterns::Double(0),
                         "Time interval we remesh");
 
-      // This are the two tresholds for the normalized cellwise error after/below which
+      // These are the two tresholds for the normalized cellwise error after/below which
       // the cell is marked for refinement/coarsening. The remesh thick is the frequency
       // for performing remeshing.
       prm.declare_entry("Threshold_for_mesh_refinement",
                         "0.50", Patterns::Double(0,1),
                         "Normalized error threshold after which a cell "
-                        "is marked for refinement");
+                        "is marked for grid refinement");
 
       prm.declare_entry("Threshold_for_mesh_coarsening",
                         "0.25", Patterns::Double(0,1),
                         "Normalized error threshold below which a cell "
-                        "is marked for coarsening");
+                        "is marked for grid coarsening");
 
       // The max level of refinement is the
       // maximum grid level. The default value (zero) is important
@@ -139,6 +139,14 @@ namespace IO
                         Patterns::Anything(),
                         "Name of the static refinement indicator file "
                         "in structured format (with extension txt.gz)");
+
+      // This is the treshold for the smoothmess estimate below which
+      // the cell is marked for degree coarsening. The default value is a small
+      // to not introduce any undesired degree coarsening.
+      prm.declare_entry("Threshold_for_degree_coarsening",
+                        "1e-4", Patterns::Double(0,100000),
+                        "Smoothness threshold below which a cell "
+                        "is marked for degree coarsening");
      }
     prm.leave_subsection();
 

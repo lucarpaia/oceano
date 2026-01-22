@@ -76,12 +76,14 @@ namespace hpOceano
     ~hpTuner(){};
 
     double remesh_tick;
-    float threshold_refinement;
-    float threshold_coarsening;
+    float threshold_mesh_refinement;
+    float threshold_mesh_coarsening;
     float min_mesh_size;
-    unsigned int max_level_refinement;
-    unsigned int min_level_refinement;
+    unsigned int max_level_mesh_refinement;
+    unsigned int min_level_mesh_refinement;
     std::string refinement_filename;
+
+    float threshold_degree_coarsening;
 
     template <int dim, typename Number>
     void estimate_error(
@@ -90,6 +92,14 @@ namespace hpOceano
       const std::vector<LinearAlgebra::distributed::Vector<Number>> &solution,
       const Function<dim>                                           &data,
       Vector<float>                                                 &error_estimate) const;
+
+    template <int dim, typename Number>
+    void estimate_smoothness(
+      const hp::FECollection<dim>*                      fe,
+      const DoFHandler<dim>*                            dof,
+      const LinearAlgebra::distributed::Vector<Number> &solution,
+      const Function<dim>                              &data,
+      Vector<float>                                    &smoothness_estimate) const;
 
   private:
     template<int dim>
@@ -133,12 +143,13 @@ namespace hpOceano
   {
     prm.enter_subsection("Mesh & hp parameters");
     remesh_tick = prm.get_double("Remesh_tick");
-    threshold_refinement = prm.get_double("Threshold_for_mesh_refinement");
-    threshold_coarsening = prm.get_double("Threshold_for_mesh_coarsening");
-    max_level_refinement = prm.get_integer("Max_level_of_mesh_refinement");
-    min_level_refinement = prm.get_integer("Global_level_of_mesh_refinement");
+    threshold_mesh_refinement = prm.get_double("Threshold_for_mesh_refinement");
+    threshold_mesh_coarsening = prm.get_double("Threshold_for_mesh_coarsening");
+    max_level_mesh_refinement = prm.get_integer("Max_level_of_mesh_refinement");
+    min_level_mesh_refinement = prm.get_integer("Global_level_of_mesh_refinement");
     min_mesh_size = prm.get_double("Min_mesh_size");
     refinement_filename = prm.get("Static_refinement_indicator_filename");
+    threshold_degree_coarsening = prm.get_double("Threshold_for_degree_coarsening");
     prm.leave_subsection();
   }
 
@@ -191,7 +202,7 @@ namespace hpOceano
         error_estimate[copy_data.cell_index] += copy_data.value;
     };
 
-    const UpdateFlags cell_flags = update_gradients | update_quadrature_points | update_JxW_values;
+    const UpdateFlags cell_flags = update_gradients | update_quadrature_points;
     hp::QCollection<dim> quadrature;
     quadrature.push_back(QGauss<dim>(n_q_points_1d));
     ScratchData<dim> scratch_data(*fe[0], quadrature, cell_flags);
@@ -251,7 +262,7 @@ namespace hpOceano
         error_estimate[copy_data.cell_index] += copy_data.value;
     };
 
-    const UpdateFlags cell_flags = update_gradients | update_quadrature_points | update_JxW_values;
+    const UpdateFlags cell_flags = update_gradients | update_quadrature_points;
     hp::QCollection<dim> quadrature;
     quadrature.push_back(QGauss<dim>(n_q_points_1d));
     ScratchData<dim> scratch_data(*fe[1], quadrature, cell_flags);
@@ -315,7 +326,7 @@ namespace hpOceano
         error_estimate[copy_data.cell_index] += copy_data.value;
     };
 
-    const UpdateFlags cell_flags = update_gradients | update_quadrature_points | update_JxW_values;
+    const UpdateFlags cell_flags = update_gradients | update_quadrature_points;
     hp::QCollection<dim> quadrature;
     quadrature.push_back(QGauss<dim>(n_q_points_1d));
     ScratchData<dim> scratch_data(*fe[0], quadrature, cell_flags);
@@ -460,5 +471,61 @@ namespace hpOceano
                           MeshWorker::assemble_own_cells);
   }
 #endif
+
+
+
+  // The smoothness estimator tracks wet-dry fronts where the solution lacks
+  // of regularity. We use a simple proxy based on the water depth.
+  template <int dim, typename Number>
+    void hpTuner::estimate_smoothness(
+      const hp::FECollection<dim>*                      fe,
+      const DoFHandler<dim>*                            dof,
+      const LinearAlgebra::distributed::Vector<Number> &solution,
+      const Function<dim>                              &data,
+      Vector<float>                                    &smoothness_estimate) const
+  {
+    const unsigned int n_q_points_1d        = fe->max_degree() + 1;
+    using Iterator = typename DoFHandler<dim>::active_cell_iterator;
+
+    auto cell_worker = [&](const Iterator   &cell,
+                           ScratchData<dim> &scratch_data,
+                           CopyData&         copy_data) {
+      hp::FEValues<dim>& hp_fe_values = scratch_data.hp_fe_values;
+      hp_fe_values.reinit(cell);
+      const FEValues<dim>& fe_values = hp_fe_values.get_present_fe_values();
+
+      std::vector<Number> values(fe_values.n_quadrature_points);
+      fe_values.get_function_values(solution, values);
+
+      copy_data.cell_index = cell->active_cell_index();
+
+      double max_depth = 0.0;
+      for(unsigned q = 0; q < fe_values.n_quadrature_points; ++q)
+        {
+          max_depth = std::max(
+            values[q] + data.value(fe_values.quadrature_point(q), 0),
+            max_depth);
+        }
+      copy_data.value = max_depth;
+    };
+
+    auto copier = [&](const CopyData &copy_data) {
+      if(copy_data.cell_index != numbers::invalid_unsigned_int)
+        smoothness_estimate[copy_data.cell_index] += copy_data.value;
+    };
+
+    const UpdateFlags cell_flags = update_values | update_quadrature_points;
+    hp::QCollection<dim> quadrature;
+    quadrature.push_back(QGauss<dim>(n_q_points_1d));
+    ScratchData<dim> scratch_data(*fe, quadrature, cell_flags);
+    CopyData copy_data;
+    MeshWorker::mesh_loop(dof->begin_active(),
+                          dof->end(),
+                          cell_worker,
+                          copier,
+                          scratch_data,
+                          copy_data,
+                          MeshWorker::assemble_own_cells);
+  }
 } // namespace hpOceano
 #endif //HP_HPPOCEANO

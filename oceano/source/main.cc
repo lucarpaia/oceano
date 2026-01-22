@@ -56,7 +56,7 @@
 #undef  ICBC_LAKEATREST
 #undef  ICBC_TRACERADVECTION
 #undef  ICBC_CHANNELFLOW
-#undef  ICBC_THACKEROSCILLATIONS1D
+#undef  ICBC_THACKEROSCILLATIONS2D
 #define ICBC_REALISTIC
 // We have two models: a non-hydrostatic Euler model for perfect gas which was the
 // original model coded in the deal.II example and the shallow water model. The Euler model
@@ -194,8 +194,8 @@
 #include <icbc/Icbc_TracerAdvection.h>
 #elif defined ICBC_CHANNELFLOW
 #include <icbc/Icbc_ChannelFlow.h>
-#elif defined ICBC_THACKEROSCILLATIONS1D
-#include <icbc/Icbc_ThackerOscillations1d.h>
+#elif defined ICBC_THACKEROSCILLATIONS2D
+#include <icbc/Icbc_ThackerOscillations2d.h>
 #elif defined ICBC_REALISTIC
 #include <icbc/Icbc_Realistic.h>
 #endif
@@ -293,9 +293,9 @@ namespace Problem
     void refine_grid(
       const hpOceano::hpTuner                    &hp_tuner,
       LinearAlgebra::distributed::Vector<Number> &postprocess_velocity);
-    /*void refine_degree(
+    void refine_degree(
       const hpOceano::hpTuner                    &hp_tuner,
-      LinearAlgebra::distributed::Vector<Number> &postprocess_velocity);*/
+      LinearAlgebra::distributed::Vector<Number> &postprocess_velocity);
 
     LinearAlgebra::distributed::Vector<Number> solution_height;
     LinearAlgebra::distributed::Vector<Number> solution_discharge;
@@ -744,16 +744,16 @@ namespace Problem
       // a cell cannot be refined. A successive intermediate step is
       // necessary to make sure that no two cells are adjacent with a refinement level
       // differing with more than one.
-      GridRefinement::refine(
-        triangulation, estimated_error_per_cell, hp_tuner.threshold_refinement * max_error);
-      GridRefinement::coarsen(
-        triangulation, estimated_error_per_cell, hp_tuner.threshold_coarsening * max_error);
+      GridRefinement::refine(triangulation,
+        estimated_error_per_cell, hp_tuner.threshold_mesh_refinement * max_error);
+      GridRefinement::coarsen(triangulation,
+        estimated_error_per_cell, hp_tuner.threshold_mesh_coarsening * max_error);
 
       // We enforce bounds on maximum and minimum mesh levels with the following lines.
       // The minimum mesh level is the number of global refinement while the maximum
       // is related both by a user provided value and a minimum target mesh size.
-      const unsigned int min_grid_level = hp_tuner.min_level_refinement;
-      const unsigned int max_grid_level = hp_tuner.max_level_refinement;
+      const unsigned int min_grid_level = hp_tuner.min_level_mesh_refinement;
+      const unsigned int max_grid_level = hp_tuner.max_level_mesh_refinement;
       const unsigned int min_grid_size = hp_tuner.min_mesh_size;
       if (min_grid_level > 0)
         for (const auto &cell :
@@ -829,7 +829,7 @@ namespace Problem
                                               solution_discharge,
                                               postprocess_velocity);
 #else
-    Assert(hp_tuner.max_level_refinement > 0
+    Assert(hp_tuner.max_level_mesh_refinement > 0
             || hp_tuner.remesh_tick < 10000000000.,
            ExcInternalError());
 #endif
@@ -843,7 +843,7 @@ namespace Problem
   // the AMR analogue function: estimate the solution smoothness, mark
   // the cells for refinement/coarsening, set the new active fe index and transfer the solution
   // onto the new basis.
-  /*template <int dim, int n_tra>
+  template <int dim, int n_tra>
   void OceanoProblem<dim, n_tra>::refine_degree(
     const hpOceano::hpTuner                    &hp_tuner,
     LinearAlgebra::distributed::Vector<Number> &postprocess_velocity)
@@ -868,10 +868,10 @@ namespace Problem
       // refinement if the smoothness is above a given threshold, mark for coarsening if the
       // smoothness is below another minimal threshold. The next functions simply enforce
       // polynomial refinement over grid grid refinement.
-      GridRefinement::refine(
-        triangulation, estimated_smoothness_per_cell, hp_tuner.threshold_refinement);
-      GridRefinement::coarsen(
-        triangulation, estimated_smoothness_per_cell, hp_tuner.threshold_coarsening);
+      GridRefinement::refine(triangulation,
+        estimated_smoothness_per_cell, hp_tuner.threshold_degree_coarsening);
+      GridRefinement::coarsen(triangulation,
+        estimated_smoothness_per_cell, hp_tuner.threshold_degree_coarsening);
 
       hp::Refinement::full_p_adaptivity(dof_handler_height);
       hp::Refinement::full_p_adaptivity(dof_handler_discharge);
@@ -944,7 +944,7 @@ namespace Problem
                                               solution_discharge,
                                               postprocess_velocity);
     }
-  }*/
+  }
 
 
 
@@ -1311,9 +1311,9 @@ namespace Problem
       TimerOutput::Scope t(timer, "compute initial solution");
       ICBC::Ic<dimension, n_variables> ic(prm);
       make_ic(ic, postprocess_velocity);
-      //refine_degree(hp_tuner, postprocess_velocity);
+      refine_degree(hp_tuner, postprocess_velocity);
 
-      for (unsigned int lev = 0; lev < hp_tuner.max_level_refinement; ++lev)
+      for (unsigned int lev = 0; lev < hp_tuner.max_level_mesh_refinement; ++lev)
         {
           refine_grid(hp_tuner, postprocess_velocity);
           make_ic(ic, postprocess_velocity);
@@ -1484,7 +1484,7 @@ namespace Problem
 
         time += time_step;
 
-        /*if (timestep_number % 5 == 0)
+        if (timestep_number % 1 == 0)
           {
             refine_degree(hp_tuner, postprocess_velocity);
 
@@ -1497,7 +1497,7 @@ namespace Problem
               rk_register_tracer_2);
 
             postprocessor.do_reinit_data = true;
-          }*/
+          }
 
         if (static_cast<int>(time / hp_tuner.remesh_tick) !=
              static_cast<int>((time - time_step) / hp_tuner.remesh_tick))
@@ -1598,8 +1598,8 @@ int main(int argc, char **argv)
       bc = new ICBC::BcTracerAdvection<dimension, n_variables>(prm);
 #elif defined ICBC_CHANNELFLOW
       bc = new ICBC::BcChannelFlow<dimension, n_variables>(prm);
-#elif defined ICBC_THACKEROSCILLATIONS1D
-      bc = new ICBC::BcThackerOscillations1d<dimension, n_variables>(prm);
+#elif defined ICBC_THACKEROSCILLATIONS2D
+      bc = new ICBC::BcThackerOscillations2d<dimension, n_variables>(prm);
 #elif defined ICBC_REALISTIC
       bc = new ICBC::BcRealistic<dimension, n_variables>(prm);
 #else
