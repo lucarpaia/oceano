@@ -499,14 +499,14 @@ namespace hpOceano
 
       copy_data.cell_index = cell->active_cell_index();
 
-      double max_depth = 0.0;
+      double min_depth = 0.0;
       for(unsigned q = 0; q < fe_values.n_quadrature_points; ++q)
         {
-          max_depth = std::max(
+          min_depth = std::min(
             values[q] + data.value(fe_values.quadrature_point(q), 0),
-            max_depth);
+            min_depth);
         }
-      copy_data.value = max_depth;
+      copy_data.value = std::max(min_depth, 0.);
     };
 
     auto copier = [&](const CopyData &copy_data) {
