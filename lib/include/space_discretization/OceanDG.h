@@ -1392,7 +1392,7 @@ namespace SpaceDiscretization
         // must be very accurate here to preserve well-balancing at machine
         // accuracy.
         const VectorizedArray<Number> epsilon = 1e-09;
-        VectorizedArray<Number> zb_max_dry = -1000.;
+        VectorizedArray<Number> zb_max_dry = -std::numeric_limits<double>::max();
         VectorizedArray<Number> n_dry_points = 0;
         std::bitset<phi_height.n_lanes> mask_cell;
 

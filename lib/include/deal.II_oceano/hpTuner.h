@@ -499,7 +499,7 @@ namespace hpOceano
 
       copy_data.cell_index = cell->active_cell_index();
 
-      double min_depth = 0.0;
+      double min_depth = std::numeric_limits<double>::max();
       for(unsigned q = 0; q < fe_values.n_quadrature_points; ++q)
         {
           min_depth = std::min(
