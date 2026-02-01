@@ -2501,11 +2501,9 @@ namespace SpaceDiscretization
   // will be quick. Thus, we can merely hardcode 5 iterations here and be
   // confident that the result is good.
   //
-  // Strictly speaking we should use the same quadrature used for the mass
-  // matrix, the Gauss-Lobatto $r+2$ points. This would compute the CFL
-  // condition that assure positivity of the water depth. Here we use the
-  // less accurate one, Gauss $r+2$ points which is more efficient and lead
-  // to larger time step
+  // We use the same quadrature used for the mass matrix, the Gauss-Lobatto
+  // $r+2$ points which compute the CFL condition that assure positivity of
+  // the water depth.
   template <int dim, int n_tra, int degree, int n_points_1d>
   double OceanoOperator<dim, n_tra, degree, n_points_1d>::compute_cell_transport_speed(
     const LinearAlgebra::distributed::Vector<Number> &solution_height,
@@ -2521,8 +2519,8 @@ namespace SpaceDiscretization
             const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
             const std::pair<unsigned int, unsigned int>                   &cell_range) {
 
-          FEEvaluation<dim, -1, degree + 1, 1, Number> phi_height(data, cell_range, 0, 2);
-          FEEvaluation<dim, -1, degree + 1, dim, Number> phi_discharge(data, cell_range, 1, 2);
+          FEEvaluation<dim, -1, degree + 2, 1, Number> phi_height(data, cell_range, 0, 1);
+          FEEvaluation<dim, -1, degree + 2, dim, Number> phi_discharge(data, cell_range, 1, 1);
 
           for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
             {
