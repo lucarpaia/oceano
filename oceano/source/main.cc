@@ -1101,8 +1101,9 @@ namespace Problem
 
         Vector<float> fe_degrees(triangulation.n_active_cells());
         for (const auto &cell : dof_handler_height.active_cell_iterators())
-          fe_degrees(cell->active_cell_index()) =
-            fe_collection_height[cell->active_fe_index()].degree;
+          if (cell->is_locally_owned())
+            fe_degrees(cell->active_cell_index()) =
+              fe_collection_height[cell->active_fe_index()].degree;
         data_out.add_data_vector(fe_degrees, "fe_degree", DataOut<dim>::type_cell_data );
       }
 
