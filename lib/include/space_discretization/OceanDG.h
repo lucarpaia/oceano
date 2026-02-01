@@ -2533,7 +2533,7 @@ namespace SpaceDiscretization
                 {
                   const auto zq = phi_height.get_value(q);
                   const auto qq = phi_discharge.get_value(q);
-                  const auto zb_q = data_quadrature_cell_2.get_data(cell, q)[0];
+                  const auto zb_q = data_quadrature_cell_1.get_data(cell, q);
                   const auto velocity = model.velocity<dim>(zq, qq, zb_q);
 
                   const auto inverse_jacobian = phi_height.inverse_jacobian(q);
