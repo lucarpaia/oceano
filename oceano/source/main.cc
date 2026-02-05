@@ -168,6 +168,7 @@
 #include <space_discretization/OceanDGWithTracer.h>
 #include <io/CommandLineParser.h>
 #include <deal.II_oceano/hpTuner.h>
+
 // The following files are included depending on
 // the Preprocessor keys. This is necessary because 
 // we have done a limited use of virtual classes; on the contrary 
@@ -890,9 +891,12 @@ namespace Problem
       // the old basis to the new one. To this end we use the SolutionTransfer class.
       // We have to initialize a SolutionTransfer object by attaching it to the old
       // DoF handler. We then prepare the data vector containing the old solution for
-      // remapping.
+      // remapping. However, the SolutionTransfer class is based on a simple interpolation.
+      // For the transfer of the water height, a further prepare step is necessary to
+      // enforce mass conservation.
       parallel::distributed::SolutionTransfer<dim, LinearAlgebra::distributed::Vector<Number>>
         solution_transfer_height(dof_handler_height);
+      oceano_operator.prepare_for_conservative_coarsening(solution_height);
       solution_transfer_height.prepare_for_coarsening_and_refinement(solution_height);
 
       parallel::distributed::SolutionTransfer<dim, LinearAlgebra::distributed::Vector<Number>>

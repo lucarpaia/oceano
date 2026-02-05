@@ -213,18 +213,19 @@ namespace SpaceDiscretization
       const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
       LinearAlgebra::distributed::Vector<Number>                    &solution_height);
 
-    void project_hydro(const Function<dim> &                       function,
-                       LinearAlgebra::distributed::Vector<Number> &solution_height,
-                       LinearAlgebra::distributed::Vector<Number> &solution_discharge) const;
+    void project_hydro(
+      const Function<dim>                                     &function,
+      LinearAlgebra::distributed::Vector<Number>              &solution_height,
+      LinearAlgebra::distributed::Vector<Number>              &solution_discharge) const;
 
     std::array<double, 2> compute_errors_hydro(
-      const Function<dim> &                             function,
-      const LinearAlgebra::distributed::Vector<Number> &solution_height,
-      const LinearAlgebra::distributed::Vector<Number> &solution_discharge) const;
+      const Function<dim>                                     &function,
+      const LinearAlgebra::distributed::Vector<Number>        &solution_height,
+      const LinearAlgebra::distributed::Vector<Number>        &solution_discharge) const;
 
     double compute_cell_transport_speed(
-      const LinearAlgebra::distributed::Vector<Number> &solution_height,
-      const LinearAlgebra::distributed::Vector<Number> &solution_discharge) const;
+      const LinearAlgebra::distributed::Vector<Number>        &solution_height,
+      const LinearAlgebra::distributed::Vector<Number>        &solution_discharge) const;
 
     void evaluate_velocity_field(
       const LinearAlgebra::distributed::Vector<Number>        &solution_height,
@@ -235,6 +236,9 @@ namespace SpaceDiscretization
       const DoFHandler<dim>                                   &dof_handler_height,
       const LinearAlgebra::distributed::Vector<Number>        &solution_height,
       std::vector<LinearAlgebra::distributed::Vector<Number>> &computed_scalar_quantities) const;
+
+    void prepare_for_conservative_coarsening(
+      LinearAlgebra::distributed::Vector<Number>              &solution_height) const;
 
     void
     initialize_vector(LinearAlgebra::distributed::Vector<Number> &vector,
@@ -1408,7 +1412,7 @@ namespace SpaceDiscretization
           }
         for (unsigned int v = 0; v < data.n_active_entries_per_cell_batch(cell); ++v)
           if ((unsigned int) n_dry_points[v] == phi_height.n_q_points)
-            mask_cell[v] = 1;
+            mask_cell[v] = true;
 
         if (mask_cell.any())
           {
@@ -2725,6 +2729,53 @@ namespace SpaceDiscretization
       }
   }
 
+  // The next function implements a conservative mass correction to be applied with the
+  // deal.ii `SolutionTransfer` class, before the call to `prepare_for_coarsening_and_refinement`.
+  // It simply averages a high order solution so that the the application of
+  // `solution_transfer.interpolate()` is conservative.
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_tra, degree, n_points_1d>::prepare_for_conservative_coarsening(
+    LinearAlgebra::distributed::Vector<Number> &solution_height) const
+  {
+    data.template cell_loop<LinearAlgebra::distributed::Vector<Number>,
+                            LinearAlgebra::distributed::Vector<Number>>(
+        [&](const MatrixFree<dim, Number> &,
+            LinearAlgebra::distributed::Vector<Number>       &dst,
+            const LinearAlgebra::distributed::Vector<Number> &src,
+            const std::pair<unsigned int, unsigned int>      &cell_range) {
+
+          FEEvaluation<dim, -1, degree + 1, 1, Number> phi_height(data, cell_range, 0, 2);
+
+          for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
+            {
+              phi_height.reinit(cell);
+              phi_height.gather_evaluate(src, EvaluationFlags::values);
+
+              VectorizedArray<Number> integral_cell = 0.;
+              for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
+                {
+                  const auto z_q = phi_height.get_value(q);
+                  integral_cell += z_q * phi_height.JxW(q);
+                }
+
+              VectorizedArray<Number> inv_area = 0.;
+              std::bitset<phi_height.n_lanes> mask_cell;
+              for (unsigned int v = 0; v < data.n_active_entries_per_cell_batch(cell); ++v)
+                {
+                  inv_area[v] = data.get_cell_iterator(cell,v)->measure();
+                  if (data.get_cell_iterator(cell,v)->active_fe_index() == 1 &&
+                        data.get_cell_iterator(cell,v)->future_fe_index() == 0)
+                    mask_cell[v] = true;
+                }
+              inv_area = 1./inv_area;
+              for (unsigned int i = 0; i < phi_height.dofs_per_cell; ++i)
+                phi_height.submit_dof_value(integral_cell * inv_area, i);
+              phi_height.set_dof_values(dst, 0, mask_cell);
+            }
+        },
+        solution_height,
+        solution_height);
+  }
 } // namespace SpaceDiscretization
 
 #endif //OCEANDG_HPP
