@@ -1450,7 +1450,13 @@ namespace Problem
     // solutions. To decrease this sensitivity, it is common practice to round
     // or truncate the time step size to a few digits, e.g. 3 in this case. In
     // case the current time is near the prescribed 'tick' value for output
-    // (e.g. 0.02), we also write the output. After the end of the time loop,
+    // (e.g. 0.02), we also write the output.
+    // After the end of the time step we perform both h and p-adaptation tasks.
+    // Adaptation and remaps are expensive and cannot be computed evrey timestep
+    // in an explicit time stepping code. To make adaptation effective, h-adaptation
+    // step is performed near a user prescribed thick. p-adaptation is performed
+    // evrey 40 time step
+    // After the end of the time loop,
     // we summarize the computation by printing some statistics, which is
     // mostly done by the TimerOutput::print_wall_time_statistics() function.
     unsigned int timestep_number = 0;
@@ -1489,7 +1495,8 @@ namespace Problem
 
         time += time_step;
 
-        if (timestep_number % 1 == 0)
+        if (static_cast<int>(time / hp_tuner.redegree_tick) !=
+             static_cast<int>((time - time_step) / hp_tuner.redegree_tick))
           {
             refine_degree(hp_tuner, postprocess_velocity);
 

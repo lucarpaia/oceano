@@ -86,9 +86,18 @@ namespace IO
       // the default value is set to a very high number or no mesh adaptation. If this
       // key is not specified the mesh adaptation is not active and the simulation will
       // continue with the initial mesh given above.
-      prm.declare_entry("Remesh_tick",
+      prm.declare_entry("Mesh_adaptation_tick",
                         "10000000000.", Patterns::Double(0),
-                        "Time interval we remesh");
+                        "Time interval we perform mesh adaptation");
+
+      // The frequency at which we flag cells for coarsening in wet-dry fronts depend on the test
+      // and on the time step. Differently from h-adaptation, the default value is set to 10 seconds
+      // which is a conservative time scale for tracking the wet-dry front in flooding simulations.
+      // If you do not want to coarsen the degree just put a very high number and no p-adaptation
+      // will be performed.
+      prm.declare_entry("Degree_adaptation_tick",
+                        "10.", Patterns::Double(0),
+                        "Time interval we perform degree adaptation");
 
       // These are the two tresholds for the normalized cellwise error after/below which
       // the cell is marked for refinement/coarsening. The remesh thick is the frequency
@@ -152,13 +161,13 @@ namespace IO
 
     // Paramteres for time includes the final time of the simulation and the Courant
     // number. For stability reason with DG the courant number should much less then one.
-    // Here we fix the courant $\in [0,1]$ as the range accepted by the parameter reader.
+    // Here we fix the courant $\in [0,10]$ as the range accepted by the parameter reader.
     prm.enter_subsection("Time parameters");
     {
       prm.declare_entry("Final_time", "0.0", Patterns::Double(0),
                         "Final time of the simulation");
 
-      prm.declare_entry("CFL", "1.0", Patterns::Double(0,1),
+      prm.declare_entry("CFL", "1.0", Patterns::Double(0,10),
                         "Courant number");
      }
     prm.leave_subsection();

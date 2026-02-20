@@ -83,6 +83,7 @@ namespace hpOceano
     unsigned int min_level_mesh_refinement;
     std::string refinement_filename;
 
+    double redegree_tick;
     float threshold_degree_coarsening;
 
     template <int dim, typename Number>
@@ -142,7 +143,7 @@ namespace hpOceano
     IO::ParameterHandler &prm)
   {
     prm.enter_subsection("Mesh & hp parameters");
-    remesh_tick = prm.get_double("Remesh_tick");
+    remesh_tick = prm.get_double("Mesh_adaptation_tick");
     threshold_mesh_refinement = prm.get_double("Threshold_for_mesh_refinement");
     threshold_mesh_coarsening = prm.get_double("Threshold_for_mesh_coarsening");
     max_level_mesh_refinement = prm.get_integer("Max_level_of_mesh_refinement");
@@ -150,6 +151,7 @@ namespace hpOceano
     min_mesh_size = prm.get_double("Min_mesh_size");
     refinement_filename = prm.get("Static_refinement_indicator_filename");
     threshold_degree_coarsening = prm.get_double("Threshold_for_degree_coarsening");
+    redegree_tick = prm.get_double("Degree_adaptation_tick");
     prm.leave_subsection();
   }
 
