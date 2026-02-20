@@ -96,7 +96,7 @@ namespace IO
       // If you do not want to coarsen the degree just put a very high number and no p-adaptation
       // will be performed.
       prm.declare_entry("Degree_adaptation_tick",
-                        "10.", Patterns::Double(0),
+                        "15.", Patterns::Double(0),
                         "Time interval we perform degree adaptation");
 
       // These are the two tresholds for the normalized cellwise error after/below which
