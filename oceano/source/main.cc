@@ -233,7 +233,7 @@ namespace Problem
   //
   // The user should stop here. The next lines are a consistency check between
   // the parameters and the preprocessors plus we set derived parameters that are
-  // also known at compile time:
+  // also known at compile time.
 #if defined MODEL_EULER
   constexpr unsigned int n_tracers            = 1;
 #elif defined MODEL_SHALLOWWATER
@@ -308,11 +308,7 @@ namespace Problem
 
     ConditionalOStream pcout;
 
-#ifdef DEAL_II_WITH_P4EST
     parallel::distributed::Triangulation<dim> triangulation;
-#else
-    Triangulation<dim> triangulation;
-#endif
 
     hp::FECollection<dim> fe_collection_height;
     hp::FECollection<dim> fe_collection_discharge;
@@ -553,9 +549,7 @@ namespace Problem
                                            ICBC::BcBase<dim, 1+dim+n_tra> *bc)
     : prm(param)
     , pcout(std::cout, Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
-#ifdef DEAL_II_WITH_P4EST
     , triangulation(MPI_COMM_WORLD, Triangulation<dim>::MeshSmoothing::eliminate_unrefined_islands)
-#endif
     , mapping(1)
     , dof_handler_height(triangulation)
     , dof_handler_discharge(triangulation)
@@ -702,10 +696,6 @@ namespace Problem
   // function performs are the classical one of AMR: estimate the error, mark the
   // cells for refinement/coarsening, execute the remeshing and transfer the solution
   // onto the new grid.
-  // The preprocessor point out that we have implemented the AMR only with P4est, a tool that
-  // handle mesh refinement on distributed architecture. Without a deal.ii version compiled
-  // with P4est mesh refinement is not active and a warning system is raised.
-  // We have a look to each task into more details.
   template <int dim, int n_tra>
   void OceanoProblem<dim, n_tra>::refine_grid(
     const hpOceano::hpTuner                    &hp_tuner,
@@ -714,7 +704,6 @@ namespace Problem
     {
       TimerOutput::Scope t(timer, "amr - remesh + remap");
 
-#ifdef DEAL_II_WITH_P4EST
       // We estimate the error. Since this operation is case-dependent it is left
       // to a specific class and to its member function `estimate_error`.
       // This computes a cellwise error based on all the components of the solution.
@@ -836,11 +825,6 @@ namespace Problem
       oceano_operator.evaluate_velocity_field(solution_height,
                                               solution_discharge,
                                               postprocess_velocity);
-#else
-    Assert(hp_tuner.max_level_mesh_refinement > 0
-            || hp_tuner.remesh_tick < 10000000000.,
-           ExcInternalError());
-#endif
     }
   }
 
