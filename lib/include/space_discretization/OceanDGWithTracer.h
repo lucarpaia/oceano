@@ -129,7 +129,9 @@ namespace SpaceDiscretization
 
     OceanoOperatorWithTracer(IO::ParameterHandler           &param,
                              ICBC::BcBase<dim, 1+dim+n_tra> *bc,
-                             TimerOutput                    &timer_output);
+                             TimerOutput                    &timer_output,
+                             const unsigned int              max_iteration_height,
+                             const unsigned int              max_iteration_tracer);
 
     void reinit(const Mapping<dim> &   mapping,
                 const DoFHandler<dim> &dof_handler_height,
@@ -166,12 +168,13 @@ namespace SpaceDiscretization
     using OceanoOperator<dim, n_tra, degree, n_points_1d>::model;
 
   private:
-
     using OceanoOperator<dim, n_tra, degree, n_points_1d>::data;
 
     using OceanoOperator<dim, n_tra, degree, n_points_1d>::num_flux;
 
     using OceanoOperator<dim, n_tra, degree, n_points_1d>::timer;
+
+    unsigned int max_iteration_tracer;
 
     void local_apply_inverse_modified_mass_matrix_tracer(
       const MatrixFree<dim, Number>                                 &data,
@@ -210,8 +213,12 @@ namespace SpaceDiscretization
   OceanoOperatorWithTracer<dim, n_tra, degree, n_points_1d>::OceanoOperatorWithTracer(
     IO::ParameterHandler             &param,
     ICBC::BcBase<dim, 1+dim+n_tra>   *bc,
-    TimerOutput                      &timer)
-    : OceanoOperator<dim, n_tra, degree, n_points_1d>(param, bc, timer)
+    TimerOutput                      &timer,
+    const unsigned int                max_iteration_height,
+    const unsigned int                max_iteration_tracer)
+    : OceanoOperator<dim, n_tra, degree, n_points_1d>(
+      param, bc, timer, max_iteration_height, max_iteration_tracer)
+    , max_iteration_tracer(max_iteration_tracer)
   {}
 
 
@@ -781,7 +788,7 @@ namespace SpaceDiscretization
             = phi_height.get_dof_value(i);
 
         AlignedVector<VectorizedArray<Number>> rhs_cell(dofs_per_cell);
-        for (unsigned int k = 0; k < 6; ++k)
+        for (unsigned int k = 0; k < max_iteration_tracer; ++k)
           {
             phi_tracer.read_dof_values(src[0]);
 

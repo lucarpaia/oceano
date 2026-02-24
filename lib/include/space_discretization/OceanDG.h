@@ -167,8 +167,10 @@ namespace SpaceDiscretization
     double check_mass_boundary_integral;
 
     OceanoOperator(IO::ParameterHandler      &param,
-                  ICBC::BcBase<dim, 1+dim+n_tra> *bc,
-                  TimerOutput               &timer_output);
+                   ICBC::BcBase<dim, 1+dim+n_tra> *bc,
+                   TimerOutput               &timer_output,
+                   const unsigned int         max_iteration_height,
+                   const unsigned int         max_iteration_tracer);
 
     void reinit(const Mapping<dim> &   mapping,
                 const DoFHandler<dim> &dof_handler_height,
@@ -292,6 +294,8 @@ namespace SpaceDiscretization
     TimerOutput &timer;
 
   private:
+    unsigned int max_iteration_height;
+
     void local_apply_inverse_mass_matrix_height(
       const MatrixFree<dim, Number>                                 &data,
       LinearAlgebra::distributed::Vector<Number>                    &dst,
@@ -390,11 +394,14 @@ namespace SpaceDiscretization
   OceanoOperator<dim, n_tra, degree, n_points_1d>::OceanoOperator(
     IO::ParameterHandler             &param,
     ICBC::BcBase<dim, 1+dim+n_tra>   *bc,
-    TimerOutput                      &timer)
+    TimerOutput                      &timer,
+    const unsigned int                max_iteration_height,
+    const unsigned int                /*max_iteration_tracer*/)
     : bc(bc)
     , model(param)
     , num_flux(param)
     , timer(timer)
+    , max_iteration_height(max_iteration_height)
   {
      model.set_vars_name<dim, n_tra>();
      check_mass_cell_integral = 0.;
@@ -1460,7 +1467,7 @@ namespace SpaceDiscretization
         // and we iterate to conserve the mass. In both cases convergence is
         // quite fast and we exit, in any case, the loop after maximum three
         // iterations.
-        for (unsigned int k = 0; (k < 3) && (norm_rhs_in_lane > 1e-16); ++k)
+        for (unsigned int k = 0; (k < max_iteration_height) && (norm_rhs_in_lane > 1e-16); ++k)
           {
             phi_height.gather_evaluate(dst, EvaluationFlags::values);
 

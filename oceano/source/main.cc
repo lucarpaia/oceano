@@ -217,6 +217,8 @@ namespace Problem
 #if defined MODEL_SHALLOWWATERWITHTRACER
   constexpr unsigned int n_tracers            = 1;
 #endif
+  constexpr unsigned int max_iteration_height = 3;
+  constexpr unsigned int max_iteration_tracer = 5;
 
   using Number = double;
 
@@ -559,7 +561,7 @@ namespace Problem
     , dof_handler_discharge(triangulation)
     , dof_handler_tracer(triangulation)
     , timer(pcout, TimerOutput::never, TimerOutput::wall_times)
-    , oceano_operator(param, bc, timer)
+    , oceano_operator(param, bc, timer, max_iteration_height, max_iteration_tracer)
     , time(0)
     , time_step(0)
   {
