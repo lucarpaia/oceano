@@ -16,8 +16,8 @@
  *
  * Author: Luca Arpaia,        2023
  */
-#ifndef SHALLOWWATERDISCHARGE_HPP
-#define SHALLOWWATERDISCHARGE_HPP
+#ifndef SHALLOWWATER_HPP
+#define SHALLOWWATER_HPP
 
 // The following files include the oceano libraries
 #include <io/ParameterReader.h>
@@ -89,11 +89,11 @@ namespace Model
   // to the class functions which take `Number` while receive
   // `VectorizedArray<Number>`. I don't know why, without a template class,
   // everything works. For now I have left both classes without template.
-  class ShallowWaterDischarge
+  class ShallowWater
   {
   public:
-    ShallowWaterDischarge(IO::ParameterHandler &prm);
-    ~ShallowWaterDischarge(){};
+    ShallowWater(IO::ParameterHandler &prm);
+    ~ShallowWater(){};
  
     double g;
     double cu4;
@@ -271,7 +271,7 @@ namespace Model
   // parameters are stored as class members. In this way they are defined/read 
   // from file in one place and then used whenever needed  with `model.param`, 
   // instead of being read/defined multiple times.
-  ShallowWaterDischarge::ShallowWaterDischarge(
+  ShallowWater::ShallowWater(
     IO::ParameterHandler &prm)
     : bottom_friction(prm)
     , wind_stress(prm)
@@ -288,7 +288,7 @@ namespace Model
   template <int dim, int n_tra>
   inline DEAL_II_ALWAYS_INLINE //
     void
-    ShallowWaterDischarge::set_vars_name()
+    ShallowWater::set_vars_name()
   {
     vars_name.push_back("free_surface");
     for (unsigned int d = 0; d < dim; ++d)
@@ -301,7 +301,7 @@ namespace Model
   template <typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Number
-    ShallowWaterDischarge::depth(
+    ShallowWater::depth(
       const Number height,
       const Number bathymetry) const
   {
@@ -311,7 +311,7 @@ namespace Model
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
-    ShallowWaterDischarge::velocity(
+    ShallowWater::velocity(
       const Number                  height,
       const Tensor<1, dim, Number> &discharge,
       const Number                  bathymetry) const
@@ -326,7 +326,7 @@ namespace Model
   template <typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Number
-    ShallowWaterDischarge::pressure(
+    ShallowWater::pressure(
       const Number height,
       const Number bathymetry) const
   {
@@ -337,7 +337,7 @@ namespace Model
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
-    ShallowWaterDischarge::mass_flux(
+    ShallowWater::mass_flux(
       const Number                  height,
       const Tensor<1, dim, Number> &discharge,
       const Number                  bathymetry) const
@@ -349,7 +349,7 @@ namespace Model
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Tensor<1, dim, Number>>
-    ShallowWaterDischarge::momentum_adv_flux(
+    ShallowWater::momentum_adv_flux(
       const Number                  height,
       const Tensor<1, dim, Number> &discharge,
       const Number                  bathymetry) const
@@ -368,7 +368,7 @@ namespace Model
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Tensor<1, dim, Number>>
-    ShallowWaterDischarge::momentum_adv_diff_flux(
+    ShallowWater::momentum_adv_diff_flux(
       const Number                    height,
       const Tensor<1, dim, Number>   &discharge,
       const Tensor<dim, dim, Number> &gradient_velocity,
@@ -395,7 +395,7 @@ namespace Model
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
-    ShallowWaterDischarge::source(
+    ShallowWater::source(
       const Number                    height,
       const Tensor<1, dim, Number>   &discharge,
       const Tensor<1, dim, Number>   &gradient_height,
@@ -424,7 +424,7 @@ namespace Model
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
-    ShallowWaterDischarge::source_nonstiff(
+    ShallowWater::source_nonstiff(
       const Number                    height,
       const Tensor<1, dim, Number>   &discharge,
       const Tensor<1, dim, Number>   &gradient_height,
@@ -448,7 +448,7 @@ namespace Model
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
-    ShallowWaterDischarge::source_stiff(
+    ShallowWater::source_stiff(
       const Number                  height,
       const Tensor<1, dim, Number> &discharge,
       const Number                  bathymetry,
@@ -464,7 +464,7 @@ namespace Model
   template <typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Number
-    ShallowWaterDischarge::square_wavespeed(
+    ShallowWater::square_wavespeed(
       const Number                  height,
       const Number                  bathymetry) const
   {
@@ -474,7 +474,7 @@ namespace Model
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Number
-    ShallowWaterDischarge::riemann_invariant_p(
+    ShallowWater::riemann_invariant_p(
       const Number                  height,
       const Tensor<1, dim, Number> &discharge,
       const Tensor<1, dim, Number> &normal,
@@ -491,7 +491,7 @@ namespace Model
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Number
-    ShallowWaterDischarge::riemann_invariant_m(
+    ShallowWater::riemann_invariant_m(
       const Number                  height,
       const Tensor<1, dim, Number> &discharge,
       const Tensor<1, dim, Number> &normal,
@@ -505,4 +505,4 @@ namespace Model
     return u - 2. * c;
   }
 } // namespace Model
-#endif //SHALLOWWATERDISCHARGE_HPP
+#endif //SHALLOWWATER_HPP

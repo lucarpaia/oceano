@@ -63,7 +63,7 @@
 // is only used for debugging, to check consistency with the original deal.II example and
 // it's not working in the present version.
 // Additionally we can add tracers to the shallow water model.
-#define MODEL_SHALLOWWATERDISCHARGE
+#define MODEL_SHALLOWWATER
 #undef  MODEL_SHALLOWWATERWITHTRACER
 #undef  MODEL_EULER
 // Next come the physics. With the following cpp keys one can switch between the different
@@ -234,7 +234,7 @@ namespace Problem
   // also known at compile time:
 #if defined MODEL_EULER
   constexpr unsigned int n_tracers            = 1;
-#elif defined MODEL_SHALLOWWATERDISCHARGE
+#elif defined MODEL_SHALLOWWATER
   constexpr unsigned int n_tracers            = 0;
 #endif
   constexpr unsigned int n_variables          = dimension + 1 + n_tracers;
@@ -312,12 +312,11 @@ namespace Problem
     Triangulation<dim> triangulation;
 #endif
 
-#ifdef OCEANO_WITH_TRACERS
-    FESystem<dim>   fe_tracer;
-#endif
-
     hp::FECollection<dim> fe_collection_height;
     hp::FECollection<dim> fe_collection_discharge;
+#ifdef OCEANO_WITH_TRACERS
+    hp::FECollection<dim> fe_collection_tracer;
+#endif
 
     MappingQ<dim>   mapping;
     DoFHandler<dim> dof_handler_height;
@@ -555,9 +554,6 @@ namespace Problem
 #ifdef DEAL_II_WITH_P4EST
     , triangulation(MPI_COMM_WORLD, Triangulation<dim>::MeshSmoothing::eliminate_unrefined_islands)
 #endif
-#ifdef OCEANO_WITH_TRACERS
-    , fe_tracer(FE_DGQ<dim>(fe_degree), n_tra)
-#endif
     , mapping(1)
     , dof_handler_height(triangulation)
     , dof_handler_discharge(triangulation)
@@ -571,6 +567,10 @@ namespace Problem
     fe_collection_height.push_back(FESystem<dim>(FE_DGQ<dim>(fe_degree), 1));
     fe_collection_discharge.push_back(FESystem<dim>(FE_DGQ<dim>(0), dim));
     fe_collection_discharge.push_back(FESystem<dim>(FE_DGQ<dim>(fe_degree), dim));
+#ifdef OCEANO_WITH_TRACERS
+    fe_collection_tracer.push_back(FESystem<dim>(FE_DGQ<dim>(0), n_tra));
+    fe_collection_tracer.push_back(FESystem<dim>(FE_DGQ<dim>(fe_degree), n_tra));
+#endif
   }
 
 
@@ -641,6 +641,11 @@ namespace Problem
     for (const auto &cell : dof_handler_discharge.active_cell_iterators())
       if (cell->is_locally_owned())
         cell->set_active_fe_index(1);
+#ifdef OCEANO_WITH_TRACERS
+    for (const auto &cell : dof_handler_tracer.active_cell_iterators())
+      if (cell->is_locally_owned())
+        cell->set_active_fe_index(1);
+#endif
   }
 
 
@@ -655,7 +660,7 @@ namespace Problem
     dof_handler_height.distribute_dofs(fe_collection_height);
     dof_handler_discharge.distribute_dofs(fe_collection_discharge);
 #ifdef OCEANO_WITH_TRACERS
-    dof_handler_tracer.distribute_dofs(fe_tracer);
+    dof_handler_tracer.distribute_dofs(fe_collection_tracer);
 #endif
     oceano_operator.reinit(mapping, dof_handler_height,
                                     dof_handler_discharge,
@@ -904,6 +909,9 @@ namespace Problem
       solution_transfer_discharge.prepare_for_coarsening_and_refinement(solution_discharge);
 
 #ifdef OCEANO_WITH_TRACERS
+      //hp::Refinement::full_p_adaptivity(dof_handler_tracer); //lrp:hp
+      //hp::Refinement::force_p_over_h(dof_handler_tracer);
+
       parallel::distributed::SolutionTransfer<dim, LinearAlgebra::distributed::Vector<Number>>
         solution_transfer_tracer(dof_handler_tracer);
       solution_transfer_tracer.prepare_for_coarsening_and_refinement(solution_tracer);

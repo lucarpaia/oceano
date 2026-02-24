@@ -230,6 +230,7 @@ namespace SpaceDiscretization
     std::vector<const AffineConstraints<double> *>
       constraints = {&dummy, &dummy, &dummy};
     const std::vector<Quadrature<1>> quadratures = {QGauss<1>(n_points_1d),
+                                                    QGaussLobatto<1>(degree + 2),
                                                     QGauss<1>(degree + 1)};
 
     typename MatrixFree<dim, Number>::AdditionalData additional_data;
@@ -372,7 +373,7 @@ namespace SpaceDiscretization
             const auto zb_q = data_quadrature_cell_0.get_data(cell, q)[0];
 
             phi_tracer.submit_gradient(
-              model.tracer_adv_diff_flux(q_q, t_q, du_q, model.depth(z_q, zb_q)*dt_q, area_cell),
+              model.tracer_adv_diff_flux(z_q, q_q, t_q, du_q, dt_q, zb_q, area_cell),
               q);
           }
 
@@ -390,8 +391,8 @@ namespace SpaceDiscretization
     const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
     const std::pair<unsigned int, unsigned int>                   &cell_range) const
   {
-    FEEvaluation<dim, degree, degree + 1, 1, Number> phi_height(data,0,1);
-    FEEvaluation<dim, degree, degree + 1, n_tra, Number> phi_tracer(data,2,1);
+    FEEvaluation<dim, degree, degree + 2, 1, Number> phi_height(data, 0, 1);
+    FEEvaluation<dim, degree, degree + 2, n_tra, Number> phi_tracer(data, 2, 1);
 
     for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
       {
@@ -404,9 +405,11 @@ namespace SpaceDiscretization
           {
             const auto z_q = phi_height.get_value(q);
             const auto t_q = phi_tracer.get_value(q);
-            const auto zb_q = data_quadrature_cell_1.get_data(cell, q)[0];
+            const auto zb_q = data_quadrature_cell_1.get_data(cell, q);
 
-            phi_tracer.submit_value(model.depth(z_q, zb_q)*t_q, q);
+            phi_tracer.submit_value(
+              model.depth(z_q, zb_q)*t_q,
+              q);
           }
 
         phi_tracer.integrate_scatter(EvaluationFlags::values,
@@ -475,18 +478,18 @@ namespace SpaceDiscretization
     const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
     const std::pair<unsigned int, unsigned int>                   &face_range) const
   {
-    FEFaceEvaluation<dim, degree, n_points_1d, 1, Number> phi_height_m(data,
-                                                                      true, 0);
-    FEFaceEvaluation<dim, degree, n_points_1d, 1, Number> phi_height_p(data,
-                                                                      false, 0);
-    FEFaceEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge_m(data,
-                                                                      true, 1);
-    FEFaceEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge_p(data,
-                                                                      false, 1);
-    FEFaceEvaluation<dim, degree, n_points_1d, n_tra, Number> phi_tracer_m(data,
-                                                                      true, 2);
-    FEFaceEvaluation<dim, degree, n_points_1d, n_tra, Number> phi_tracer_p(data,
-                                                                      false, 2);
+    FEFaceEvaluation<dim, degree, degree + 2, 1, Number> phi_height_m(data,
+                                                                      true, 0, 1);
+    FEFaceEvaluation<dim, degree, degree + 2, 1, Number> phi_height_p(data,
+                                                                      false, 0, 1);
+    FEFaceEvaluation<dim, degree, degree + 2, dim, Number> phi_discharge_m(data,
+                                                                      true, 1, 1);
+    FEFaceEvaluation<dim, degree, degree + 2, dim, Number> phi_discharge_p(data,
+                                                                      false, 1, 1);
+    FEFaceEvaluation<dim, degree, degree + 2, n_tra, Number> phi_tracer_m(data,
+                                                                      true, 2, 1);
+    FEFaceEvaluation<dim, degree, degree + 2, n_tra, Number> phi_tracer_p(data,
+                                                                      false, 2, 1);
 
     for (unsigned int face = face_range.first; face < face_range.second; ++face)
       {
@@ -712,14 +715,29 @@ namespace SpaceDiscretization
 
   // The next function implements the inverse mass matrix operation. The
   // algorithms and rationale have been discussed extensively for the
-  // hydrodyanamics. We just comment on the particular form of such a mass-matrix.
-  // Haveìing condensed the water depth into the mass-matrix, the integrand is no more
-  // a polynomial. For consistency we use the $r+1$-accurate quadrature formula used
-  // elsewhere that integrate exactly polynomials of degree 2r+1 (thus, the standard
-  // mass-matrix but not a polynomial of degree 3r, that would results for a constant
-  // water depth or for a polynomial bathymetry). For coastal and oceanic applications,
-  // with a free-surface almost constant on a cell, intuition suggests that the aliasing
-  // error, coming from under-integration, should stay small.
+  // hydrodyanamics. We just comment the particular form of the tracer mass-matrix.
+  // Having condensed the water depth into the mass-matrix, the integrand is no more
+  // a polynomial. For consistency we use the $r+2$-points quadrature formula used
+  // in the continuity equation that integrates exactly polynomials of degree 2r+1
+  // (thus, the standard mass-matrix but not a polynomial of degree 3r, that would
+  // results for a constant water depth or for a polynomial bathymetry).
+  // For coastal applications with a free-surface almost constant on a cell, intuition
+  // suggests that the aliasing error, coming from under-integration, should stay small.
+  //
+  // To exploit vectorization, we invert the mass-matrix in a similar manner of the
+  // continuity equation, with a Jacobi method. The first iteration corresponds to mass
+  // lumping, the successive ones can be seen as corrections. Jacobi is very slow but here
+  // we need only a few iterations to go beyond mass-lumping.
+  //
+  // We precompute the diagonal mass-matrix outside the Jacobi iterator. Later into the
+  // iterator, we read the residual, we sum the tracer mass term which depend on the
+  // iterative solution. Finally we invert the mass-matrix and update the solution.
+  //
+  // A last comment is on the access to `phi_tracer.begin_dof_values` which is by pointer
+  // and not, as usual, by value. This is necessary because the function returns a
+  // different type (double or Tensor) depending on the number of tracer and it is too
+  // complicated to catch the correct case. With pointer we access directly to the tracer
+  // value at the dof.
   template <int dim, int n_tra, int degree, int n_points_1d>
   void OceanoOperatorWithTracer<dim, n_tra, degree, n_points_1d>::local_apply_inverse_modified_mass_matrix_tracer(
     const MatrixFree<dim, Number> &,
@@ -727,33 +745,69 @@ namespace SpaceDiscretization
     const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
     const std::pair<unsigned int, unsigned int>                   &cell_range) const
   {
-    FEEvaluation<dim, degree, degree + 1, n_tra, Number> phi_tracer(data, 2, 1);
-    FEEvaluation<dim, degree, degree + 1, 1, Number> phi_height_ri(data, 0, 1);
-    MatrixFreeOperators::CellwiseInverseMassMatrix<dim, degree, n_tra, Number>
+    FEEvaluation<dim, degree, degree + 2, n_tra, Number> phi_tracer(data, 2, 1);
+    FEEvaluation<dim, degree, degree + 2, 1, Number> phi_height(data, 0, 1);
+    MatrixFreeOperatorsOceano::CellwiseInverseMassMatrixLumped<dim, degree, n_tra, Number>
       inverse(phi_tracer);
 
     for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
       {
         phi_tracer.reinit(cell);
-        phi_tracer.read_dof_values(src[0]);
+        phi_height.reinit(cell);
+        phi_height.gather_evaluate(src[1], EvaluationFlags::values);
 
-        phi_height_ri.reinit(cell);
-        phi_height_ri.gather_evaluate(src[1], EvaluationFlags::values);
-
-	AlignedVector<VectorizedArray<Number>> inverse_jxw(phi_tracer.n_q_points);
-	inverse.fill_inverse_JxW_values(inverse_jxw);
-
+        VectorizedArray<Number> n_dry_points = 0;
+        AlignedVector<VectorizedArray<Number>> h(phi_height.n_q_points);
         for (unsigned int q = 0; q < phi_tracer.n_q_points; ++q)
           {
-            const auto z_q = phi_height_ri.get_value(q);
-            const auto zb_q = data_quadrature_cell_1.get_data(cell, q)[0];
+            const auto z_q = phi_height.get_value(q);
+            const auto zb_q = data_quadrature_cell_1.get_data(cell, q);
+            const auto mask_q =
+            compare_and_apply_mask<SIMDComparison::less_than_or_equal>(
+              z_q, -zb_q, 0., 1.);
+            n_dry_points += 1.-mask_q;
 
-            inverse_jxw[q] *= 1. / model.depth(z_q, zb_q);
+            h[q] = model.depth(z_q, zb_q);
+            phi_height.submit_value(h[q], q);
           }
 
-        inverse.apply(inverse_jxw, n_tra, phi_tracer.begin_dof_values(),
-          phi_tracer.begin_dof_values());
-        phi_tracer.set_dof_values(dst);
+        phi_height.integrate(EvaluationFlags::values);
+
+        const auto dofs_per_component = phi_tracer.dofs_per_component;
+        const auto dofs_per_cell = phi_tracer.dofs_per_cell;
+        AlignedVector<VectorizedArray<Number>> cell_matrix(dofs_per_component);
+        for (unsigned int i = 0; i < dofs_per_component; ++i)
+          cell_matrix[phi_height.get_internal_dof_numbering()[i]]
+            = phi_height.get_dof_value(i);
+
+        AlignedVector<VectorizedArray<Number>> rhs_cell(dofs_per_cell);
+        for (unsigned int k = 0; k < 6; ++k)
+          {
+            phi_tracer.read_dof_values(src[0]);
+
+            for (unsigned int i = 0; i < dofs_per_cell; ++i)
+              rhs_cell[i] = phi_tracer.begin_dof_values()[i];
+
+
+            phi_tracer.gather_evaluate(dst, EvaluationFlags::values);
+
+            for (unsigned int q = 0; q < phi_tracer.n_q_points; ++q)
+              {
+                const auto t_q = phi_tracer.get_value(q);
+
+                phi_tracer.submit_value(-h[q]*t_q, q);
+              }
+
+            phi_tracer.integrate(EvaluationFlags::values,
+                                   &rhs_cell[0],
+                                   true);
+
+
+            inverse.apply(&cell_matrix[0], &rhs_cell[0],
+              phi_tracer.begin_dof_values(), n_dry_points);
+
+            phi_tracer.distribute_local_to_global(dst);
+          }
       }
   }
 
@@ -859,7 +913,7 @@ namespace SpaceDiscretization
 
 
     {
-      unsigned int n_stages = vec_ki_tracer.size()-1; //lrp: may be optimized passing as argument
+      unsigned int n_stages = vec_ki_tracer.size()-1;
       TimerOutput::Scope t(timer, "rk_stage tracer - inv mass + vec upd");
       data.cell_loop(
         &OceanoOperatorWithTracer::local_apply_cell_mass_tracer,
@@ -883,22 +937,22 @@ namespace SpaceDiscretization
         2);
       if (current_stage == n_stages-1)
         {
-          solution_tracer.zero_out_ghost_values(); //lrp: works only serial this is potentially dangerous in // runs
+          solution_tracer.zero_out_ghost_values();
           data.cell_loop(
             &OceanoOperatorWithTracer::local_apply_inverse_modified_mass_matrix_tracer,
             this,
             solution_tracer,
-            {vec_ki_tracer.front(), next_ri_height},
-            true);
+            {vec_ki_tracer.front(), next_ri_height});
         }
       else
         {
+          next_ri_tracer = solution_tracer;
+          next_ri_tracer.zero_out_ghost_values();
           data.cell_loop(
             &OceanoOperatorWithTracer::local_apply_inverse_modified_mass_matrix_tracer,
             this,
             next_ri_tracer,
-            {vec_ki_tracer.front(), next_ri_height},
-            true);
+            {vec_ki_tracer.front(), next_ri_height});
         }
     }
   }
@@ -957,25 +1011,42 @@ namespace SpaceDiscretization
     const Function<dim> &                       function,
     LinearAlgebra::distributed::Vector<Number> &solution_tracer) const
   {
-    FEEvaluation<dim, degree, degree + 1, n_tra, Number> phi_tracer(data, 2, 1);
+    FEEvaluation<dim, degree, degree + 1, n_tra, Number> phi_tracer(data, 2, 2);
     MatrixFreeOperators::CellwiseInverseMassMatrix<dim, degree, n_tra, Number>
       inverse_tracer(phi_tracer);
     solution_tracer.zero_out_ghost_values();
     for (unsigned int cell = 0; cell < data.n_cell_batches(); ++cell)
       {
         phi_tracer.reinit(cell);
-        phi_tracer.gather_evaluate(solution_tracer, EvaluationFlags::values);
-        for (unsigned int q = 0; q < phi_tracer.n_q_points; ++q) 
-          {
-            phi_tracer.submit_dof_value(evaluate_function_tracer<dim, Number, n_tra>(
-                                                    function,
-                                                    phi_tracer.quadrature_point(q),
-                                                    phi_tracer.get_value(q)),
-                                 q);
-          }
-        inverse_tracer.transform_from_q_points_to_basis(n_tra,
-                                                 phi_tracer.begin_dof_values(),
-                                                 phi_tracer.begin_dof_values());
+        //if (phi_tracer.get_active_fe_index())
+        //  {
+            phi_tracer.gather_evaluate(solution_tracer, EvaluationFlags::values);
+            for (unsigned int q = 0; q < phi_tracer.n_q_points; ++q)
+              {
+                phi_tracer.submit_dof_value(evaluate_function_tracer<dim, Number, n_tra>(
+                                                        function,
+                                                        phi_tracer.quadrature_point(q),
+                                                        phi_tracer.get_value(q)),
+                                     q);
+              }
+            inverse_tracer.transform_from_q_points_to_basis(n_tra,
+                                                     phi_tracer.begin_dof_values(),
+                                                     phi_tracer.begin_dof_values());
+        //  }
+        //else
+        //  {
+        //    VectorizedArray<Number> inv_area = 0.;
+        //    for (unsigned int q = 0; q < phi_tracer.n_q_points; ++q)
+        //      inv_area += phi_tracer.JxW(q);
+        //    inv_area = 1./inv_area;
+        //    for (unsigned int q = 0; q < phi_tracer.n_q_points; ++q)
+        //      phi_tracer.submit_value(evaluate_function_tracer<dim, Number, n_tra>(
+        //                                             function,
+        //                                             phi_tracer.quadrature_point(q),
+        //                                             phi_tracer.get_value(q)) * inv_area,
+        //                              q);
+        //    phi_tracer.integrate(EvaluationFlags::values);
+        //  }
         phi_tracer.set_dof_values(solution_tracer);
       }
   }

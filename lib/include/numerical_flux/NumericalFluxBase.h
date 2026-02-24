@@ -23,8 +23,8 @@
 // The following files include the oceano libraries 
 #if defined MODEL_EULER
 #include <model/Euler.h>
-#elif defined MODEL_SHALLOWWATERDISCHARGE
-#include <model/ShallowWaterDischarge.h>
+#elif defined MODEL_SHALLOWWATER
+#include <model/ShallowWater.h>
 #endif
 
 /**
@@ -88,8 +88,8 @@ namespace NumericalFlux
 
 #if defined MODEL_EULER
     Model::Euler model;
-#elif defined MODEL_SHALLOWWATERDISCHARGE
-    Model::ShallowWaterDischarge model;
+#elif defined MODEL_SHALLOWWATER
+    Model::ShallowWater model;
 #elif defined MODEL_SHALLOWWATERWITHTRACER
     Model::ShallowWaterWithTracer model;
 #endif

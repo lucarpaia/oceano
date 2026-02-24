@@ -261,8 +261,10 @@ namespace TimeIntegrator
                                          &b_i[0] :
                                          &a_i[0][0]),
                                        vec_ri,
-                                       solution_height,
-                                       vec_ri_height,
+                                       vec_ri[0],
+                                       (0 == ci.size() - 1 ?
+                                         solution_height :
+                                         vec_ri_height),
                                        vec_ki_tracer,
                                        solution_tracer,
                                        vec_ri_tracer);

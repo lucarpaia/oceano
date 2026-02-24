@@ -58,8 +58,8 @@
 // The following files include the oceano libraries
 #if defined MODEL_EULER
 #include <model/Euler.h>
-#elif defined MODEL_SHALLOWWATERDISCHARGE
-#include <model/ShallowWaterDischarge.h>
+#elif defined MODEL_SHALLOWWATER
+#include <model/ShallowWater.h>
 #elif defined MODEL_SHALLOWWATERWITHTRACER
 #include <model/ShallowWaterWithTracer.h>
 #endif
@@ -267,8 +267,8 @@ namespace SpaceDiscretization
     // outside the OceanoOperator class
 #if defined MODEL_EULER
     Model::Euler model;
-#elif defined MODEL_SHALLOWWATERDISCHARGE
-    Model::ShallowWaterDischarge model;
+#elif defined MODEL_SHALLOWWATER
+    Model::ShallowWater model;
 #elif defined MODEL_SHALLOWWATERWITHTRACER
     Model::ShallowWaterWithTracer model;
 #else
@@ -1437,12 +1437,12 @@ namespace SpaceDiscretization
         phi_height.gather_evaluate(dst, EvaluationFlags::values);
 
         for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
-              {
-                const auto z_q = phi_height.get_value(q);
-                const auto zb_q = data_quadrature_cell_1.get_data(cell, q);
+          {
+            const auto z_q = phi_height.get_value(q);
+            const auto zb_q = data_quadrature_cell_1.get_data(cell, q);
 
-                phi_height.submit_value(-model.depth(z_q, zb_q), q);
-              }
+            phi_height.submit_value(-model.depth(z_q, zb_q), q);
+          }
 
         phi_height.integrate(EvaluationFlags::values,
                                    &rhs_cell[0],
@@ -1862,7 +1862,7 @@ namespace SpaceDiscretization
 
       if (current_stage == n_stages-1)
         {
-          solution_height.zero_out_ghost_values(); //lrp: works only serial this is potentially dangerous in // runs
+          solution_height.zero_out_ghost_values();
           data.cell_loop(
             &OceanoOperator::local_apply_inverse_mass_matrix_height,
             this,
@@ -1872,7 +1872,7 @@ namespace SpaceDiscretization
       else
         {
           next_ri_height = solution_height;
-          next_ri_height.zero_out_ghost_values(); //lrp: works only serial this is potentially dangerous in // runs
+          next_ri_height.zero_out_ghost_values();
           data.cell_loop(
             &OceanoOperator::local_apply_inverse_mass_matrix_height,
             this,
@@ -2042,7 +2042,7 @@ namespace SpaceDiscretization
 
       if (current_stage == n_stages-1)
         {
-          solution_height.zero_out_ghost_values(); //lrp: works only serial this is potentially dangerous in // runs
+          solution_height.zero_out_ghost_values();
           data.cell_loop(
             &OceanoOperator::local_apply_inverse_mass_matrix_height,
             this,
@@ -2052,7 +2052,7 @@ namespace SpaceDiscretization
       else
         {
           next_ri_height = solution_height;
-          next_ri_height.zero_out_ghost_values(); //lrp: works only serial this is potentially dangerous in // runs
+          next_ri_height.zero_out_ghost_values();
           data.cell_loop(
             &OceanoOperator::local_apply_inverse_mass_matrix_height,
             this,
