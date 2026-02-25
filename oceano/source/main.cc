@@ -874,9 +874,15 @@ namespace Problem
 
       hp::Refinement::full_p_adaptivity(dof_handler_height);
       hp::Refinement::full_p_adaptivity(dof_handler_discharge);
+#ifdef OCEANO_WITH_TRACERS
+      hp::Refinement::full_p_adaptivity(dof_handler_tracer);
+#endif
 
       hp::Refinement::force_p_over_h(dof_handler_height);
       hp::Refinement::force_p_over_h(dof_handler_discharge);
+#ifdef OCEANO_WITH_TRACERS
+      hp::Refinement::force_p_over_h(dof_handler_tracer);
+#endif
 
       for (const auto &cell :
            triangulation.active_cell_iterators())
@@ -902,9 +908,6 @@ namespace Problem
       solution_transfer_discharge.prepare_for_coarsening_and_refinement(solution_discharge);
 
 #ifdef OCEANO_WITH_TRACERS
-      //hp::Refinement::full_p_adaptivity(dof_handler_tracer); //lrp:hp
-      //hp::Refinement::force_p_over_h(dof_handler_tracer);
-
       parallel::distributed::SolutionTransfer<dim, LinearAlgebra::distributed::Vector<Number>>
         solution_transfer_tracer(dof_handler_tracer);
       solution_transfer_tracer.prepare_for_coarsening_and_refinement(solution_tracer);
