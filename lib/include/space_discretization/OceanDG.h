@@ -2251,6 +2251,12 @@ namespace SpaceDiscretization
   // with the points lying at the interior
   // of the cell. This allows to mantain a discontinuous datum with
   // the jump passing through the edges of the cell.
+  //
+  // We conclude the discussion with a comment of the `zero_out_ghost_values()`
+  // functions. They are necessary when performing hp-adaptation because cells are
+  // ghosted during the solution transfer between the grids, which prevents from
+  // writing into the solution vector, what we want to do here. A deal.ii
+  // error message is raised. The call unlocks the write operation.
   template <int dim, int n_tra, int degree, int n_points_1d>
   void OceanoOperator<dim, n_tra, degree, n_points_1d>::project_hydro(
     const Function<dim> &                       function,

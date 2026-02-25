@@ -838,54 +838,8 @@ namespace SpaceDiscretization
   }
 #endif
 
-  // Having discussed the implementation of the functions that deal with
-  // advancing the solution by one time step, let us now move to functions
-  // that implement other, ancillary operations. Specifically, these are
-  // functions that compute projections, evaluate errors, and compute the speed
-  // of information transport on a cell.
-  //
-  // The first of these functions is essentially equivalent to
-  // VectorTools::project(), just much faster because it is specialized for DG
-  // elements where there is no need to set up and solve a linear system, as
-  // each element has independent basis functions. The reason why we show the
-  // code here, besides a small speedup of this non-critical operation, is that
-  // it shows additional functionality provided by
-  // MatrixFreeOperators::CellwiseInverseMassMatrix.
-  //
-  // The projection operation works as follows: If we denote the matrix of
-  // shape functions evaluated at quadrature points by $S$, the projection on
-  // cell $K$ is an operation of the form $\underbrace{S J^K S^\mathrm
-  // T}_{\mathcal M^K} \mathbf{w}^K = S J^K
-  // \tilde{\mathbf{w}}(\mathbf{x}_q)_{q=1:n_q}$, where $J^K$ is the diagonal
-  // matrix containing the determinant of the Jacobian times the quadrature
-  // weight (JxW), $\mathcal M^K$ is the cell-wise mass matrix, and
-  // $\tilde{\mathbf{w}}(\mathbf{x}_q)_{q=1:n_q}$ is the evaluation of the
-  // field to be projected onto quadrature points. (In reality the matrix $S$
-  // has additional structure through the tensor product, as explained in the
-  // introduction.) This system can now equivalently be written as
-  // $\mathbf{w}^K = \left(S J^K S^\mathrm T\right)^{-1} S J^K
-  // \tilde{\mathbf{w}}(\mathbf{x}_q)_{q=1:n_q} = S^{-\mathrm T}
-  // \left(J^K\right)^{-1} S^{-1} S J^K
-  // \tilde{\mathbf{w}}(\mathbf{x}_q)_{q=1:n_q}$. Now, the term $S^{-1} S$ and
-  // then $\left(J^K\right)^{-1} J^K$ cancel, resulting in the final
-  // expression $\mathbf{w}^K = S^{-\mathrm T}
-  // \tilde{\mathbf{w}}(\mathbf{x}_q)_{q=1:n_q}$. This operation is
-  // implemented by
-  // MatrixFreeOperators::CellwiseInverseMassMatrix::transform_from_q_points_to_basis().
-  // The name is derived from the fact that this projection is simply
-  // the multiplication by $S^{-\mathrm T}$, a basis change from the
-  // nodal basis in the points of the Gaussian quadrature to the given finite
-  // element basis. Note that we call FEEvaluation::set_dof_values() to write
-  // the result into the vector, overwriting previous content, rather than
-  // accumulating the results as typical in integration tasks -- we can do
-  // this because every vector entry has contributions from only a single
-  // cell for discontinuous Galerkin discretizations.
-  //
-  // The quadrature choosen to do the integral is the normal one stored in
-  // the finite element evaluation class, thus a Gaussian quadrature
-  // with the points lying at the interior
-  // of the cell. This allows to mantain a discontinuous datum with
-  // the jump passing through the edges of the cell.
+  // The functions that implement other ancillary operations, specifically
+  // projections and errors evaluation are identical to the `OceanoOperator`.
   template <int dim, int n_tra, int degree, int n_points_1d>
   void OceanoOperatorWithTracer<dim, n_tra, degree, n_points_1d>::project_tracers(
     const Function<dim> &                       function,
@@ -893,7 +847,7 @@ namespace SpaceDiscretization
   {
     const unsigned int dummy = 0;
 
-    solution_tracer.zero_out_ghost_values(); //lrp:hp-dbg test if necessary
+    solution_tracer.zero_out_ghost_values();
     data.template cell_loop<LinearAlgebra::distributed::Vector<Number>, unsigned int>(
         [&](const MatrixFree<dim, Number> &,
             LinearAlgebra::distributed::Vector<Number>       &dst,
