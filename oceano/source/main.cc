@@ -206,23 +206,30 @@ namespace Problem
   using namespace dealii;
 
   // We collect some parameters that control the execution of the program at the top of the
-  // file. These are parameters that the user should not change for operational 
-  // simuations. They can be thus considered known at compile time leading, I guess,
-  // to some optimization. Besides the dimension and polynomial degree we want to run with, we
-  // also specify a number of points in the Gaussian quadrature formula we
-  // want to use for the nonlinear terms in the shallow water equations.
+  // file. These are parameters that the user should not change for operational simuations.
+  // They can be considered known at compile time leading to some optimization.
+  // The variable type is a template parameter that should be editable, depending on the
+  // specific application:
+  using Number = double;
+  // Besides the problem dimension, which is two, and polynomial degree we want to run with:
   constexpr unsigned int dimension            = 2;
   constexpr unsigned int fe_degree            = 1;
+  // we also specify a number of points in the Gauss-Legendre quadrature formula we
+  // want to use for the volume terms:
   constexpr unsigned int n_q_points_1d        = floor(1.5*fe_degree) + 1;
+  // The number of tracers:
 #if defined MODEL_SHALLOWWATERWITHTRACER
   constexpr unsigned int n_tracers            = 1;
 #endif
+  // and the maximum number of iterations for the iterative method that invert the
+  // mass matrix in the continuity and in the tracer equation. For wet-dry cells convergence
+  // is fast so a few iterations are enough, for wet cells the iterative method is basically
+  // a Jacobi method that allows to go beyond first order mass lumping. Again a few iterations
+  // are a good threshold beteween the error constant and computational efficiency:
   constexpr unsigned int max_iteration_height = 3;
   constexpr unsigned int max_iteration_tracer = 5;
-
-  using Number = double;
-
-  // Next off is the choice of the time integrator scheme:
+  // Next off is the choice of the time integrator scheme: please check the time integrator
+  // class to see the list of all possible time integrators:
 #if defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
   constexpr TimeIntegrator::ExplicitRungeKuttaScheme rk_scheme = TimeIntegrator::stage_3_order_2;
 #elif defined TIMEINTEGRATOR_ADDITIVERUNGEKUTTA
@@ -985,7 +992,7 @@ namespace Problem
           ICBC::ExactSolution<dimension, n_variables>(time,prm),
           solution_height, solution_discharge);
 #ifdef OCEANO_WITH_TRACERS
-      const std::array<double,1> errors_tracers =
+      const double errors_tracers =
         oceano_operator.compute_errors_tracers(
           ICBC::ExactSolution<dimension, n_variables>(time,prm), solution_tracer);
 #endif
@@ -1005,7 +1012,7 @@ namespace Problem
 
 #ifdef OCEANO_WITH_TRACERS
       pcout << ", "+ vars_names[dim+0+1] + ":" << std::setprecision(4)
-            << std::setw(10) << errors_tracers[0];
+            << std::setw(10) << errors_tracers;
 #endif
       pcout << std::endl;
 

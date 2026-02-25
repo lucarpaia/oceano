@@ -44,7 +44,7 @@ namespace SpaceDiscretization
   // is resolved with an overloading depending on the third dummy argument,
   // is to handle the case of one single tracer and multiple tracers without
   // an `if` statement.
-  template <int dim, typename Number, int n_vars>
+  template <int dim, typename Number, int n_tra>
   VectorizedArray<Number>
   evaluate_function_tracer(
     const Function<dim>                       &function,
@@ -154,7 +154,7 @@ namespace SpaceDiscretization
     void project_tracers(const Function<dim> &                       function,
                          LinearAlgebra::distributed::Vector<Number> &solution_tracer) const;
 
-    std::array<double, 1> compute_errors_tracers(
+    double compute_errors_tracers(
       const Function<dim> &                             function,
       const LinearAlgebra::distributed::Vector<Number> &solution_tracer) const;
 
@@ -265,82 +265,9 @@ namespace SpaceDiscretization
 
   // @sect4{Local evaluators}
 
-  // Now we proceed to the local evaluators for the ocean problem. The
-  // evaluators are relatively simple and follow what has been presented in
-  // step-37, step-48, or step-59. The first notable difference is the fact
-  // that we use a FEEvaluation with a non-standard number of quadrature
-  // points. Whereas we previously always set the number of quadrature points
-  // to equal the polynomial degree plus one (ensuring exact integration on
-  // affine element shapes), we now set the number quadrature points as a
-  // separate variable (e.g. the polynomial degree plus two or three halves of
-  // the polynomial degree) to more accurately handle nonlinear terms. Since
-  // the evaluator is fed with the appropriate loop lengths via the template
-  // argument and keeps the number of quadrature points in the whole cell in
-  // the variable FEEvaluation::n_q_points, we now automatically operate on
-  // the more accurate formula without further changes.
-  //
-  // The second difference is due to the fact that we are now evaluating a
-  // multi-component system, as opposed to the scalar systems considered
-  // previously. The matrix-free framework provides several ways to handle the
-  // multi-component case. One variant utilizes an FEEvaluation
-  // object with multiple components embedded into it, specified by the fourth
-  // template argument `n_vars` for the components in the shallow water system.
-  // The alternative variant followed here uses several FEEvaluation objects,
-  // a scalar one for the height, a vector-valued one with `dim` components for the
-  // momentum, and another scalar evaluator for the tracers. To ensure that
-  // those components point to the correct part of the solution, the
-  // constructor of FEEvaluation takes three optional integer arguments after
-  // the required MatrixFree field, namely the number of the DoFHandler for
-  // multi-DoFHandler systems (taking the first by default), the number of the
-  // quadrature point in case there are multiple Quadrature objects (see more
-  // below), and as a third argument the component within a vector system. As
-  // we have a single vector for all components, we would go with the third
-  // argument, and set it to `0` for the density, `1` for the vector-valued
-  // momentum, and `dim+1` for the energy slot. FEEvaluation then picks the
-  // appropriate subrange of the solution vector during
-  // FEEvaluationBase::read_dof_values() and
-  // FEEvaluation::distributed_local_to_global() or the more compact
-  // FEEvaluation::gather_evaluate() and FEEvaluation::integrate_scatter()
-  // calls.
-  //
-  // When it comes to the evaluation of the body force vector, we need to call
-  // the `evaluate_function()` method we provided above; Since the body force,
-  // in the general case is not a constant, we must call it inside the loop over
-  // quadrature point data, which of course is quite expensive.
-  // Once the body force has been computed we compute the body force term associated
-  // the right-hand side of the shallow water equation inside the `source()` function,
-  // a member function of the model class.
-  //
-  //
-  // The rest follows the other tutorial programs. Since we have implemented
-  // all physics for the governing equations in the separate `model.flux()`
-  // and `model.source()` functions, all we have to do here is to call this function
-  // given the current solution evaluated at quadrature points, returned by
-  // `phi.get_value(q)`, and tell the FEEvaluation object to queue the flux
-  // for testing it by the gradients of the shape functions (which is a Tensor
-  // of outer `n_vars` components, each holding a tensor of `dim` components
-  // for the $x,y,z$ component of the shallow water flux). One final thing worth
-  // mentioning is the order in which we queue the data for testing by the
-  // value of the test function, `phi.submit_value()`, in case we are given an
-  // external function: We must do this after calling `phi.get_value(q)`,
-  // because `get_value()` (reading the solution) and `submit_value()`
-  // (queuing the value for multiplication by the test function and summation
-  // over quadrature points) access the same underlying data field. Here it
-  // would be easy to achieve also without temporary variable `w_q` since
-  // there is no mixing between values and gradients. For more complicated
-  // setups, one has to first copy out e.g. both the value and gradient at a
-  // quadrature point and then queue results again by
-  // FEEvaluationBase::submit_value() and FEEvaluationBase::submit_gradient().
-  // Note that the flux term contains mass-flux and non-linear advection flux
-  // while the pressure flux appears in the source term, where it is written
-  // in a non-conservative form $h\nabla\zeta$. This why the `model.source()`
-  // function take as argument the gradient of the free-surface.
-  //
-  // As a final note, we mention that we do not use the first MatrixFree
-  // argument of this function, which is a call-back from MatrixFree::loop().
-  // The interfaces imposes the present list of arguments, but since we are in
-  // a member function where the MatrixFree object is already available as the
-  // `data` variable, we stick with that to avoid confusion.
+  // The local evaluator for the tracer are just similar to the ones commented
+  // in `OceanoOperator` class. We do not comment them further. We use quadrature
+  // formulae identical to the ones used in the continuity equation for consistency.
   template <int dim, int n_tra, int degree, int n_points_1d>
   void OceanoOperatorWithTracer<dim, n_tra, degree, n_points_1d>::local_apply_cell_tracer(
     const MatrixFree<dim, Number> &,
@@ -348,10 +275,10 @@ namespace SpaceDiscretization
     const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
     const std::pair<unsigned int, unsigned int>                   &cell_range) const
   {
-    FEEvaluation<dim, degree, n_points_1d, 1, Number> phi_height(data,0);
-    FEEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge(data,1);
-    FEEvaluation<dim, degree, n_points_1d, n_tra, Number> phi_tracer(data,2);
-    FEEvaluation<dim, degree, n_points_1d, dim, Number> phi_velocity(data,1);
+    FEEvaluation<dim, -1, n_points_1d, 1, Number> phi_height(data,cell_range,0);
+    FEEvaluation<dim, -1, n_points_1d, dim, Number> phi_discharge(data,cell_range,1);
+    FEEvaluation<dim, -1, n_points_1d, n_tra, Number> phi_tracer(data,cell_range,2);
+    FEEvaluation<dim, -1, n_points_1d, dim, Number> phi_velocity(data,cell_range,1);
 
     const auto inv_degree = 1./degree;
 
@@ -389,8 +316,6 @@ namespace SpaceDiscretization
       }
   }
 
-  // The next function concerns the computation of the mass-matrix term on
-  // the right-hand-side, the one computed at $t^n$:
   template <int dim, int n_tra, int degree, int n_points_1d>
   void OceanoOperatorWithTracer<dim, n_tra, degree, n_points_1d>::local_apply_cell_mass_tracer(
     const MatrixFree<dim, Number> &,
@@ -398,8 +323,8 @@ namespace SpaceDiscretization
     const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
     const std::pair<unsigned int, unsigned int>                   &cell_range) const
   {
-    FEEvaluation<dim, degree, degree + 2, 1, Number> phi_height(data, 0, 1);
-    FEEvaluation<dim, degree, degree + 2, n_tra, Number> phi_tracer(data, 2, 1);
+    FEEvaluation<dim, -1, degree + 2, 1, Number> phi_height(data, cell_range, 0, 1);
+    FEEvaluation<dim, -1, degree + 2, n_tra, Number> phi_tracer(data, cell_range, 2, 1);
 
     for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
       {
@@ -424,60 +349,8 @@ namespace SpaceDiscretization
       }
   }
 
-  // The next function concerns the computation of integrals on interior
-  // faces, where we need evaluators from both cells adjacent to the face. We
-  // associate the variable `phi_m` with the solution component $\mathbf{w}^-$
-  // and the variable `phi_p` with the solution component $\mathbf{w}^+$. We
-  // distinguish the two sides in the constructor of FEFaceEvaluation by the
-  // second argument, with `true` for the interior side and `false` for the
-  // exterior side, with interior and exterior denoting the orientation with
-  // respect to the normal vector.
-  //
-  // Note that the calls FEFaceEvaluation::gather_evaluate() and
-  // FEFaceEvaluation::integrate_scatter() combine the access to the vectors
-  // and the sum factorization parts. This combined operation not only saves a
-  // line of code, but also contains an important optimization: Given that we
-  // use a nodal basis in terms of the Lagrange polynomials in the points of
-  // the Gauss-Lobatto quadrature formula, only $(p+1)^{d-1}$ out of the
-  // $(p+1)^d$ basis functions evaluate to non-zero on each face. Thus, the
-  // evaluator only accesses the necessary data in the vector and skips the
-  // parts which are multiplied by zero. If we had first read the vector, we
-  // would have needed to load all data from the vector, as the call in
-  // isolation would not know what data is required in subsequent
-  // operations. If the subsequent FEFaceEvaluation::evaluate() call requests
-  // values and derivatives, indeed all $(p+1)^d$ vector entries for each
-  // component are needed, as the normal derivative is nonzero for all basis
-  // functions.
-  //
-  // The arguments to the evaluators as well as the procedure is similar to
-  // the cell evaluation. We again use the more accurate (over-)integration
-  // scheme due to the nonlinear terms, specified as the third template
-  // argument in the list. At the quadrature points, we then go to our
-  // free-standing functions for the numerical flux. They receives the solution
-  // evaluated at quadrature points from both sides (i.e., $\mathbf{w}^-$ and
-  // $\mathbf{w}^+$), as well as the normal vector onto the minus side.
-  // We separate numerical fluxes coming from terms written in weak form from
-  // terms written in strong form. A simple trick is used to have
-  // discontinuous bathymetry at the quadrature points along the edges. The
-  // quadrature point is shifted perpendicularly to the edge direction by a
-  // very small quantity. Givent the outward sign of the normal, the offset is
-  // positive for the "there" side and negative for the "here" side.
-  //
-  // For the shallow water equations mass-flux
-  // and non-linear advection terms are coded in weak form while pressure force
-  // appears in strong form. For instance, the weak form for the pressure term
-  // has proved to preserve easily the lake at rest solution. Depending on weak/strong
-  // formulation, the flux term has different forms. We cumulate numerical flux
-  // in two different arrays for both sided.
-  // As explained above, the weak numerical flux is already multiplied by the normal
-  // vector from the minus side. We need to switch the sign because the
-  // boundary term comes with a minus sign in the weak form derived in the
-  // introduction. The flux is then queued for testing both on the minus sign
-  // and on the plus sign, with switched sign as the normal vector from the
-  // plus side is exactly opposed to the one from the minus side.  The strong
-  // form goes with the same sign on both sides. For this reason we have used
-  // another function to compute it.
-  //
+  // Identical is also computation of integrals on interior
+  // faces, where we need evaluators from both cells adjacent to the face.
   template <int dim, int n_tra, int degree, int n_points_1d>
   void OceanoOperatorWithTracer<dim, n_tra, degree, n_points_1d>::local_apply_face_tracer(
     const MatrixFree<dim, Number> &,
@@ -485,17 +358,17 @@ namespace SpaceDiscretization
     const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
     const std::pair<unsigned int, unsigned int>                   &face_range) const
   {
-    FEFaceEvaluation<dim, degree, degree + 2, 1, Number> phi_height_m(data,
+    FEFaceEvaluation<dim, -1, degree + 2, 1, Number> phi_height_m(data, face_range,
                                                                       true, 0, 1);
-    FEFaceEvaluation<dim, degree, degree + 2, 1, Number> phi_height_p(data,
+    FEFaceEvaluation<dim, -1, degree + 2, 1, Number> phi_height_p(data, face_range,
                                                                       false, 0, 1);
-    FEFaceEvaluation<dim, degree, degree + 2, dim, Number> phi_discharge_m(data,
+    FEFaceEvaluation<dim, -1, degree + 2, dim, Number> phi_discharge_m(data, face_range,
                                                                       true, 1, 1);
-    FEFaceEvaluation<dim, degree, degree + 2, dim, Number> phi_discharge_p(data,
+    FEFaceEvaluation<dim, -1, degree + 2, dim, Number> phi_discharge_p(data, face_range,
                                                                       false, 1, 1);
-    FEFaceEvaluation<dim, degree, degree + 2, n_tra, Number> phi_tracer_m(data,
+    FEFaceEvaluation<dim, -1, degree + 2, n_tra, Number> phi_tracer_m(data, face_range,
                                                                       true, 2, 1);
-    FEFaceEvaluation<dim, degree, degree + 2, n_tra, Number> phi_tracer_p(data,
+    FEFaceEvaluation<dim, -1, degree + 2, n_tra, Number> phi_tracer_p(data, face_range,
                                                                       false, 2, 1);
 
     for (unsigned int face = face_range.first; face < face_range.second; ++face)
@@ -536,7 +409,7 @@ namespace SpaceDiscretization
       }
   }
 
-  // The boundary conditions for tracers are discussed here. They are of course
+  // The boundary conditions for tracers need a detailed discussion. They are of course
   // related to the hydrodynamics. Supercritical flows are easy to implement since
   // the tracers always enter or leave the domain.
   //
@@ -556,9 +429,9 @@ namespace SpaceDiscretization
     const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
     const std::pair<unsigned int, unsigned int>                   &face_range) const
   {
-    FEFaceEvaluation<dim, degree, n_points_1d, 1, Number> phi_height(data, true, 0);
-    FEFaceEvaluation<dim, degree, n_points_1d, dim, Number> phi_discharge(data, true, 1);
-    FEFaceEvaluation<dim, degree, n_points_1d, n_tra, Number> phi_tracer(data, true, 2);
+    FEFaceEvaluation<dim, -1, n_points_1d, 1, Number> phi_height(data, face_range, true, 0);
+    FEFaceEvaluation<dim, -1, n_points_1d, dim, Number> phi_discharge(data, face_range, true, 1);
+    FEFaceEvaluation<dim, -1, n_points_1d, n_tra, Number> phi_tracer(data, face_range, true, 2);
 
     const unsigned int n_vars = dim+1;
 
@@ -752,14 +625,14 @@ namespace SpaceDiscretization
     const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
     const std::pair<unsigned int, unsigned int>                   &cell_range) const
   {
-    FEEvaluation<dim, degree, degree + 2, n_tra, Number> phi_tracer(data, 2, 1);
-    FEEvaluation<dim, degree, degree + 2, 1, Number> phi_height(data, 0, 1);
-    MatrixFreeOperatorsOceano::CellwiseInverseMassMatrixLumped<dim, degree, n_tra, Number>
-      inverse(phi_tracer);
+    FEEvaluation<dim, -1, degree + 2, 1, Number> phi_height(data, cell_range, 0, 1);
+    FEEvaluation<dim, -1, degree + 2, n_tra, Number> phi_tracer(data, cell_range, 2, 1);
 
     for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
       {
         phi_tracer.reinit(cell);
+        MatrixFreeOperatorsOceano::CellwiseInverseMassMatrixLumped<dim, -1, n_tra, Number>
+          inverse(phi_tracer);
         phi_height.reinit(cell);
         phi_height.gather_evaluate(src[1], EvaluationFlags::values);
 
@@ -1018,90 +891,102 @@ namespace SpaceDiscretization
     const Function<dim> &                       function,
     LinearAlgebra::distributed::Vector<Number> &solution_tracer) const
   {
-    FEEvaluation<dim, degree, degree + 1, n_tra, Number> phi_tracer(data, 2, 2);
-    MatrixFreeOperators::CellwiseInverseMassMatrix<dim, degree, n_tra, Number>
-      inverse_tracer(phi_tracer);
-    solution_tracer.zero_out_ghost_values();
-    for (unsigned int cell = 0; cell < data.n_cell_batches(); ++cell)
-      {
-        phi_tracer.reinit(cell);
-        //if (phi_tracer.get_active_fe_index())
-        //  {
-            phi_tracer.gather_evaluate(solution_tracer, EvaluationFlags::values);
-            for (unsigned int q = 0; q < phi_tracer.n_q_points; ++q)
-              {
-                phi_tracer.submit_dof_value(evaluate_function_tracer<dim, Number, n_tra>(
-                                                        function,
-                                                        phi_tracer.quadrature_point(q),
-                                                        phi_tracer.get_value(q)),
-                                     q);
-              }
-            inverse_tracer.transform_from_q_points_to_basis(n_tra,
-                                                     phi_tracer.begin_dof_values(),
-                                                     phi_tracer.begin_dof_values());
-        //  }
-        //else
-        //  {
-        //    VectorizedArray<Number> inv_area = 0.;
-        //    for (unsigned int q = 0; q < phi_tracer.n_q_points; ++q)
-        //      inv_area += phi_tracer.JxW(q);
-        //    inv_area = 1./inv_area;
-        //    for (unsigned int q = 0; q < phi_tracer.n_q_points; ++q)
-        //      phi_tracer.submit_value(evaluate_function_tracer<dim, Number, n_tra>(
-        //                                             function,
-        //                                             phi_tracer.quadrature_point(q),
-        //                                             phi_tracer.get_value(q)) * inv_area,
-        //                              q);
-        //    phi_tracer.integrate(EvaluationFlags::values);
-        //  }
-        phi_tracer.set_dof_values(solution_tracer);
-      }
+    const unsigned int dummy = 0;
+
+    solution_tracer.zero_out_ghost_values(); //lrp:hp-dbg test if necessary
+    data.template cell_loop<LinearAlgebra::distributed::Vector<Number>, unsigned int>(
+        [&](const MatrixFree<dim, Number> &,
+            LinearAlgebra::distributed::Vector<Number>       &dst,
+            const unsigned int &,
+            const std::pair<unsigned int, unsigned int>      &cell_range) {
+
+          FEEvaluation<dim, -1, degree + 1, n_tra, Number> phi_tracer(data, cell_range, 2, 2);
+          MatrixFreeOperators::CellwiseInverseMassMatrix<dim, degree, n_tra, Number>
+            inverse_tracer(phi_tracer);
+
+          for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
+            {
+              phi_tracer.reinit(cell);
+              phi_tracer.gather_evaluate(dst, EvaluationFlags::values);
+              if (phi_tracer.get_active_fe_index())
+                {
+                  for (unsigned int q = 0; q < phi_tracer.n_q_points; ++q)
+                      phi_tracer.submit_dof_value(evaluate_function_tracer<dim, Number, n_tra>(
+                                                              function,
+                                                              phi_tracer.quadrature_point(q),
+                                                              phi_tracer.get_value(q)),
+                                                  q);
+                  inverse_tracer.transform_from_q_points_to_basis(n_tra,
+                                                           phi_tracer.begin_dof_values(),
+                                                           phi_tracer.begin_dof_values());
+                }
+              else
+                {
+                  VectorizedArray<Number> inv_area = 0.;
+                  for (unsigned int q = 0; q < phi_tracer.n_q_points; ++q)
+                    inv_area += phi_tracer.JxW(q);
+                  inv_area = 1./inv_area;
+                  for (unsigned int q = 0; q < phi_tracer.n_q_points; ++q)
+                    phi_tracer.submit_value(evaluate_function_tracer<dim, Number, n_tra>(
+                                                           function,
+                                                           phi_tracer.quadrature_point(q),
+                                                           phi_tracer.get_value(q)) * inv_area,
+                                            q);
+                  phi_tracer.integrate(EvaluationFlags::values);
+                }
+              phi_tracer.set_dof_values(dst);
+            }
+        },
+        solution_tracer,
+        dummy);
   }
 
   // This is a similar function to the one that compute the error for the hydrodynamics.
   // Here, in a completely similar mannel, we computes the error for the tracer.
   // To avoid to print to screen to much information we just compute the error for one tracer, the
-  // first one. For this reason `n_err=1`.
+  // first one.
   template <int dim, int n_tra, int degree, int n_points_1d>
-  std::array<double, 1> OceanoOperatorWithTracer<dim, n_tra, degree, n_points_1d>::compute_errors_tracers(
+  double OceanoOperatorWithTracer<dim, n_tra, degree, n_points_1d>::compute_errors_tracers(
     const Function<dim> &                             function,
     const LinearAlgebra::distributed::Vector<Number> &solution_tracer) const
   {
     TimerOutput::Scope t(timer, "compute errors");
-    const unsigned int n_err = 1;
-    double             errors_squared[n_err] = {};
-    FEEvaluation<dim, degree, n_points_1d, n_tra, Number> phi_tracer(data, 2, 0);
 
-    for (unsigned int cell = 0; cell < data.n_cell_batches(); ++cell)
-      {
-        VectorizedArray<Number> local_errors_squared[n_err] = {};
-        phi_tracer.reinit(cell);
-        phi_tracer.gather_evaluate(solution_tracer, EvaluationFlags::values);
-        for (unsigned int q = 0; q < phi_tracer.n_q_points; ++q)
-          {
-            const auto error = evaluate_function_tracer<dim, Number, 1>(
-            		         function, 
-                                 phi_tracer.quadrature_point(q),
-                                 phi_tracer.get_value(q)[0])
-                             - phi_tracer.get_value(q)[0];
-            const auto JxW = phi_tracer.JxW(q);
-            for (unsigned int t = 0; t < n_err; ++t)
-              local_errors_squared[t] += (error[t] * error[t]) * JxW;
-          }
+    double             errors_squared = 0.;
+    unsigned int dummy = 0;
 
-        for (unsigned int v = 0; v < data.n_active_entries_per_cell_batch(cell);
-             ++v)
-          for (unsigned int d = 0; d < n_err; ++d)
-            errors_squared[d] += local_errors_squared[d][v];
-      }
+    data.template cell_loop<unsigned int, LinearAlgebra::distributed::Vector<Number>>(
+        [&](const MatrixFree<dim, Number> &,
+            unsigned int &,
+            const LinearAlgebra::distributed::Vector<Number> &src,
+            const std::pair<unsigned int, unsigned int>       &cell_range) {
 
-    Utilities::MPI::sum(errors_squared, MPI_COMM_WORLD, errors_squared);
+          FEEvaluation<dim, -1, n_points_1d, n_tra, Number> phi_tracer(data, cell_range, 2, 0);
 
-    std::array<double, n_err> errors;
-    for (unsigned int d = 0; d < n_err; ++d)
-      errors[d] = std::sqrt(errors_squared[d]);
+          for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
+            {
+              VectorizedArray<Number> local_errors_squared = 0.;
+              phi_tracer.reinit(cell);
+              phi_tracer.gather_evaluate(src, EvaluationFlags::values);
+              for (unsigned int q = 0; q < phi_tracer.n_q_points; ++q)
+                {
+                  const auto error = evaluate_function_tracer<dim, Number, 1>(
+                                       function,
+                                       phi_tracer.quadrature_point(q),
+                                       local_errors_squared)
+                                   - phi_tracer.begin_values()[q];
+                  const auto JxW = phi_tracer.JxW(q);
+                  local_errors_squared += (error * error) * JxW;
+                }
 
-    return errors;
+              for (unsigned int v = 0; v < data.n_active_entries_per_cell_batch(cell); ++v)
+                  errors_squared += local_errors_squared[v];
+            }
+        },
+        dummy,
+        solution_tracer);
+
+    return std::sqrt(Utilities::MPI::sum(errors_squared, MPI_COMM_WORLD));
   }
 
 } // namespace SpaceDiscretization
