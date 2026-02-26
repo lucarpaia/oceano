@@ -247,7 +247,7 @@ namespace ICBC
     else if (component == 2)
       return v;
     else
-      return 0.;
+      return 1.;
   }
 
 
