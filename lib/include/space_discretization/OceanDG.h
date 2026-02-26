@@ -1387,6 +1387,8 @@ namespace SpaceDiscretization
   {
     FEEvaluation<dim, -1, degree + 2, 1, Number> phi_height(data, cell_range, 0, 1);
 
+    const VectorizedArray<Number> epsilon_lift = 1e-09;
+
     for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
       {
         phi_height.reinit(cell);
@@ -1402,7 +1404,6 @@ namespace SpaceDiscretization
         // convergence of the iterative method. In fact, the free-surface
         // must be very accurate here to preserve well-balancing at machine
         // accuracy.
-        const VectorizedArray<Number> epsilon = 1e-09;
         VectorizedArray<Number> zb_max_dry = -std::numeric_limits<double>::max();
         VectorizedArray<Number> n_dry_points = 0;
         std::bitset<phi_height.n_lanes> mask_cell;
@@ -1424,7 +1425,7 @@ namespace SpaceDiscretization
         if (mask_cell.any())
           {
             for (unsigned int i = 0; i < dofs_per_cell; ++i)
-              phi_height.submit_dof_value(-zb_max_dry + epsilon, i);
+              phi_height.submit_dof_value(-zb_max_dry + epsilon_lift, i);
             phi_height.set_dof_values(dst, 0, mask_cell);
           }
 
