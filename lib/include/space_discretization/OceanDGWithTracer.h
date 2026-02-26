@@ -156,6 +156,7 @@ namespace SpaceDiscretization
 
     double compute_errors_tracers(
       const Function<dim> &                             function,
+      const LinearAlgebra::distributed::Vector<Number> &solution_height,
       const LinearAlgebra::distributed::Vector<Number> &solution_tracer) const;
 
     using OceanoOperator<dim, n_tra, degree, n_points_1d>::bc;
@@ -612,6 +613,13 @@ namespace SpaceDiscretization
   // We precompute the diagonal mass-matrix outside the Jacobi iterator. Later into the
   // iterator, we read the residual, we sum the tracer mass term which depend on the
   // iterative solution. Finally we invert the mass-matrix and update the solution.
+  // For the inversion we introduce a second small tolerance parameter, chosen to be
+  // close to machine precision (1e-11). This parameter is required
+  // for the treatment of dry cells. In fully dry cells, the Newton iteration converges
+  // to a dry state within a round-off error. Due to such numerical round-off, the tracer
+  // matrix can be singular if the water depth is close to roundoff. To prevent the
+  // generation of spurious wet cells, quadrature points are classified as dry whenever
+  // $h<\epsilon$.
   //
   // A last comment is on the access to `phi_tracer.begin_dof_values` which is by pointer
   // and not, as usual, by value. This is necessary because the function returns a
@@ -627,6 +635,8 @@ namespace SpaceDiscretization
   {
     FEEvaluation<dim, -1, degree + 2, 1, Number> phi_height(data, cell_range, 0, 1);
     FEEvaluation<dim, -1, degree + 2, n_tra, Number> phi_tracer(data, cell_range, 2, 1);
+
+    const VectorizedArray<Number> epsilon_dry = 1e-11;
 
     for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
       {
@@ -644,7 +654,7 @@ namespace SpaceDiscretization
             const auto zb_q = data_quadrature_cell_1.get_data(cell, q);
             const auto mask_q =
             compare_and_apply_mask<SIMDComparison::less_than_or_equal>(
-              z_q, -zb_q, 0., 1.);
+              z_q, -zb_q + epsilon_dry, 0., 1.);
             n_dry_points += 1.-mask_q;
 
             h[q] = model.depth(z_q, zb_q);
@@ -902,6 +912,7 @@ namespace SpaceDiscretization
   template <int dim, int n_tra, int degree, int n_points_1d>
   double OceanoOperatorWithTracer<dim, n_tra, degree, n_points_1d>::compute_errors_tracers(
     const Function<dim> &                             function,
+    const LinearAlgebra::distributed::Vector<Number> &solution_height,
     const LinearAlgebra::distributed::Vector<Number> &solution_tracer) const
   {
     TimerOutput::Scope t(timer, "compute errors");
@@ -909,28 +920,37 @@ namespace SpaceDiscretization
     double             errors_squared = 0.;
     unsigned int dummy = 0;
 
-    data.template cell_loop<unsigned int, LinearAlgebra::distributed::Vector<Number>>(
+    data.template cell_loop<unsigned int, std::vector<LinearAlgebra::distributed::Vector<Number>>>(
         [&](const MatrixFree<dim, Number> &,
             unsigned int &,
-            const LinearAlgebra::distributed::Vector<Number> &src,
-            const std::pair<unsigned int, unsigned int>       &cell_range) {
+            const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
+            const std::pair<unsigned int, unsigned int>                   &cell_range) {
 
+          FEEvaluation<dim, -1, n_points_1d, 1, Number> phi_height(data, cell_range, 0, 1, 0);
           FEEvaluation<dim, -1, n_points_1d, n_tra, Number> phi_tracer(data, cell_range, 2, 0);
 
           for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
             {
-              VectorizedArray<Number> local_errors_squared = 0.;
+              phi_height.reinit(cell);
+              phi_height.gather_evaluate(src[0], EvaluationFlags::values);
+
               phi_tracer.reinit(cell);
-              phi_tracer.gather_evaluate(src, EvaluationFlags::values);
+              phi_tracer.gather_evaluate(src[1], EvaluationFlags::values);
+
+              VectorizedArray<Number> local_errors_squared = 0.;
               for (unsigned int q = 0; q < phi_tracer.n_q_points; ++q)
                 {
+                  const auto z_q = phi_height.get_value(q);
+                  const auto zb_q = data_quadrature_cell_0.get_data(cell, q)[0];
+                  const auto mask_q =
+                    compare_and_apply_mask<SIMDComparison::less_than_or_equal>(
+                      z_q, -zb_q, 0., 1.);
                   const auto error = evaluate_function_tracer<dim, Number, 1>(
                                        function,
                                        phi_tracer.quadrature_point(q),
                                        local_errors_squared)
                                    - phi_tracer.begin_values()[q];
-                  const auto JxW = phi_tracer.JxW(q);
-                  local_errors_squared += (error * error) * JxW;
+                  local_errors_squared += (error * error) * phi_tracer.JxW(q) * mask_q;
                 }
 
               for (unsigned int v = 0; v < data.n_active_entries_per_cell_batch(cell); ++v)
@@ -938,7 +958,7 @@ namespace SpaceDiscretization
             }
         },
         dummy,
-        solution_tracer);
+        {solution_height, solution_tracer});
 
     return std::sqrt(Utilities::MPI::sum(errors_squared, MPI_COMM_WORLD));
   }

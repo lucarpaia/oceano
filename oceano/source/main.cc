@@ -997,7 +997,8 @@ namespace Problem
 #ifdef OCEANO_WITH_TRACERS
       const double errors_tracers =
         oceano_operator.compute_errors_tracers(
-          ICBC::ExactSolution<dimension, n_variables>(time,prm), solution_tracer);
+          ICBC::ExactSolution<dimension, n_variables>(time,prm),
+          solution_height, solution_tracer);
 #endif
 
       const std::string quantity_name =
