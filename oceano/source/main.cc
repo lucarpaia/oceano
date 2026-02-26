@@ -1394,9 +1394,9 @@ namespace Problem
           << triangulation.n_global_active_cells() << std::endl;
     pcout << "Initial number of degrees of freedom: " << dof_handler_height.n_dofs()
              + dof_handler_discharge.n_dofs() + dof_handler_tracer.n_dofs()
-          << " ( = " << ( 1 + dim + n_tra ) << " [vars] x "
-          << triangulation.n_global_active_cells() << " [cells] x "
-          << Utilities::pow(fe_degree + 1, dim) << " [dofs/cell/var] )"
+          << ", " << ( 1 + dim + n_tra ) << " [vars], "
+          << triangulation.n_global_active_cells() << " [cells], "
+          << Utilities::pow(fe_degree + 1, dim) << " [dofs/cell/var]"
           << std::endl;
     pcout.get_stream().imbue(s);
 
