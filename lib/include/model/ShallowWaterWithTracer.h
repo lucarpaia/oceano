@@ -143,15 +143,9 @@ namespace Model
     void
     ShallowWaterWithTracer::set_vars_name()
   {
-    vars_name.push_back("free_surface");
-    for (unsigned int d = 0; d < dim; ++d)
-      vars_name.push_back("hu");
+    ShallowWater::set_vars_name <dim,n_tra>();
     for (unsigned int t = 0; t < n_tra; ++t)
-        vars_name.push_back("t_"+std::to_string(t+1));
-
-    for (unsigned int d = 0; d < dim; ++d)
-      postproc_vars_name.push_back("velocity");
-    postproc_vars_name.push_back("depth");
+      vars_name.push_back("t_"+std::to_string(t+1));
   }
 
   template <int dim, int n_tra, typename Number>
