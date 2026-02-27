@@ -106,6 +106,7 @@
 #if defined MODEL_SHALLOWWATERWITHTRACER
 #define OCEANO_WITH_TRACERS
 #endif
+// Activate global mass conservation checks:
 #undef  OCEANO_WITH_MASSCONSERVATIONCHECK
 
 // The include files are similar to the previous matrix-free tutorial programs with
@@ -364,7 +365,7 @@ namespace Problem
       std::map<double, std::vector<std::vector<double>>> pointHistory_data;
       std::vector<Point<dim>> point_vector;
 
-      std::map<double, std::array<double, 2>> integralHistory_data;
+      std::map<double, std::array<double, (n_tra==0) ? 2 : 4>> integralHistory_data;
 
       // variables
       std::vector<std::string> postproc_vars_name;
@@ -495,7 +496,7 @@ namespace Problem
         to_gnuplot << "# Requested variables: " << "free_surface"; // lrp: TODO read from model class
         for (unsigned int v = 0; v < n_postproc_vars; ++v)
           {
-             to_gnuplot << " " << postproc_vars_name[v];
+             to_gnuplot << ", " << postproc_vars_name[v];
           }
         to_gnuplot << '\n';
         to_gnuplot << "#\n";
@@ -518,13 +519,26 @@ namespace Problem
 
       std::ofstream to_gnuplot(filename_integral);
 
-      to_gnuplot << "# Requested variables: " << "depth\n";
-      to_gnuplot << "# Time " << " " << "total_mass" << " " << "boundary_flux\n";
+      to_gnuplot << "# Requested variables: " << "depth";
+#ifdef OCEANO_WITH_TRACERS
+      to_gnuplot << ", tracer";
+#endif
+      to_gnuplot << "\n";
+
+      to_gnuplot << "# Time, total_mass, boundary_mass_flux";
+#ifdef OCEANO_WITH_TRACERS
+      to_gnuplot << ", total_tracer_mass, boundary_tracer_flux";
+#endif
+      to_gnuplot << "\n";
 
       for (auto i : integralHistory_data)
         {
           to_gnuplot << i.first << " " << std::setprecision(14) << i.second[0]
                                 << " " << std::setprecision(12) << i.second[1]
+#ifdef OCEANO_WITH_TRACERS
+                                << " " << std::setprecision(14) << i.second[2]
+                                << " " << std::setprecision(12) << i.second[3]
+#endif
                                 << '\n';
         }
       to_gnuplot.close();
@@ -1229,7 +1243,12 @@ namespace Problem
       // balance is strictly related to the scheme, here we do almost nothing since much of
       // the work has been done into the space discretization class, `OceanoOperator`.
       postprocessor.integralHistory_data[time] =
-        {{oceano_operator.check_mass_cell_integral, oceano_operator.check_mass_boundary_integral}};
+        {{oceano_operator.check_mass_cell_integral, oceano_operator.check_mass_boundary_integral
+#ifdef OCEANO_WITH_TRACERS
+         ,oceano_operator.check_tracer_mass_cell_integral
+         ,oceano_operator.check_tracer_mass_boundary_integral
+#endif
+        }};
     }
 
     if (postprocessor.do_meshsize)

@@ -213,7 +213,7 @@ namespace SpaceDiscretization
     check_mass(
       const Number                                                   factor_residual,
       const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
-      LinearAlgebra::distributed::Vector<Number>                    &solution_height);
+      const LinearAlgebra::distributed::Vector<Number>              &solution_height);
 
     void project_hydro(
       const Function<dim>                                     &function,
@@ -2158,7 +2158,7 @@ namespace SpaceDiscretization
   void OceanoOperator<dim, n_tra, degree, n_points_1d>::check_mass(
     const Number                                                   factor_residual,
     const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
-    LinearAlgebra::distributed::Vector<Number>                    &solution_height)
+    const LinearAlgebra::distributed::Vector<Number>              &solution_height)
   {
 
     {

@@ -208,6 +208,11 @@ namespace TimeIntegrator
   // operator evaluation. Finally, when we are at the last stage, we must
   // skip the computation of the vector $\mathbf{r}_{s+1}$ as there is no
   // coefficient $a_s$ available (nor will it be used).
+  //
+  // For mass conservation, we have not used a different code path for
+  // internal and for the last stage. The reason is that we only need the
+  // mass at the end of the time step, thus the mass at internal stages is
+  // simply overwritten.
   template <typename VectorType, typename Operator>
   void ExplicitRungeKuttaIntegrator::perform_time_step(
     Operator                &pde_operator,
@@ -272,6 +277,12 @@ namespace TimeIntegrator
     pde_operator.check_mass(b_i[0],
                             vec_ri,
                             solution_height);
+#ifdef OCEANO_WITH_TRACERS
+    pde_operator.check_tracer_mass(b_i[0],
+                                   vec_ri,
+                                   solution_height,
+                                   solution_tracer);
+#endif
 #endif
 
     for (unsigned int stage = 1; stage < ci.size(); ++stage)
@@ -313,6 +324,12 @@ namespace TimeIntegrator
         pde_operator.check_mass(b_i[stage],
                                 vec_ri,
                                 solution_height);
+#ifdef OCEANO_WITH_TRACERS
+        pde_operator.check_tracer_mass(b_i[stage],
+                                       vec_ri,
+                                       solution_height,
+                                       solution_tracer);
+#endif
 #endif
       }
   }
