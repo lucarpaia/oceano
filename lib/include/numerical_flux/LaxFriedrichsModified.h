@@ -48,8 +48,7 @@ namespace NumericalFlux
   //
   // In this and the following functions, we use `z` for the mass variable,
   // (for us the water height or the free-surface position) and `q`
-  // stands for the momentum variable (for us it could be the discharge or
-  // velocity, depending on the selected model).
+  // stands for the discharge.
   // We use variable suffixes `_m` and
   // `_p` to indicate quantities derived from $\mathbf{w}^-$ and $\mathbf{w}^+$,
   // i.e., values "here" and "there" relative to the current cell when looking
@@ -69,8 +68,8 @@ namespace NumericalFlux
                               const Tensor<1, dim, Number> &q_m,
                               const Tensor<1, dim, Number> &q_p,
                               const Tensor<1, dim, Number> &normal,
-                              const Number                  data_m,
-                              const Number                  data_p) const;
+                              const Number                  zb_m,
+                              const Number                  zb_p) const;
 
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
@@ -80,8 +79,8 @@ namespace NumericalFlux
                              const Tensor<1, dim, Number> &q_m,
                              const Tensor<1, dim, Number> &q_p,
                              const Tensor<1, dim, Number> &normal,
-                             const Number                  data_m,
-                             const Number                  data_p) const;
+                             const Number                  zb_m,
+                             const Number                  zb_p) const;
 
     template <int dim, int n_tra, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
@@ -93,8 +92,8 @@ namespace NumericalFlux
                               const Tensor<1, n_tra, Number> &t_m,
                               const Tensor<1, n_tra, Number> &t_p,
                               const Tensor<1, dim, Number>   &normal,
-                              const Number                    data_m,
-                              const Number                    data_p) const;
+                              const Number                    zb_m,
+                              const Number                    zb_p) const;
 
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
@@ -106,8 +105,8 @@ namespace NumericalFlux
                               const Number                  t_m,
                               const Number                  t_p,
                               const Tensor<1, dim, Number> &normal,
-                              const Number                  data_m,
-                              const Number                  data_p) const;
+                              const Number                  zb_m,
+                              const Number                  zb_p) const;
   };
 
 
@@ -129,13 +128,15 @@ namespace NumericalFlux
   // \mathbf{n^-}$, where the factor $\lambda =
   // \max\left(\|\mathbf{u}^-\|+c^-, \|\mathbf{u}^+\|+c^+\right)$ gives the
   // maximal wave speed and $c = \sqrt{g h}$ is the speed of the gravity
-  // waves.
+  // waves. We use the so-called "hydrostatic reconstruction" for a
+  // discontinuous bathymetry $z_b=\min\left(z_b^+, z_b^-\right)$. This
+  // is necessary, in presence of discontinuous bathymetry, to have positivity
+  // but it also avoids spurious fluxes.
   //
   // Since the numerical flux is multiplied by the normal vector in the weak
   // form, we multiply by the result by the normal vector for all terms in the
   // equation. In these multiplications, the `operator*` defined above enables
   // a compact notation similar to the mathematical definition.
-
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Number
@@ -145,21 +146,28 @@ namespace NumericalFlux
       const Tensor<1, dim, Number> &q_m,
       const Tensor<1, dim, Number> &q_p,
       const Tensor<1, dim, Number> &normal,
-      const Number                  data_m,
-      const Number                  data_p) const
+      const Number                  zb_m,
+      const Number                  zb_p) const
   {
-    const auto v_m = model.velocity<dim>(z_m, q_m, data_m);
-    const auto v_p = model.velocity<dim>(z_p, q_p, data_p);
+    const auto v_m = model.velocity<dim>(z_m, q_m, zb_m);
+    const auto v_p = model.velocity<dim>(z_p, q_p, zb_p);
 
     const auto lambda_m = std::abs(v_m * normal)
-      + std::sqrt(model.square_wavespeed(z_m, data_m));
+      + std::sqrt(model.square_wavespeed(z_m, zb_m));
     const auto lambda_p = std::abs(v_p * normal)
-      + std::sqrt(model.square_wavespeed(z_p, data_p));
+      + std::sqrt(model.square_wavespeed(z_p, zb_p));
 
     const auto lambda = std::max(lambda_p, lambda_m);
 
-    return 0.5 * (q_m * normal + q_p * normal) +
-           0.5 * lambda * (z_m - z_p);
+    const auto zb_star = std::min(zb_m, zb_p);
+    const auto flux_m = model.mass_flux<dim>(z_m, q_m, zb_star);
+    const auto flux_p = model.mass_flux<dim>(z_p, q_p, zb_star);
+
+    const auto zcorr_m = std::max(z_m, -zb_star);
+    const auto zcorr_p = std::max(z_p, -zb_star);
+
+    return 0.5 * (flux_m * normal + flux_p * normal) +
+           0.5 * lambda * (zcorr_m - zcorr_p);
   }
 
   template <int dim, typename Number>
@@ -171,39 +179,32 @@ namespace NumericalFlux
       const Tensor<1, dim, Number> &q_m,
       const Tensor<1, dim, Number> &q_p,
       const Tensor<1, dim, Number> &normal,
-      const Number                  data_m,
-      const Number                  data_p) const
+      const Number                  zb_m,
+      const Number                  zb_p) const
   {
-    const auto v_m = model.velocity<dim>(z_m, q_m, data_m);
-    const auto v_p = model.velocity<dim>(z_p, q_p, data_p);
+    const auto v_m = model.velocity<dim>(z_m, q_m, zb_m);
+    const auto v_p = model.velocity<dim>(z_p, q_p, zb_p);
 
     const auto lambda_m = std::abs(v_m * normal)
-      + std::sqrt(model.square_wavespeed(z_m, data_m));
+      + std::sqrt(model.square_wavespeed(z_m, zb_m));
     const auto lambda_p = std::abs(v_p * normal)
-      + std::sqrt(model.square_wavespeed(z_p, data_p));
+      + std::sqrt(model.square_wavespeed(z_p, zb_p));
 
     const auto lambda = std::max(lambda_p, lambda_m);
 
-    const auto flux_m = model.momentum_adv_flux<dim>(z_m, q_m, data_m);
-    const auto flux_p = model.momentum_adv_flux<dim>(z_p, q_p, data_p);
+    const auto zb_star = std::min(zb_m, zb_p);
+    const auto hu_m = model.mass_flux<dim>(z_m, q_m, zb_star);
+    const auto hu_p = model.mass_flux<dim>(z_p, q_p, zb_star);
+    const auto flux_m = model.momentum_adv_flux<dim>(z_m, hu_m, zb_m);
+    const auto flux_p = model.momentum_adv_flux<dim>(z_p, hu_p, zb_p);
 
     return 0.5 * (flux_m * normal + flux_p * normal) +
-           0.5 * lambda * (q_m - q_p);
+           0.5 * lambda * (hu_m - hu_p);
   }
 
 #ifdef OCEANO_WITH_TRACERS
-  // The tracer numerical flux follows similarly. We add a comment
-  // on the presence of an averaged bathymetry in the upwind part where
-  // jumps have to be computed. Instead of considering, as it would be more
-  // natural, a jump in the bathymetry as well, we use an average value. The
-  // reason is to verify, on all bathyemtries even discontinuous ones, the
-  // consistency with the continuity. If you consider a constant tracer, the
-  // numerical flux collapses to the numerical mass flux where the upwind part
-  // is proportional to the jump in the water height and not to the jump in the
-  // bathymetry that would cause a violation of well-balancing. To summarize,
-  // using a simple bathyemtry average in the jump term, make the
-  // depth-integrated tracer jump dimensionally consistent and preserve the
-  // consistency with the continuity.
+  // The tracer numerical flux follows similarly to the numerical mass flux as we
+  // have to preserve the consistency with the continuity equation.
   template <int dim, int n_tra, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, n_tra, Number>
@@ -215,27 +216,30 @@ namespace NumericalFlux
       const Tensor<1, n_tra, Number>  &t_m,
       const Tensor<1, n_tra, Number>  &t_p,
       const Tensor<1, dim, Number>    &normal,
-      const Number                     data_m,
-      const Number                     data_p) const
+      const Number                     zb_m,
+      const Number                     zb_p) const
   {
-    const auto v_m = model.velocity<dim>(z_m, q_m, data_m);
-    const auto v_p = model.velocity<dim>(z_p, q_p, data_p);
+    const auto v_m = model.velocity<dim>(z_m, q_m, zb_m);
+    const auto v_p = model.velocity<dim>(z_p, q_p, zb_p);
 
     const auto lambda_m = std::abs(v_m * normal)
-      + std::sqrt(model.square_wavespeed(z_m, data_m));
+      + std::sqrt(model.square_wavespeed(z_m, zb_m));
     const auto lambda_p = std::abs(v_p * normal)
-      + std::sqrt(model.square_wavespeed(z_p, data_p));
+      + std::sqrt(model.square_wavespeed(z_p, zb_p));
 
     const auto lambda = std::max(lambda_p, lambda_m);
 
-    const auto flux_m = model.tracer_adv_flux<dim, n_tra>(q_m, t_m);
-    const auto flux_p = model.tracer_adv_flux<dim, n_tra>(q_p, t_p);
-    const auto data = 0.5 * (data_m+data_p);
+    const auto zb_star = std::min(zb_m, zb_p);
+    const auto flux_m = model.tracer_adv_flux<dim, n_tra>(z_m, q_m, t_m, zb_star);
+    const auto flux_p = model.tracer_adv_flux<dim, n_tra>(z_p, q_p, t_p, zb_star);
+
+    const auto h_m = model.depth(z_m, zb_star);
+    const auto h_p = model.depth(z_p, zb_star);
 
     Tensor<1, n_tra, Number> numflux;
     for (unsigned int t = 0; t < n_tra; ++t)
       numflux[t] = 0.5 * (flux_m[t] * normal + flux_p[t] * normal) +
-                   0.5 * lambda * ((z_m+data) * t_m[t] - (z_p+data) * t_p[t]);
+                   0.5 * lambda * (h_m * t_m[t] - h_p * t_p[t]);
 
      return numflux;
   }
@@ -251,25 +255,28 @@ namespace NumericalFlux
       const Number                  t_m,
       const Number                  t_p,
       const Tensor<1, dim, Number> &normal,
-      const Number                  data_m,
-      const Number                  data_p) const
+      const Number                  zb_m,
+      const Number                  zb_p) const
   {
-    const auto v_m = model.velocity<dim>(z_m, q_m, data_m);
-    const auto v_p = model.velocity<dim>(z_p, q_p, data_p);
+    const auto v_m = model.velocity<dim>(z_m, q_m, zb_m);
+    const auto v_p = model.velocity<dim>(z_p, q_p, zb_p);
 
     const auto lambda_m = std::abs(v_m * normal)
-      + std::sqrt(model.square_wavespeed(z_m, data_m));
+      + std::sqrt(model.square_wavespeed(z_m, zb_m));
     const auto lambda_p = std::abs(v_p * normal)
-      + std::sqrt(model.square_wavespeed(z_p, data_p));
+      + std::sqrt(model.square_wavespeed(z_p, zb_p));
 
     const auto lambda = std::max(lambda_p, lambda_m);
 
-    const auto flux_m = model.tracer_adv_flux(q_m, t_m);
-    const auto flux_p = model.tracer_adv_flux(q_p, t_p);
-    const auto data = 0.5 * (data_m+data_p);
+    const auto zb_star = std::min(zb_m, zb_p);
+    const auto flux_m = model.tracer_adv_flux(z_m, q_m, t_m, zb_star);
+    const auto flux_p = model.tracer_adv_flux(z_p, q_p, t_p, zb_star);
+
+    const auto h_m = model.depth(z_m, zb_star);
+    const auto h_p = model.depth(z_p, zb_star);
 
     return 0.5 * (flux_m * normal + flux_p * normal) +
-           0.5 * lambda * ((z_m+data) * t_m - (z_p+data) * t_p);
+           0.5 * lambda * (h_m * t_m - h_p * t_p);
   }
 #endif
 } // namespace NumericalFlux

@@ -46,8 +46,10 @@ namespace ICBC
   // cpp key:
 #undef  ICBC_LAKEATREST_BATHYMETRYDISCONTINUOUS
   // You can also check the well-balanced property of the scheme with respect to the
-  // "water-at-rest" state, without the perturbation. Define the following cpp key:
-#undef  ICBC_LAKEATREST_WATERATREST
+  // "water-at-rest" state, without the perturbation. Define one of the following cpp key,
+  // depending if you want to test the wet or the dry lake at rest test.
+#undef  ICBC_LAKEATREST_WATERATRESTWET
+#undef  ICBC_LAKEATREST_WATERATRESTDRY
 
   using namespace dealii;
   
@@ -56,147 +58,30 @@ namespace ICBC
   // the bassin depth far from the hill:
   constexpr double h0      = 1.0;
   // the amplitude of the perturbation:
+#if defined ICBC_LAKEATREST_WATERATRESTWET || defined ICBC_LAKEATREST_WATERATRESTDRY
+  constexpr double a0      = 0.0;
+#else
   constexpr double a0      = 0.01;
+#endif
+  // and the height of the hill:
+#if defined ICBC_LAKEATREST_WATERATRESTDRY
+  constexpr double b0      = 1.3;
+#else
 #if defined ICBC_LAKEATREST_BATHYMETRYDISCONTINUOUS
   constexpr double b0      = 0.65;
 #else
   constexpr double b0      = 0.80;
 #endif
-  // The initial set specify a non trivial initial state
+#endif
+  // We specify a non trivial initial state
   // (a water height level different from zero). This is realized thanks to the
   // following offset:
   constexpr double z0      = 1.0;
 
-  // @sect3{Equation data}
-
-  // The class `ExactSolution` defines analytical functions that can be useful
-  // to define initial and boundary conditions. Apart for the template for the
-  // dimension which is in common with the base `Function` class, we have added
-  // the number of variables.
-  template <int dim, int n_vars>  
-  class ExactSolution : public Function<dim>
-  {
-  public:
-    ExactSolution(const double time,
-                  IO::ParameterHandler &/*prm*/)
-      : Function<dim>(n_vars, time)
-    {}
-
-    virtual double value(const Point<dim> & p,
-                         const unsigned int component = 0) const override;
-  };  
-
-  // We code the exact solution as the lake at rest state. In the Oceano
-  // variables (free-surface and momentum) it is the null vector. If you
-  // set the amplitude to zero you can use the exact solution to check
-  // that the method preserve the initial condition. We check that the test runs
-  // in two-dimensions (you cannot run this test in one dimension).
-  template <int dim, int n_vars>
-  double ExactSolution<dim, n_vars>::value(const Point<dim> & /*x*/,
-                                           const unsigned int component) const
-  {
-    Assert(dim == 2, ExcNotImplemented());
-    if (component == 0)
-      return z0;
-    else if (component == 1)
-      return 0.;
-    else
-      return 0.;
-  }
-
 
 
   // @sect3{Equation data}
   //
-  // The `Ic` and `Bc` classes define the initial/boundary condition for the
-  // test-case. They are very similar in the templates and the constructor.
-  // They both take as argument the parameter class and they stored it
-  // internally. This means that we can read the Parameter file from
-  // anywhere when we are implementing ic/bc and we can access constants or
-  // filenames from which the initial/boundary data depends.
-  // The initial condition is realized thanks to a derived class of the
-  // deal.II `Function` class that define many type of time and space functions.
-  // The initial condition class overloads the constructor of the base class
-  // providing automatically a zero time. Note that, apart for the template for
-  // the dimension which is in common with the base `Function` class, we have
-  // added the number of variables to construct the base class with the correct
-  // number of dimension and do some sanity checks. 
-  // We return either the water depth or the momentum depending on which component
-  // is requested. Two sanity checks have been added. One is to control that the
-  // space dimension is two (you cannot run this test in one dimension) and
-  // another one on the number of variables, that for two-dimensional shallow
-  // water equation is three.
-  //
-  // An absorbing outflow boundary condition is specified on the left and
-  // right boundary of the domain. In this way we let the wave smoothly go out from the
-  // the domain. Top and bottom boundaries are walls. For the water-at-rest test
-  // we use a closed basin with four walls. This avoids spurious effects from the
-  // boundaries.
-  template <int dim, int n_vars>
-  class Ic : public Function<dim>
-  {
-  public:
-    Ic(IO::ParameterHandler &/*prm*/)
-      : Function<dim>(n_vars, 0.)
-    {}
-    ~Ic(){};
-
-    virtual double value(const Point<dim> & p,
-                         const unsigned int component = 0) const override;
-  };
-
-  template <int dim, int n_vars>
-  double Ic<dim, n_vars>::value(const Point<dim>  &x,
-                                const unsigned int component) const
-  {
-    Assert(dim == 2, ExcNotImplemented());
-    Assert(n_vars == 3, ExcNotImplemented());
-
-    if (component == 0)
-      if ((0.05 <= x[0]) && (x[0] <= 0.15))
-#ifndef ICBC_LAKEATREST_WATERATREST
-        return z0 + a0;
-#else
-        return z0;
-#endif
-      else
-        return z0;
-    else
-      return 0.;
-  }
-
-
-
-  template <int dim, int n_vars>  
-  class BcLakeAtRest : public BcBase<dim, n_vars>
-  {
-  public:
-  
-    BcLakeAtRest(IO::ParameterHandler &prm)
-      : prm(prm)
-    {}
-    ~BcLakeAtRest(){};
-         
-    void set_boundary_conditions() override;
-
-  private:
-    ParameterHandler &prm;
-  };
-
-  template <int dim, int n_vars>
-  void BcLakeAtRest<dim, n_vars>::set_boundary_conditions()
-  {
-#ifndef ICBC_LAKEATREST_WATERATREST
-    this->set_absorbing_outflow_boundary(
-      1, std::make_unique<ExactSolution<dim, n_vars>>(0, prm));
-#else
-    this->set_wall_boundary(1);
-#endif
-    this->set_wall_boundary(0);
-  }         
-
-
-
   // We need a class to handle the problem data. Problem data are case dependent; for this
   // reason it appears inside the `ICBC` namespace. The data in general depends on
   // both time and space. Deal.II has a class `Function` which returns function
@@ -215,7 +100,7 @@ namespace ICBC
   // names which contains the may be imported too.
   //
   // For this case we need to define the bathyemtry data values.
-  template <int dim>  
+  template <int dim>
   class ProblemData : public Function<dim>
   {
   public:
@@ -263,6 +148,128 @@ namespace ICBC
       return lakeAtRest_bathymetry(x);
     else
       return 0.0;
+  }
+
+
+
+  // The class `ExactSolution` defines analytical functions that can be useful
+  // to define initial and boundary conditions. Apart for the template for the
+  // dimension which is in common with the base `Function` class, we have added
+  // the number of variables.
+  template <int dim, int n_vars>  
+  class ExactSolution : public Function<dim>
+  {
+  public:
+    ExactSolution(const double time,
+                  IO::ParameterHandler &/*prm*/)
+      : Function<dim>(n_vars, time)
+    {}
+
+    virtual double value(const Point<dim> & p,
+                         const unsigned int component = 0) const override;
+  };  
+
+  // We code the exact solution as the lake at rest state. In the Oceano
+  // variables (free-surface and momentum) it is the null vector. If you
+  // set the amplitude to zero you can use the exact solution to check
+  // that the method preserve the initial condition. We check that the test runs
+  // in two-dimensions (you cannot run this test in one dimension).
+  template <int dim, int n_vars>
+  double ExactSolution<dim, n_vars>::value(const Point<dim> & /*x*/,
+                                           const unsigned int component) const
+  {
+    Assert(dim == 2, ExcNotImplemented());
+    if (component == 0)
+      return z0;
+    else if (component == 1)
+      return 0.;
+    else
+      return 0.;
+  }
+
+
+
+  // The `Ic` and `Bc` classes define the initial/boundary condition for the
+  // test-case. They are very similar in the templates and the constructor.
+  // They both take as argument the parameter class and they stored it
+  // internally. This means that we can read the Parameter file from
+  // anywhere when we are implementing ic/bc and we can access constants or
+  // filenames from which the initial/boundary data depends.
+  // The initial condition is realized thanks to a derived class of the
+  // deal.II `Function` class that define many type of time and space functions.
+  // The initial condition class overloads the constructor of the base class
+  // providing automatically a zero time. Note that, apart for the template for
+  // the dimension which is in common with the base `Function` class, we have
+  // added the number of variables to construct the base class with the correct
+  // number of dimension and do some sanity checks. 
+  // We return either the water depth or the momentum depending on which component
+  // is requested. Two sanity checks have been added. One is to control that the
+  // space dimension is two (you cannot run this test in one dimension) and
+  // another one on the number of variables, that for two-dimensional shallow
+  // water equation is three.
+  //
+  // An absorbing outflow boundary condition is specified on the left and
+  // right boundary of the domain. In this way we let the wave smoothly go out from the
+  // the domain. Top and bottom boundaries are walls. For the water-at-rest test
+  // we use a closed basin with four walls. This avoids spurious effects from the
+  // boundaries.
+  template <int dim, int n_vars>
+  class Ic : public Function<dim>
+  {
+  public:
+    Ic(IO::ParameterHandler &/*prm*/)
+      : Function<dim>(n_vars, 0.)
+    {}
+    ~Ic(){};
+
+    virtual double value(const Point<dim> & p,
+                         const unsigned int component = 0) const override;
+  };
+
+  template <int dim, int n_vars>
+  double Ic<dim, n_vars>::value(const Point<dim>  &x,
+                                const unsigned int component) const
+  {
+    Assert(dim == 2, ExcNotImplemented());
+    Assert(n_vars == 3, ExcNotImplemented());
+
+    if (component == 0)
+      if ((0.05 <= x[0]) && (x[0] <= 0.15))
+        return z0 + a0;
+      else
+        return z0;
+    else
+      return 0.;
+  }
+
+
+
+  template <int dim, int n_vars>  
+  class BcLakeAtRest : public BcBase<dim, n_vars>
+  {
+  public:
+  
+    BcLakeAtRest(IO::ParameterHandler &prm)
+      : prm(prm)
+    {}
+    ~BcLakeAtRest(){};
+         
+    void set_boundary_conditions() override;
+
+  private:
+    ParameterHandler &prm;
+  };
+
+  template <int dim, int n_vars>
+  void BcLakeAtRest<dim, n_vars>::set_boundary_conditions()
+  {
+    this->set_wall_boundary(0);
+#if defined ICBC_LAKEATREST_WATERATRESTWET || defined ICBC_LAKEATREST_WATERATRESTDRY
+    this->set_wall_boundary(1);
+#else
+    this->set_absorbing_outflow_boundary(
+      1, std::make_unique<ExactSolution<dim, n_vars>>(0, prm));
+#endif
   }
 } // namespace ICBC
 

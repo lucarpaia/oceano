@@ -83,8 +83,8 @@ namespace NumericalFlux
       numerical_presflux_strong(const Number                     z_m,
                                 const Number                     z_p,
                                 const Tensor<1, dim, Number>    &normal,
-                                const Number                     data_m,
-                                const Number                     data_p) const;
+                                const Number                     zb_m,
+                                const Number                     zb_p) const;
 
 #if defined MODEL_EULER
     Model::Euler model;
@@ -103,6 +103,12 @@ namespace NumericalFlux
   // We implement the contribution to the numerical flux coming from the terms that
   // have been approximated with the strong formulation of discontinuos Galerkin.
   // This is the case for the pressure term in the shallow water equations.
+  // Note the correction for a wet-dry interface where we replace the maximum between
+  // the free-surface and the bathymetry which nullify spurious pressure or wrong
+  // pressure flux. Coherently with the tracer flux we use the so-called "hydrostatic
+  // reconstruction" for a discontinuous bathymetry $z_b=\min\left(z_b^+, z_b^-\right)$.
+  // This is necessary, in presence of discontinuous bathymetry, to avoid spurious
+  // fluxes.
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
@@ -110,18 +116,21 @@ namespace NumericalFlux
       const Number                      z_m,
       const Number                      z_p,
       const Tensor<1, dim, Number>     &normal,
-      const Number                      data_m,
-      const Number                      data_p) const
+      const Number                      zb_m,
+      const Number                      zb_p) const
   {
-    const auto h_p = z_p + data_p;
+    const auto zb_star = std::min(zb_m, zb_p);
+    const auto h_p = model.depth(z_p, zb_star);
+    const auto zcorr_m = std::max(z_m, -zb_star);
+    const auto zcorr_p = std::max(z_p, -zb_star);
 #define NUMERICALFLUXBASE_CENTER
 #undef  NUMERICALFLUXBASE_OUTER
 #if defined NUMERICALFLUXBASE_CENTER
-    const auto h_m = z_m + data_m;
-    return model.g * 0.25 * (h_p + h_m) * (z_p - z_m) * normal;
+    const auto h_m = model.depth(z_m, zb_star);
+    return model.g * 0.25 * (h_p + h_m) * (zcorr_p - zcorr_m) * normal;
 #elif defined NUMERICALFLUXBASE_OUTER
-    (void) data_m;
-    return model.g * 0.5 * h_p * (z_p - z_m) * normal;
+    (void) zb_m;
+    return model.g * 0.5 * h_p * (zcorr_p - zcorr_m) * normal;
 #endif
   }
    

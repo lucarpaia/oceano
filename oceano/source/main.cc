@@ -56,6 +56,7 @@
 #undef  ICBC_LAKEATREST
 #undef  ICBC_TRACERADVECTION
 #undef  ICBC_CHANNELFLOW
+#undef  ICBC_THACKEROSCILLATIONS2D
 #define ICBC_REALISTIC
 // We have two models: a non-hydrostatic Euler model for perfect gas which was the
 // original model coded in the deal.II example and the shallow water model. The Euler model
@@ -88,12 +89,12 @@
 // of course related and it is recommended to use the same model for both:
 #define PHYSICS_DIFFUSIONCOEFFICIENTCONSTANT
 #undef  PHYSICS_DIFFUSIONCOEFFICIENTSMAGORINSKY
-// We end with a tuner class for the AMR:
-#undef  AMR_HEIGHTGRADIENT
-#define AMR_VORTICITY
-#undef  AMR_TRACERGRADIENT
-#undef  AMR_BATHYMETRY
-#undef  AMR_FROMFILE
+// We end with the error estimate for AMR:
+#undef  HPOCEANO_ERRORHEIGHTGRADIENT
+#define HPOCEANO_ERRORVORTICITY
+#undef  HPOCEANO_ERRORTRACERGRADIENT
+#undef  HPOCEANO_ERRORBATHYMETRY
+#undef  HPOCEANO_ERRORFROMFILE
 //
 //
 //
@@ -113,8 +114,8 @@
 // Activate global mass conservation checks:
 #undef  OCEANO_WITH_MASSCONSERVATIONCHECK
 
-// The include files are similar to the previous matrix-free tutorial programs
-// step-37, step-48, and step-59
+// The include files are similar to the previous matrix-free tutorial programs with
+// hp-adaptation
 #include <deal.II/base/conditional_ostream.h>
 #include <deal.II/base/function.h>
 #include <deal.II/base/logstream.h>
@@ -133,6 +134,9 @@
 #include <deal.II/grid/grid_generator.h>
 #include <deal.II/grid/tria.h>
 #include <deal.II/grid/grid_in.h>
+
+#include <deal.II/hp/fe_collection.h>
+#include <deal.II/hp/refinement.h>
 
 #include <deal.II/lac/affine_constraints.h>
 #include <deal.II/lac/la_parallel_vector.h>
@@ -169,7 +173,8 @@
 #include <space_discretization/OceanDG.h>
 #include <space_discretization/OceanDGWithTracer.h>
 #include <io/CommandLineParser.h>
-#include <amr/AmrTuner.h>
+#include <deal.II_oceano/hpTuner.h>
+
 // The following files are included depending on
 // the Preprocessor keys. This is necessary because 
 // we have done a limited use of virtual classes; on the contrary 
@@ -196,6 +201,8 @@
 #include <icbc/Icbc_TracerAdvection.h>
 #elif defined ICBC_CHANNELFLOW
 #include <icbc/Icbc_ChannelFlow.h>
+#elif defined ICBC_THACKEROSCILLATIONS2D
+#include <icbc/Icbc_ThackerOscillations2d.h>
 #elif defined ICBC_REALISTIC
 #include <icbc/Icbc_Realistic.h>
 #endif
@@ -205,21 +212,30 @@ namespace Problem
   using namespace dealii;
 
   // We collect some parameters that control the execution of the program at the top of the
-  // file. These are parameters that the user should not change for operational 
-  // simuations. They can be thus considered known at compile time leading, I guess,
-  // to some optimization. Besides the dimension and polynomial degree we want to run with, we
-  // also specify a number of points in the Gaussian quadrature formula we
-  // want to use for the nonlinear terms in the shallow water equations.
+  // file. These are parameters that the user should not change for operational simuations.
+  // They can be considered known at compile time leading to some optimization.
+  // The variable type is a template parameter that should be editable, depending on the
+  // specific application:
+  using Number = double;
+  // Besides the problem dimension, which is two, and polynomial degree we want to run with:
   constexpr unsigned int dimension            = 2;
   constexpr unsigned int fe_degree            = 1;
+  // we also specify a number of points in the Gauss-Legendre quadrature formula we
+  // want to use for the volume terms:
   constexpr unsigned int n_q_points_1d        = floor(1.5*fe_degree) + 1;
+  // The number of tracers:
 #if defined MODEL_SHALLOWWATERWITHTRACER
   constexpr unsigned int n_tracers            = 1;
 #endif
-
-  using Number = double;
-
-  // Next off is the choice of the time integrator scheme:
+  // and the maximum number of iterations for the iterative method that invert the
+  // mass matrix in the continuity and in the tracer equation. For wet-dry cells convergence
+  // is fast so a few iterations are enough, for wet cells the iterative method is basically
+  // a Jacobi method that allows to go beyond first order mass lumping. Again a few iterations
+  // are a good threshold beteween the error constant and computational efficiency:
+  constexpr unsigned int max_iteration_height = 3;
+  constexpr unsigned int max_iteration_tracer = 5;
+  // Next off is the choice of the time integrator scheme: please check the time integrator
+  // class to see the list of all possible time integrators:
 #if defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
   constexpr TimeIntegrator::ExplicitRungeKuttaScheme rk_scheme = TimeIntegrator::stage_3_order_2;
 #elif defined TIMEINTEGRATOR_ADDITIVERUNGEKUTTA
@@ -230,7 +246,7 @@ namespace Problem
   //
   // The user should stop here. The next lines are a consistency check between
   // the parameters and the preprocessors plus we set derived parameters that are
-  // also known at compile time:
+  // also known at compile time.
 #if defined MODEL_EULER
   constexpr unsigned int n_tracers            = 1;
 #elif defined MODEL_SHALLOWWATER
@@ -291,7 +307,10 @@ namespace Problem
       const ICBC::Ic<dim, 1+dim+n_tra>            ic,
       LinearAlgebra::distributed::Vector<Number> &postprocess_velocity);
     void refine_grid(
-      const Amr::AmrTuner                        &amr_tuner,
+      const hpOceano::hpTuner                    &hp_tuner,
+      LinearAlgebra::distributed::Vector<Number> &postprocess_velocity);
+    void refine_degree(
+      const hpOceano::hpTuner                    &hp_tuner,
       LinearAlgebra::distributed::Vector<Number> &postprocess_velocity);
 
     LinearAlgebra::distributed::Vector<Number> solution_height;
@@ -302,16 +321,12 @@ namespace Problem
 
     ConditionalOStream pcout;
 
-#ifdef DEAL_II_WITH_P4EST
     parallel::distributed::Triangulation<dim> triangulation;
-#else
-    Triangulation<dim> triangulation;
-#endif
 
-    FESystem<dim>   fe_height;
-    FESystem<dim>   fe_discharge;
+    hp::FECollection<dim> fe_collection_height;
+    hp::FECollection<dim> fe_collection_discharge;
 #ifdef OCEANO_WITH_TRACERS
-    FESystem<dim>   fe_tracer;
+    hp::FECollection<dim> fe_collection_tracer;
 #endif
 
     MappingQ<dim>   mapping;
@@ -486,7 +501,7 @@ namespace Problem
         to_gnuplot << "# Requested variables: " << "free_surface"; // lrp: TODO read from model class
         for (unsigned int v = 0; v < n_postproc_vars; ++v)
           {
-             to_gnuplot << " " << postproc_vars_name[v];
+             to_gnuplot << ", " << postproc_vars_name[v];
           }
         to_gnuplot << '\n';
         to_gnuplot << "#\n";
@@ -509,8 +524,17 @@ namespace Problem
 
       std::ofstream to_gnuplot(filename_integral);
 
-      to_gnuplot << "# Requested variables: " << "depth\n";
-      to_gnuplot << "# Time " << " " << "total_mass" << " " << "boundary_flux\n";
+      to_gnuplot << "# Requested variables: " << "depth";
+#ifdef OCEANO_WITH_TRACERS
+      to_gnuplot << ", tracer";
+#endif
+      to_gnuplot << "\n";
+
+      to_gnuplot << "# Time, total_mass, boundary_mass_flux";
+#ifdef OCEANO_WITH_TRACERS
+      to_gnuplot << ", total_tracer_mass, boundary_tracer_flux";
+#endif
+      to_gnuplot << "\n";
 
       for (auto i : integralHistory_data)
         {
@@ -539,34 +563,41 @@ namespace Problem
   // for water level, momentum, and tracers, a first-order mapping and initialize
   // the time and time step to zero. Deal.ii supports also high order mappings,
   // in principle of the same degree as the underlying finite element.
+  // We introduces the concept of a finite element collection, implemented in the
+  // class `hp::FECollection`. In essence, such a collection acts like an object
+  // of type `std::vector<FiniteElement>`, but with a few more bells and whistles
+  // and a memory management better suited to the task at hand. In the constructor,
+  // the collection is immediately filled with finite elements of the chosen degree,
+  // along with a zero-degree element to be used in regions where the solution lacks
+  // regularity.
   template <int dim, int n_tra>
   OceanoProblem<dim, n_tra>::OceanoProblem(IO::ParameterHandler           &param,
                                            ICBC::BcBase<dim, 1+dim+n_tra> *bc)
     : prm(param)
     , pcout(std::cout, Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
-#ifdef DEAL_II_WITH_P4EST
     , triangulation(MPI_COMM_WORLD, Triangulation<dim>::MeshSmoothing::eliminate_unrefined_islands)
-#endif
-    , fe_height(FE_DGQ<dim>(fe_degree), 1)
-    , fe_discharge(FE_DGQ<dim>(fe_degree), dim)
-#ifdef OCEANO_WITH_TRACERS
-    , fe_tracer(FE_DGQ<dim>(fe_degree), n_tra)
-#endif
     , mapping(1)
     , dof_handler_height(triangulation)
     , dof_handler_discharge(triangulation)
     , dof_handler_tracer(triangulation)
     , timer(pcout, TimerOutput::never, TimerOutput::wall_times)
-    , oceano_operator(param, bc, timer)
+    , oceano_operator(param, bc, timer, max_iteration_height, max_iteration_tracer)
     , time(0)
     , time_step(0)
-  {}
+  {
+    fe_collection_height.push_back(FESystem<dim>(FE_DGQ<dim>(0), 1));
+    fe_collection_height.push_back(FESystem<dim>(FE_DGQ<dim>(fe_degree), 1));
+    fe_collection_discharge.push_back(FESystem<dim>(FE_DGQ<dim>(0), dim));
+    fe_collection_discharge.push_back(FESystem<dim>(FE_DGQ<dim>(fe_degree), dim));
+#ifdef OCEANO_WITH_TRACERS
+    fe_collection_tracer.push_back(FESystem<dim>(FE_DGQ<dim>(0), n_tra));
+    fe_collection_tracer.push_back(FESystem<dim>(FE_DGQ<dim>(fe_degree), n_tra));
+#endif
+  }
 
 
 
-  // It is possible to create the mesh inside 
-  // deal.II using the functions in the namespace GridGenearator. However 
-  // here we use only the possibility to import the mesh from an external mesher, Gmsh. 
+  // We use import the mesh from an external mesher, Gmsh.
   // Gmsh is the smallest and most quickly set up open source tool we are aware of. 
   // One of the issues is that deal.II, at least until version 9.2, 
   // can only deal with meshes that only consist of quadrilaterals and hexahedra - 
@@ -574,11 +605,9 @@ namespace Problem
   // of the features deal.II offers for quadrilateral and hexahedral meshes for several 
   // versions following the 9.3 release that introduced support for simplicial and 
   // mixed meshes first. Gmsh can generate unstructured 2d quad meshes.
-  // Having the base mesh in place (including the manifolds set by
-  // GridGenerator::channel_with_cylinder()), we can then perform the
-  // specified number of global refinements, create the unknown numbering from
-  // the DoFHandler, and hand the DoFHandler and Mapping objects to the
-  // initialization of the OceanoOperator.
+  // Having the base mesh in place, we can then perform the specified number of global
+  // refinements, create the unknown numbering from the DoFHandler, and hand the
+  // DoFHandler and Mapping objects to the initialization of the OceanoOperator.
   //
   // Furthermore, the shallow water equations may have a source term, which contains bottom
   // friction, wind stress ... Friction force, as other terms coming from
@@ -587,19 +616,16 @@ namespace Problem
   // can be other examples. Time and space functions are represented in deal.ii with a Function
   // class. Here we set a pointer to Functions that defines such external data, both for
   // the boundary conditions and for data associated to it.
+  //
+  // Initialize the finite element degree to the highest order available in the collection.
+  // Without this operation, the lowest polynomial degree is selected by default,
+  // resulting in the initial condition being evaluated at the lowest order throughout
+  // the domain, which is undesirable.
   template <int dim, int n_tra>
   void OceanoProblem<dim, n_tra>::make_grid()
   {
     oceano_operator.bc->set_problem_data(std::make_unique<ICBC::ProblemData<dim>>(prm));
 
-    // The class GridIn can read many different mesh formats from a 
-    // file from disk. In order to read a grid from a file, we generate an object 
-    // of data type GridIn and associate the triangulation to it (i.e. we tell 
-    // it to fill our triangulation object when we ask it to read the file). 
-    // Then we open the respective file and initialize the triangulation with 
-    // the data in the file. The path to the file is reconstructed from the current
-    // directory, that means that the mesh file must exist in the same directory where
-    // the executable is lunched.
     GridIn<dim> gridin;
     gridin.attach_triangulation(triangulation);
   
@@ -609,9 +635,9 @@ namespace Problem
     std::string current_working_directory(cwd);
     std::string slash("/");
 
-    prm.enter_subsection("Mesh & geometry parameters");
+    prm.enter_subsection("Mesh & hp parameters");
     const std::string file_msh = prm.get("Mesh_filename");
-    const unsigned int n_global_refinements = prm.get_integer("Number_of_refinements");
+    const unsigned int n_global_refinements = prm.get_integer("Global_level_of_mesh_refinement");
     prm.leave_subsection();
 
     std::ifstream f(current_working_directory+slash+file_msh);
@@ -630,6 +656,18 @@ namespace Problem
     pcout.get_stream().imbue(s);
 
     oceano_operator.bc->set_boundary_conditions();
+
+    for (const auto &cell : dof_handler_height.active_cell_iterators())
+      if (cell->is_locally_owned())
+        cell->set_active_fe_index(1);
+    for (const auto &cell : dof_handler_discharge.active_cell_iterators())
+      if (cell->is_locally_owned())
+        cell->set_active_fe_index(1);
+#ifdef OCEANO_WITH_TRACERS
+    for (const auto &cell : dof_handler_tracer.active_cell_iterators())
+      if (cell->is_locally_owned())
+        cell->set_active_fe_index(1);
+#endif
   }
 
 
@@ -641,10 +679,10 @@ namespace Problem
   template <int dim, int n_tra>
   void OceanoProblem<dim, n_tra>::make_dofs()
   {
-    dof_handler_height.distribute_dofs(fe_height);
-    dof_handler_discharge.distribute_dofs(fe_discharge);
+    dof_handler_height.distribute_dofs(fe_collection_height);
+    dof_handler_discharge.distribute_dofs(fe_collection_discharge);
 #ifdef OCEANO_WITH_TRACERS
-    dof_handler_tracer.distribute_dofs(fe_tracer);
+    dof_handler_tracer.distribute_dofs(fe_collection_tracer);
 #endif
     oceano_operator.reinit(mapping, dof_handler_height,
                                     dof_handler_discharge,
@@ -684,19 +722,14 @@ namespace Problem
   // function performs are the classical one of AMR: estimate the error, mark the
   // cells for refinement/coarsening, execute the remeshing and transfer the solution
   // onto the new grid.
-  // The preprocessor point out that we have implemented the AMR only with P4est, a tool that
-  // handle mesh refinement on distributed architecture. Without a deal.ii version compiled
-  // with P4est mesh refinement is not active and a warning system is raised.
-  // We have a look to each task into more details.
   template <int dim, int n_tra>
   void OceanoProblem<dim, n_tra>::refine_grid(
-    const Amr::AmrTuner                        &amr_tuner,
+    const hpOceano::hpTuner                    &hp_tuner,
     LinearAlgebra::distributed::Vector<Number> &postprocess_velocity)
   {
     {
       TimerOutput::Scope t(timer, "amr - remesh + remap");
 
-#ifdef DEAL_II_WITH_P4EST
       // We estimate the error. Since this operation is case-dependent it is left
       // to a specific class and to its member function `estimate_error`.
       // This computes a cellwise error based on all the components of the solution.
@@ -709,17 +742,17 @@ namespace Problem
       dof_handlers.push_back(&dof_handler_height);
       dof_handlers.push_back(&dof_handler_discharge);
 
-      std::vector<FESystem<dim>*> finite_elements;
-      finite_elements.push_back(&fe_height);
-      finite_elements.push_back(&fe_discharge);
+      std::vector<hp::FECollection<dim>*> fe_collections;
+      fe_collections.push_back(&fe_collection_height);
+      fe_collections.push_back(&fe_collection_discharge);
 
-      amr_tuner.estimate_error<dim,Number>(finite_elements,
-                                           dof_handlers,
-                                           {solution_height,
-                                           postprocess_velocity,
-                                           solution_tracer},
-                                           *oceano_operator.bc->problem_data,
-                                           estimated_error_per_cell);
+      hp_tuner.estimate_error<dim,Number>(fe_collections,
+                                          dof_handlers,
+                                          {solution_height,
+                                          postprocess_velocity,
+                                          solution_tracer},
+                                          *oceano_operator.bc->problem_data,
+                                          estimated_error_per_cell);
 
       float max_error = estimated_error_per_cell.linfty_norm();
       max_error = Utilities::MPI::max(max_error, MPI_COMM_WORLD);
@@ -734,17 +767,17 @@ namespace Problem
       // a cell cannot be refined. A successive intermediate step is
       // necessary to make sure that no two cells are adjacent with a refinement level
       // differing with more than one.
-      GridRefinement::refine(
-        triangulation, estimated_error_per_cell, amr_tuner.threshold_refinement * max_error);
-      GridRefinement::coarsen(
-        triangulation, estimated_error_per_cell, amr_tuner.threshold_coarsening * max_error);
+      GridRefinement::refine(triangulation,
+        estimated_error_per_cell, hp_tuner.threshold_mesh_refinement * max_error);
+      GridRefinement::coarsen(triangulation,
+        estimated_error_per_cell, hp_tuner.threshold_mesh_coarsening * max_error);
 
       // We enforce bounds on maximum and minimum mesh levels with the following lines.
       // The minimum mesh level is the number of global refinement while the maximum
       // is related both by a user provided value and a minimum target mesh size.
-      const unsigned int min_grid_level = amr_tuner.min_level_refinement;
-      const unsigned int max_grid_level = amr_tuner.max_level_refinement;
-      const unsigned int min_grid_size = amr_tuner.min_mesh_size;
+      const unsigned int min_grid_level = hp_tuner.min_level_mesh_refinement;
+      const unsigned int max_grid_level = hp_tuner.max_level_mesh_refinement;
+      const unsigned int min_grid_size = hp_tuner.min_mesh_size;
       if (min_grid_level > 0)
         for (const auto &cell :
              triangulation.active_cell_iterators_on_level(min_grid_level))
@@ -818,11 +851,125 @@ namespace Problem
       oceano_operator.evaluate_velocity_field(solution_height,
                                               solution_discharge,
                                               postprocess_velocity);
-#else
-    Assert(amr_tuner.max_level_refinement > 0
-            || amr_tuner.remesh_tick < 10000000000.,
-           ExcInternalError());
+    }
+  }
+
+
+
+  // This function takes care of the p-refinement. Where the solution lacks regularity
+  // we decrease the polynomial order. The tasks this function performs are similar to
+  // the AMR analogue function: estimate the solution smoothness, mark
+  // the cells for refinement/coarsening, set the new active fe index and transfer the solution
+  // onto the new basis.
+  template <int dim, int n_tra>
+  void OceanoProblem<dim, n_tra>::refine_degree(
+    const hpOceano::hpTuner                    &hp_tuner,
+    LinearAlgebra::distributed::Vector<Number> &postprocess_velocity)
+  {
+    {
+      TimerOutput::Scope t(timer, "p-adaptation + remap");
+
+      // We estimate the solution smoothness. Since this operation is case-dependent it
+      // is left to the specific class and to its member function `estimate_smoothness`.
+      // This computes a cellwise smoothness indicator based on the solution.
+      Vector<float> estimated_smoothness_per_cell(triangulation.n_active_cells());
+
+      hp_tuner.estimate_smoothness<dim,Number>(&fe_collection_height,
+                                               &dof_handler_height,
+                                                solution_height,
+                                               *oceano_operator.bc->problem_data,
+                                                estimated_smoothness_per_cell);
+
+      // Next we find out which cells to refine/coarsen: we use two functions from
+      // a class that implements several different algorithms to refine a triangulation
+      // based on cell-wise smoothness indicators. These functions are very simple: mark for
+      // refinement if the smoothness is above a given threshold, mark for coarsening if the
+      // smoothness is below another minimal threshold. The next functions simply enforce
+      // polynomial refinement over grid grid refinement.
+      GridRefinement::refine(triangulation,
+        estimated_smoothness_per_cell, hp_tuner.threshold_degree_coarsening);
+      GridRefinement::coarsen(triangulation,
+        estimated_smoothness_per_cell, hp_tuner.threshold_degree_coarsening);
+
+      hp::Refinement::full_p_adaptivity(dof_handler_height);
+      hp::Refinement::full_p_adaptivity(dof_handler_discharge);
+#ifdef OCEANO_WITH_TRACERS
+      hp::Refinement::full_p_adaptivity(dof_handler_tracer);
 #endif
+
+      hp::Refinement::force_p_over_h(dof_handler_height);
+      hp::Refinement::force_p_over_h(dof_handler_discharge);
+#ifdef OCEANO_WITH_TRACERS
+      hp::Refinement::force_p_over_h(dof_handler_tracer);
+#endif
+
+      for (const auto &cell :
+           triangulation.active_cell_iterators())
+        {
+          cell->clear_refine_flag();
+          cell->clear_coarsen_flag();
+        }
+
+      // As part of p-adaptation we need to transfer the solution vectors from
+      // the old basis to the new one. To this end we use the SolutionTransfer class.
+      // We have to initialize a SolutionTransfer object by attaching it to the old
+      // DoF handler. We then prepare the data vector containing the old solution for
+      // remapping. However, the SolutionTransfer class is based on a simple interpolation.
+      // For the transfer of the water height, a further prepare step is necessary to
+      // enforce mass conservation.
+      parallel::distributed::SolutionTransfer<dim, LinearAlgebra::distributed::Vector<Number>>
+        solution_transfer_height(dof_handler_height);
+      oceano_operator.prepare_for_conservative_coarsening(solution_height);
+      solution_transfer_height.prepare_for_coarsening_and_refinement(solution_height);
+
+      parallel::distributed::SolutionTransfer<dim, LinearAlgebra::distributed::Vector<Number>>
+        solution_transfer_discharge(dof_handler_discharge);
+      solution_transfer_discharge.prepare_for_coarsening_and_refinement(solution_discharge);
+
+#ifdef OCEANO_WITH_TRACERS
+      parallel::distributed::SolutionTransfer<dim, LinearAlgebra::distributed::Vector<Number>>
+        solution_transfer_tracer(dof_handler_tracer);
+      solution_transfer_tracer.prepare_for_coarsening_and_refinement(solution_tracer);
+#endif
+
+      // We actually do the refinement and recreate the DoF structure of the new solution
+      // vector.
+      triangulation.execute_coarsening_and_refinement();
+      make_dofs();
+
+      // We transfer the solution vectors between the two different basis. We initialize
+      // a temporary vector to store the interpolated solution. Please note that in parallel
+      // computations the interpolation operates only on locally owned dofs. We thus zero out
+      // the ghost dofs of the source vector and after the interpolation we need to syncronize
+      // the ghost dofs owned on other processor with an update.
+      LinearAlgebra::distributed::Vector<Number> transfer_height;
+      transfer_height.reinit(solution_height);
+      transfer_height.zero_out_ghost_values();
+      solution_transfer_height.interpolate(transfer_height);
+      transfer_height.update_ghost_values();
+
+      LinearAlgebra::distributed::Vector<Number> transfer_discharge;
+      transfer_discharge.reinit(solution_discharge);
+      transfer_discharge.zero_out_ghost_values();
+      solution_transfer_discharge.interpolate(transfer_discharge);
+      transfer_discharge.update_ghost_values();
+
+      solution_height = transfer_height;
+      solution_discharge = transfer_discharge;
+
+#ifdef OCEANO_WITH_TRACERS
+      LinearAlgebra::distributed::Vector<Number> transfer_tracer;
+      transfer_tracer.reinit(solution_tracer);
+      transfer_tracer.zero_out_ghost_values();
+      solution_transfer_tracer.interpolate(transfer_tracer);
+      transfer_tracer.update_ghost_values();
+
+      solution_tracer = transfer_tracer;
+#endif
+      postprocess_velocity.reinit(solution_discharge);
+      oceano_operator.evaluate_velocity_field(solution_height,
+                                              solution_discharge,
+                                              postprocess_velocity);
     }
   }
 
@@ -867,9 +1014,10 @@ namespace Problem
           ICBC::ExactSolution<dimension, n_variables>(time,prm),
           solution_height, solution_discharge);
 #ifdef OCEANO_WITH_TRACERS
-      const std::array<double,1> errors_tracers =
+      const double errors_tracers =
         oceano_operator.compute_errors_tracers(
-          ICBC::ExactSolution<dimension, n_variables>(time,prm), solution_tracer);
+          ICBC::ExactSolution<dimension, n_variables>(time,prm),
+          solution_height, solution_tracer);
 #endif
 
       const std::string quantity_name =
@@ -887,7 +1035,7 @@ namespace Problem
 
 #ifdef OCEANO_WITH_TRACERS
       pcout << ", "+ vars_names[dim+0+1] + ":" << std::setprecision(4)
-            << std::setw(10) << errors_tracers[0];
+            << std::setw(10) << errors_tracers;
 #endif
       pcout << std::endl;
 
@@ -923,12 +1071,13 @@ namespace Problem
       // submits a vector in which the correct subset of entries is correct is all
       // that is necessary.
       //
-      // @note As of 2023, Visit 3.3.3 can still not deal with higher-order cells.
-      //   Rather, it simply reports that there is no data to show. To view the
-      //   results of this program with Visit, you will want to comment out the
-      //   line that sets `flags.write_higher_order_cells = true;`. On the other
-      //   hand, Paraview is able to understand VTU files with higher order cells
-      //   just fine.
+      // Paraview is able to understand VTU files with higher order cells
+      // just fine. No particular difficulty is posed in case of hp-adaptation,
+      // where low order cells are projected onto a high order subdivision. As of
+      // 2023, Visit 3.3.3 can still not deal with higher-order cells.
+      // Rather, it simply reports that there is no data to show. To view the
+      // results of this program with Visit, you will want to comment out the
+      // line that sets `flags.write_higher_order_cells = true;`.
       std::vector<std::string> names_postproc = postprocessor.get_names();
       std::vector<std::string> names_vector;
       for (unsigned int d = 0; d < dim; ++d)
@@ -977,6 +1126,13 @@ namespace Problem
                                    postprocess_scalar_variables[v],
                                    {names_postproc[dim+v]},
                                    {interpretation_postproc[dim+v]});
+
+        Vector<float> fe_degrees(triangulation.n_active_cells());
+        for (const auto &cell : dof_handler_height.active_cell_iterators())
+          if (cell->is_locally_owned())
+            fe_degrees(cell->active_cell_index()) =
+              fe_collection_height[cell->active_fe_index()].degree;
+        data_out.add_data_vector(fe_degrees, "fe_degree", DataOut<dim>::type_cell_data );
       }
 
       // For the analytical solution cases, we also perform another projection of
@@ -1023,7 +1179,7 @@ namespace Problem
 //      data_out.add_data_vector(mpi_owner, "owner");
 
       data_out.build_patches(mapping,
-                             fe_height.degree,
+                             fe_collection_height.max_degree(),
                              DataOut<dim>::curved_inner_cells);
 
       const std::string filename =
@@ -1153,20 +1309,22 @@ namespace Problem
             << " = " << n_vect_bits << " bits ("
             << Utilities::System::get_current_vectorization_level() << ')'
             << std::endl;
-      pcout << "Number of quadrature points along a line: " << std::setw(4)
-            << n_q_points_1d << std::endl;
-      pcout << "Number of quadrature points in a cell   : " << std::setw(4)
+      pcout << "Number of quadrature points along a line   : " << std::setw(4)
+            << fe_degree + 2 << std::endl;
+      pcout << "Number of quadrature points in a cell      : " << std::setw(4)
             << n_q_points_1d * n_q_points_1d  << std::endl;
+      pcout << "Number of quadrature points for mass-matrix: " << std::setw(4)
+            << (fe_degree + 2) * (fe_degree + 2) << std::endl;
     }
 
     make_grid();
     make_dofs();
 
-    // It is the turn of the constructor of the AmrTuner. We have collected
-    // all the  tuning parameters for the AMR in a separate class in order
+    // It is the turn of the constructor of the hpTuner. We have collected
+    // all the  tuning parameters for hp-adaptivity in a separate class in order
     // to keep things in order. This class is controlled via a preprocessor
     // for the choice of the error estimate.
-    Amr::AmrTuner amr_tuner(prm);
+    hpOceano::hpTuner hp_tuner(prm);
 
     // We introduce an auxiliary vector to store the velocity. Velocities are derived
     // from discharges and are ubiquious (output, grid refinement, eddy viscosity/diffusivity).
@@ -1179,6 +1337,7 @@ namespace Problem
 
     // We set the initial conditions. This is done in a scope to free
     // the memory associated to the data stored in the initial condition class.
+    // We operate p-refinement to lower the degree in dry areas.
     // For initial value problems we may proceed with mesh
     // refinement to the initial solution. The mesh is pushed
     // to the maximum refinement level since the start.
@@ -1186,10 +1345,11 @@ namespace Problem
       TimerOutput::Scope t(timer, "compute initial solution");
       ICBC::Ic<dimension, n_variables> ic(prm);
       make_ic(ic, postprocess_velocity);
+      refine_degree(hp_tuner, postprocess_velocity);
 
-      for (unsigned int lev = 0; lev < amr_tuner.max_level_refinement; ++lev)
+      for (unsigned int lev = 0; lev < hp_tuner.max_level_mesh_refinement; ++lev)
         {
-          refine_grid(amr_tuner, postprocess_velocity);
+          refine_grid(hp_tuner, postprocess_velocity);
           make_ic(ic, postprocess_velocity);
         }
     }
@@ -1259,9 +1419,9 @@ namespace Problem
           << triangulation.n_global_active_cells() << std::endl;
     pcout << "Initial number of degrees of freedom: " << dof_handler_height.n_dofs()
              + dof_handler_discharge.n_dofs() + dof_handler_tracer.n_dofs()
-          << " ( = " << ( 1 + dim + n_tra ) << " [vars] x "
-          << triangulation.n_global_active_cells() << " [cells] x "
-          << Utilities::pow(fe_degree + 1, dim) << " [dofs/cell/var] )"
+          << ", " << ( 1 + dim + n_tra ) << " [vars], "
+          << triangulation.n_global_active_cells() << " [cells], "
+          << Utilities::pow(fe_degree + 1, dim) << " [dofs/cell/var]"
           << std::endl;
     pcout.get_stream().imbue(s);
 
@@ -1319,7 +1479,13 @@ namespace Problem
     // solutions. To decrease this sensitivity, it is common practice to round
     // or truncate the time step size to a few digits, e.g. 3 in this case. In
     // case the current time is near the prescribed 'tick' value for output
-    // (e.g. 0.02), we also write the output. After the end of the time loop,
+    // (e.g. 0.02), we also write the output.
+    // After the end of the time step we perform both h and p-adaptation tasks.
+    // Adaptation and remaps are expensive and cannot be computed evrey timestep
+    // in an explicit time stepping code. To make adaptation effective, h-adaptation
+    // step is performed near a user prescribed thick. p-adaptation is performed
+    // evrey 40 time step
+    // After the end of the time loop,
     // we summarize the computation by printing some statistics, which is
     // mostly done by the TimerOutput::print_wall_time_statistics() function.
     unsigned int timestep_number = 0;
@@ -1358,10 +1524,26 @@ namespace Problem
 
         time += time_step;
 
-        if (static_cast<int>(time / amr_tuner.remesh_tick) !=
-             static_cast<int>((time - time_step) / amr_tuner.remesh_tick))
+        if (static_cast<int>(time / hp_tuner.redegree_tick) !=
+             static_cast<int>((time - time_step) / hp_tuner.redegree_tick))
           {
-            refine_grid(amr_tuner, postprocess_velocity);
+            refine_degree(hp_tuner, postprocess_velocity);
+
+            integrator.reinit(solution_height, solution_discharge, solution_tracer,
+              rk_register_height_1,
+              rk_register_discharge_1,
+              rk_register_tracer_1,
+              rk_register_height_2,
+              rk_register_discharge_2,
+              rk_register_tracer_2);
+
+            postprocessor.do_reinit_data = true;
+          }
+
+        if (static_cast<int>(time / hp_tuner.remesh_tick) !=
+             static_cast<int>((time - time_step) / hp_tuner.remesh_tick))
+          {
+            refine_grid(hp_tuner, postprocess_velocity);
 
             integrator.reinit(solution_height, solution_discharge, solution_tracer,
               rk_register_height_1,
@@ -1457,6 +1639,8 @@ int main(int argc, char **argv)
       bc = new ICBC::BcTracerAdvection<dimension, n_variables>(prm);
 #elif defined ICBC_CHANNELFLOW
       bc = new ICBC::BcChannelFlow<dimension, n_variables>(prm);
+#elif defined ICBC_THACKEROSCILLATIONS2D
+      bc = new ICBC::BcThackerOscillations2d<dimension, n_variables>(prm);
 #elif defined ICBC_REALISTIC
       bc = new ICBC::BcRealistic<dimension, n_variables>(prm);
 #else

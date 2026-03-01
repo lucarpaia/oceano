@@ -64,7 +64,7 @@ namespace IO
     // Parameters for mesh include the mesh file and the
     // number of global refinement steps that are applied to the initial
     // coarse mesh.
-    prm.enter_subsection("Mesh & geometry parameters");
+    prm.enter_subsection("Mesh & hp parameters");
     {
     
       prm.declare_entry("Mesh_filename",
@@ -76,7 +76,7 @@ namespace IO
       // For the number of refinement steps, we allow integer values 
       // in the range $[0,\infty)$, where the omitted second argument to the 
       // `Patterns::Integer` object denotes the half-open interval.    
-      prm.declare_entry("Number_of_refinements",
+      prm.declare_entry("Global_level_of_mesh_refinement",
                         "6", Patterns::Integer(0),
                         "Number of global mesh refinement steps "
                         "applied to initial coarse grid");
@@ -86,22 +86,31 @@ namespace IO
       // the default value is set to a very high number or no mesh adaptation. If this
       // key is not specified the mesh adaptation is not active and the simulation will
       // continue with the initial mesh given above.
-      prm.declare_entry("Remesh_tick",
+      prm.declare_entry("Mesh_adaptation_tick",
                         "10000000000.", Patterns::Double(0),
-                        "Time interval we remesh");
+                        "Time interval we perform mesh adaptation");
 
-      // This are the two tresholds for the normalized cellwise error after/below which
+      // The frequency at which we flag cells for coarsening in wet-dry fronts depend on the test
+      // and on the time step. Differently from h-adaptation, the default value is set to 10 seconds
+      // which is a conservative time scale for tracking the wet-dry front in flooding simulations.
+      // If you do not want to coarsen the degree just put a very high number and no p-adaptation
+      // will be performed.
+      prm.declare_entry("Degree_adaptation_tick",
+                        "15.", Patterns::Double(0),
+                        "Time interval we perform degree adaptation");
+
+      // These are the two tresholds for the normalized cellwise error after/below which
       // the cell is marked for refinement/coarsening. The remesh thick is the frequency
       // for performing remeshing.
-      prm.declare_entry("Threshold_for_refinement",
+      prm.declare_entry("Threshold_for_mesh_refinement",
                         "0.50", Patterns::Double(0,1),
                         "Normalized error threshold after which a cell "
-                        "is marked for refinement");
+                        "is marked for grid refinement");
 
-      prm.declare_entry("Threshold_for_coarsening",
+      prm.declare_entry("Threshold_for_mesh_coarsening",
                         "0.25", Patterns::Double(0,1),
                         "Normalized error threshold below which a cell "
-                        "is marked for coarsening");
+                        "is marked for grid coarsening");
 
       // The max level of refinement is the
       // maximum grid level. The default value (zero) is important
@@ -110,7 +119,7 @@ namespace IO
       // 100 which means that the most refined cell can be "only" $2^10$ times
       // smaller then the initial one, e.g. if you start with a resolution of 100 km
       // you can can have cells as smaller as 100 m.
-      prm.declare_entry("Max_level_of_refinement",
+      prm.declare_entry("Max_level_of_mesh_refinement",
                         "0", Patterns::Integer(0,100),
                         "Maximum level of grid refinement. "
                         "A value of one means that the grid, at maximum, "
@@ -132,25 +141,33 @@ namespace IO
                         "It controls the maximum resolution");
 
       // A static refinement indicator can be read read from file, if the
-      // preprocessing `AMR_FROMFILE` is defined. Otherwise this parameter
+      // preprocessing `HPOCEANO_ERRORFROMFILE` is defined. Otherwise this parameter
       // is ignored.
       prm.declare_entry("Static_refinement_indicator_filename",
                         "refinement_indicator.tzt.gz",
                         Patterns::Anything(),
                         "Name of the static refinement indicator file "
                         "in structured format (with extension txt.gz)");
+
+      // This is the treshold for the smoothmess estimate below which
+      // the cell is marked for degree coarsening. The default value is a small
+      // to not introduce any undesired degree coarsening.
+      prm.declare_entry("Threshold_for_degree_coarsening",
+                        "1e-4", Patterns::Double(0,100000),
+                        "Smoothness threshold below which a cell "
+                        "is marked for degree coarsening");
      }
     prm.leave_subsection();
 
     // Paramteres for time includes the final time of the simulation and the Courant
     // number. For stability reason with DG the courant number should much less then one.
-    // Here we fix the courant $\in [0,1]$ as the range accepted by the parameter reader.
+    // Here we fix the courant $\in [0,10]$ as the range accepted by the parameter reader.
     prm.enter_subsection("Time parameters");
     {
       prm.declare_entry("Final_time", "0.0", Patterns::Double(0),
                         "Final time of the simulation");
 
-      prm.declare_entry("CFL", "1.0", Patterns::Double(0,1),
+      prm.declare_entry("CFL", "1.0", Patterns::Double(0,10),
                         "Courant number");
      }
     prm.leave_subsection();
@@ -204,6 +221,13 @@ namespace IO
                         "0.",
                         Patterns::Double(0),
                         "Horizontal diffusion coefficient");
+
+      prm.declare_entry("Threshold_for_wetdry",
+                        "0.1",
+                        Patterns::Double(0),
+                        "Depth threshold used in the de-singularizing of"
+                        "the velocity computation: below the threshold"
+                        "the division the division is avoided.");
     }
     prm.leave_subsection();
 

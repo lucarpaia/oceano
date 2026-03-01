@@ -16,29 +16,32 @@
  *
  * Author: Luca Arpaia,        2023
  */
-#ifndef AMR_HPP
-#define AMR_HPP
+#ifndef HPOCEANO_HPP
+#define HPOCEANO_HPP
 
 #include <deal.II/meshworker/mesh_loop.h>
+#include <deal.II/hp/fe_values.h>
 #include <io/TxtDataReader.h>
 /**
- * Namespace containing the AMR options.
+ * Namespace containing the hp-options for the Oceano operator.
  */
 
-namespace Amr
+namespace hpOceano
 {
 
   using namespace dealii;
 
-  // @sect3{Adaptive Mesh Refinement}
+  // @sect3{hp-capabilities}
 
   // In the following class, we implement a fine tuning of
-  // the Adaptive Mesh Refinement algorithm already available
-  // in Deal.ii. The tuning consist of:
+  // the hp-adaptive algorithm, already available in Deal.ii.
+  // The tuning consists of:
   // \begin{itemize}
-  // \item mainly we have the function  for the error estimate
-  // that is case-dependent. You would like to refine around the free-surface
+  // \item we have the functions for the error/smoothness estimate
+  // that are case-dependent. You would like to refine around the free-surface
   // gradients to detect impulsive waves or to strong vorticity patterns.
+  // At the same time you need to lower the polynomial degree in presence
+  // of irregular flow features, such as near the wet-dry interface.
   // \item the tuning parameters that are read from the parameter file
   // and then are stored into as classe members.
   // \end{itemize}
@@ -46,15 +49,16 @@ namespace Amr
   // The implementation of this class, is not done as
   // in the other namespaces, with base/derived classes or with different
   // classes under the same namespace. Since just one function is changing
-  // (the one that estimate the error), we simply switches the different
-  // estimate with the preprocessors. The interface of `estimate_error`
-  // is very general to deal with very different computation: from
-  // evalution of finite element solutions to general data evaluation
+  // (the one that estimate the error/smoothness), we simply switches the
+  // different estimate with the preprocessors. The interfaces of
+  // `estimate_error` and `estimate_smoothness` can deal with very different
+  // computation: from evalution of finite element solutions to generic
+  // data evaluation.
   //
-  // The error estimates are computed with the `MeshWorker` interface.
-  // This is a collection of functions and classes for the mesh loops.
-  // The workhorse of this namespace is the `mesh_loop()` function, which
-  // implements a completely generic loop over all mesh cells.
+  // The error and smoothness estimates are computed with the `MeshWorker`
+  // interface. This is a collection of functions and classes for the mesh
+  // loops. The workhorse of this namespace is the `mesh_loop()` function,
+  // which implements a completely generic loop over all mesh cells.
   // The loop() function depends on certain objects handed to it as arguments.
   // These objects are of two types, info objects like `ScratchData` and
   // function objects ("workers") that perform the local operations on cells.
@@ -65,45 +69,56 @@ namespace Amr
   // The computation of the error estimate is done within a lambda function
   // and it is the only part that really changes between the different
   // indicators.
-  class AmrTuner
+  class hpTuner
   {
   public:
-    AmrTuner(IO::ParameterHandler &prm);
-    ~AmrTuner(){};
+    hpTuner(IO::ParameterHandler &prm);
+    ~hpTuner(){};
 
     double remesh_tick;
-    float threshold_refinement;
-    float threshold_coarsening;
+    float threshold_mesh_refinement;
+    float threshold_mesh_coarsening;
     float min_mesh_size;
-    unsigned int max_level_refinement;
-    unsigned int min_level_refinement;
+    unsigned int max_level_mesh_refinement;
+    unsigned int min_level_mesh_refinement;
     std::string refinement_filename;
+
+    double redegree_tick;
+    float threshold_degree_coarsening;
 
     template <int dim, typename Number>
     void estimate_error(
-      const std::vector<FESystem<dim>*>                             &fe,
+      const std::vector<hp::FECollection<dim>*>                     &fe,
       const std::vector<DoFHandler<dim>*>                           &dof,
       const std::vector<LinearAlgebra::distributed::Vector<Number>> &solution,
       const Function<dim>                                           &data,
       Vector<float>                                                 &error_estimate) const;
+
+    template <int dim, typename Number>
+    void estimate_smoothness(
+      const hp::FECollection<dim>*                      fe,
+      const DoFHandler<dim>*                            dof,
+      const LinearAlgebra::distributed::Vector<Number> &solution,
+      const Function<dim>                              &data,
+      Vector<float>                                    &smoothness_estimate) const;
 
   private:
     template<int dim>
     struct ScratchData
     {
       ScratchData(
-          const FESystem<dim>      &fe,
-          const unsigned int        quadrature_degree,
-          const UpdateFlags         update_flags)
-        : fe_values(fe, QGauss<dim>(quadrature_degree), update_flags)
+          const hp::FECollection<dim> &fe,
+          const hp::QCollection<dim>  &quadrature,
+          const UpdateFlags            update_flags)
+        : hp_fe_values(fe, quadrature, update_flags)
       {}
 
       ScratchData(const ScratchData<dim> &scratch_data)
-      : fe_values(scratch_data.fe_values.get_fe(),
-                  scratch_data.fe_values.get_quadrature(),
-                  scratch_data.fe_values.get_update_flags()) {}
+      : hp_fe_values(scratch_data.hp_fe_values.get_fe_collection(),
+                     scratch_data.hp_fe_values.get_quadrature_collection(),
+                     scratch_data.hp_fe_values.get_update_flags()) {}
 
-      FEValues<dim> fe_values;
+      hp::FEValues<dim> hp_fe_values;
     };
 
     struct CopyData
@@ -121,25 +136,27 @@ namespace Amr
   };
 
   // The constructor of the class takes as arguments 
-  // only the parameters handler class in order to read the AMR
+  // only the parameters handler class in order to read the
   // parameters that are strongly case dependent and needs some
-  // tuning to obtain the desired meshes.
-  AmrTuner::AmrTuner(
+  // tuning to obtain the desired refinement/coarsening.
+  hpTuner::hpTuner(
     IO::ParameterHandler &prm)
   {
-    prm.enter_subsection("Mesh & geometry parameters");
-    remesh_tick = prm.get_double("Remesh_tick");
-    threshold_refinement = prm.get_double("Threshold_for_refinement");
-    threshold_coarsening = prm.get_double("Threshold_for_coarsening");
-    max_level_refinement = prm.get_integer("Max_level_of_refinement");
-    min_level_refinement = prm.get_integer("Number_of_refinements");
+    prm.enter_subsection("Mesh & hp parameters");
+    remesh_tick = prm.get_double("Mesh_adaptation_tick");
+    threshold_mesh_refinement = prm.get_double("Threshold_for_mesh_refinement");
+    threshold_mesh_coarsening = prm.get_double("Threshold_for_mesh_coarsening");
+    max_level_mesh_refinement = prm.get_integer("Max_level_of_mesh_refinement");
+    min_level_mesh_refinement = prm.get_integer("Global_level_of_mesh_refinement");
     min_mesh_size = prm.get_double("Min_mesh_size");
     refinement_filename = prm.get("Static_refinement_indicator_filename");
+    threshold_degree_coarsening = prm.get_double("Threshold_for_degree_coarsening");
+    redegree_tick = prm.get_double("Degree_adaptation_tick");
     prm.leave_subsection();
   }
 
 
-#if defined AMR_HEIGHTGRADIENT
+#if defined HPOCEANO_ERRORHEIGHTGRADIENT
   // The first error estimator is the simpler one. The gradient of the
   // free-surface (its norm). This is recommended only for surface waves
   // that are freely propagating. It is well suited for tsunamis waves,
@@ -150,21 +167,22 @@ namespace Amr
   // degree; for linear polynomials the gradient is constant and one
   // point it is enough to evaluate it, etc ...
   template <int dim, typename Number>
-    void AmrTuner::estimate_error(
-      const std::vector<FESystem<dim>*>                             &fe,
+    void hpTuner::estimate_error(
+      const std::vector<hp::FECollection<dim>*>                     &fe,
       const std::vector<DoFHandler<dim>*>                           &dof,
       const std::vector<LinearAlgebra::distributed::Vector<Number>> &solution,
       const Function<dim>                                           &/*data*/,
       Vector<float>                                                 &error_estimate) const
   {
-    const unsigned int n_q_points_amr_1d        = fe[0]->degree;
+    const unsigned int n_q_points_1d        = fe[0]->max_degree();
     using Iterator = typename DoFHandler<dim>::active_cell_iterator;
 
     auto cell_worker = [&](const Iterator   &cell,
                            ScratchData<dim> &scratch_data,
                            CopyData&         copy_data) {
-      FEValues<dim>& fe_values = scratch_data.fe_values;
-      fe_values.reinit(cell);
+      hp::FEValues<dim>& hp_fe_values = scratch_data.hp_fe_values;
+      hp_fe_values.reinit(cell);
+      const FEValues<dim>& fe_values = hp_fe_values.get_present_fe_values();
 
       std::vector<Tensor<1, dim>> gradients(fe_values.n_quadrature_points);
       fe_values.get_function_gradients(solution[0], gradients);
@@ -186,8 +204,10 @@ namespace Amr
         error_estimate[copy_data.cell_index] += copy_data.value;
     };
 
-    const UpdateFlags cell_flags = update_gradients | update_quadrature_points | update_JxW_values;
-    ScratchData<dim> scratch_data(*fe[0], n_q_points_amr_1d, cell_flags);
+    const UpdateFlags cell_flags = update_gradients | update_quadrature_points;
+    hp::QCollection<dim> quadrature;
+    quadrature.push_back(QGauss<dim>(n_q_points_1d));
+    ScratchData<dim> scratch_data(*fe[0], quadrature, cell_flags);
     CopyData copy_data;
     MeshWorker::mesh_loop(dof[0]->begin_active(),
                           dof[0]->end(),
@@ -198,7 +218,7 @@ namespace Amr
                           MeshWorker::assemble_own_cells);
   }
 
-#elif defined AMR_VORTICITY
+#elif defined HPOCEANO_ERRORVORTICITY
   // The second error estimator uses the vorticity. This can detect
   // vortices, eddies and fronts.
   // Differently from before we need to evaluate the gradient of a
@@ -206,21 +226,22 @@ namespace Amr
   // dimensional vector of Tensors, with the quadrature points
   // along the lines and the dim-components along the columns.
   template <int dim, typename Number>
-    void AmrTuner::estimate_error(
-      const std::vector<FESystem<dim>*>                             &fe,
+    void hpTuner::estimate_error(
+      const std::vector<hp::FECollection<dim>*>                     &fe,
       const std::vector<DoFHandler<dim>*>                           &dof,
       const std::vector<LinearAlgebra::distributed::Vector<Number>> &solution,
       const Function<dim>                                           &/*data*/,
       Vector<float>                                                 &error_estimate) const
   {
-    const unsigned int n_q_points_amr_1d        = fe[1]->degree;
+    const unsigned int n_q_points_1d        = fe[1]->max_degree();
     using Iterator = typename DoFHandler<dim>::active_cell_iterator;
 
     auto cell_worker = [&](const Iterator   &cell,
                            ScratchData<dim> &scratch_data,
                            CopyData&         copy_data) {
-      FEValues<dim>& fe_values = scratch_data.fe_values;
-      fe_values.reinit(cell);
+      hp::FEValues<dim>& hp_fe_values = scratch_data.hp_fe_values;
+      hp_fe_values.reinit(cell);
+      const FEValues<dim>& fe_values = hp_fe_values.get_present_fe_values();
 
       std::vector<std::vector<Tensor<1, dim>>>
         gradients(fe_values.n_quadrature_points, std::vector<Tensor<1, dim>>(dim));
@@ -243,8 +264,10 @@ namespace Amr
         error_estimate[copy_data.cell_index] += copy_data.value;
     };
 
-    const UpdateFlags cell_flags = update_gradients | update_quadrature_points | update_JxW_values;
-    ScratchData<dim> scratch_data(*fe[1], n_q_points_amr_1d, cell_flags);
+    const UpdateFlags cell_flags = update_gradients | update_quadrature_points;
+    hp::QCollection<dim> quadrature;
+    quadrature.push_back(QGauss<dim>(n_q_points_1d));
+    ScratchData<dim> scratch_data(*fe[1], quadrature, cell_flags);
     CopyData copy_data;
     MeshWorker::mesh_loop(dof[1]->begin_active(),
                           dof[1]->end(),
@@ -255,7 +278,7 @@ namespace Amr
                           MeshWorker::assemble_own_cells);
   }
 
-#elif defined AMR_TRACERGRADIENT
+#elif defined HPOCEANO_ERRORTRACERGRADIENT
   // The third error estimator is the the gradient of a tracer (its norm).
   // This is recommended to improve the resolution near tracer fronts.
   // The cell_worker computes the finite element gradient
@@ -268,21 +291,22 @@ namespace Amr
   // tracers and the free-surface are co-located we can use the same dof
   // structure.
   template <int dim, typename Number>
-    void AmrTuner::estimate_error(
-      const std::vector<FESystem<dim>*>                             &fe,
+    void hpTuner::estimate_error(
+      const std::vector<hp::FECollection<dim>*>                     &fe,
       const std::vector<DoFHandler<dim>*>                           &dof,
       const std::vector<LinearAlgebra::distributed::Vector<Number>> &solution,
       const Function<dim>                                           &/*data*/,
       Vector<float>                                                 &error_estimate) const
   {
-    const unsigned int n_q_points_amr_1d        = fe[0]->degree;
+    const unsigned int n_q_points_1d        = fe[0]->max_degree();
     using Iterator = typename DoFHandler<dim>::active_cell_iterator;
 
     auto cell_worker = [&](const Iterator   &cell,
                            ScratchData<dim> &scratch_data,
                            CopyData&         copy_data) {
-      FEValues<dim>& fe_values = scratch_data.fe_values;
-      fe_values.reinit(cell);
+      hp::FEValues<dim>& hp_fe_values = scratch_data.hp_fe_values;
+      hp_fe_values.reinit(cell);
+      const FEValues<dim>& fe_values = hp_fe_values.get_present_fe_values();
 
       std::vector<Tensor<1, dim>> gradients(fe_values.n_quadrature_points);
       fe_values.get_function_gradients(solution[2], gradients);
@@ -304,8 +328,10 @@ namespace Amr
         error_estimate[copy_data.cell_index] += copy_data.value;
     };
 
-    const UpdateFlags cell_flags = update_gradients | update_quadrature_points | update_JxW_values;
-    ScratchData<dim> scratch_data(*fe[0], n_q_points_amr_1d, cell_flags);
+    const UpdateFlags cell_flags = update_gradients | update_quadrature_points;
+    hp::QCollection<dim> quadrature;
+    quadrature.push_back(QGauss<dim>(n_q_points_1d));
+    ScratchData<dim> scratch_data(*fe[0], quadrature, cell_flags);
     CopyData copy_data;
     MeshWorker::mesh_loop(dof[0]->begin_active(),
                           dof[0]->end(),
@@ -316,7 +342,7 @@ namespace Amr
                           MeshWorker::assemble_own_cells);
   }
 
-#elif defined AMR_BATHYMETRY
+#elif defined HPOCEANO_ERRORBATHYMETRY
   // The fourth error estimator is more a refinement indicator.
   // It can be used for static mesh refinement as it uses the
   // bathymetry to increase the resolution in coastal regions, near
@@ -331,21 +357,22 @@ namespace Amr
   // is taken only during the initial refinement stage and we expect
   // to not impact much the final computational time.
   template <int dim, typename Number>
-    void AmrTuner::estimate_error(
-      const std::vector<FESystem<dim>*>                             &fe,
+    void hpTuner::estimate_error(
+      const std::vector<hp::FECollection<dim>*>                     &fe,
       const std::vector<DoFHandler<dim>*>                           &dof,
       const std::vector<LinearAlgebra::distributed::Vector<Number>> &/*solution*/,
       const Function<dim>                                           &data,
       Vector<float>                                                 &error_estimate) const
   {
-    const unsigned int n_q_points_amr_1d        = 10;
+    const unsigned int n_q_points_1d        = 10;
     using Iterator = typename DoFHandler<dim>::active_cell_iterator;
 
     auto cell_worker = [&](const Iterator   &cell,
                            ScratchData<dim> &scratch_data,
                            CopyData&         copy_data) {
-      FEValues<dim>& fe_values = scratch_data.fe_values;
-      fe_values.reinit(cell);
+      hp::FEValues<dim>& hp_fe_values = scratch_data.hp_fe_values;
+      hp_fe_values.reinit(cell);
+      const FEValues<dim>& fe_values = hp_fe_values.get_present_fe_values();
 
       copy_data.cell_index = cell->active_cell_index();
 
@@ -364,7 +391,9 @@ namespace Amr
     };
 
     const UpdateFlags cell_flags = update_quadrature_points;
-    ScratchData<dim> scratch_data(*fe[0], n_q_points_amr_1d, cell_flags);
+    hp::QCollection<dim> quadrature;
+    quadrature.push_back(QGauss<dim>(n_q_points_1d));
+    ScratchData<dim> scratch_data(*fe[0], quadrature, cell_flags);
     CopyData copy_data;
     MeshWorker::mesh_loop(dof[0]->begin_active(),
                           dof[0]->end(),
@@ -375,7 +404,7 @@ namespace Amr
                           MeshWorker::assemble_own_cells);
   }
 
-#elif defined AMR_FROMFILE
+#elif defined HPOCEANO_ERRORFROMFILE
   // This is also a refinement indicator as it is not related
   // to the finit element solution but it is read directly from
   // file. It can be used, as before, for static mesh refinement.
@@ -389,14 +418,14 @@ namespace Amr
   // to be sure to detect all features, even starting from a
   // very coarse mesh.
   template <int dim, typename Number>
-    void AmrTuner::estimate_error(
-      const std::vector<FESystem<dim>*>                             &fe,
+    void hpTuner::estimate_error(
+      const std::vector<hp::FECollection<dim>*>                     &fe,
       const std::vector<DoFHandler<dim>*>                           &dof,
       const std::vector<LinearAlgebra::distributed::Vector<Number>> &/*solution*/,
       const Function<dim>                                           &/*data*/,
       Vector<float>                                                 &error_estimate) const
   {
-    const unsigned int n_q_points_amr_1d        = 10;
+    const unsigned int n_q_points_1d        = 10;
     using Iterator = typename DoFHandler<dim>::active_cell_iterator;
 
     IO::TxtDataReader<dim> data_reader(refinement_filename);
@@ -410,8 +439,9 @@ namespace Amr
     auto cell_worker = [&](const Iterator   &cell,
                            ScratchData<dim> &scratch_data,
                            CopyData&         copy_data) {
-      FEValues<dim>& fe_values = scratch_data.fe_values;
-      fe_values.reinit(cell);
+      hp::FEValues<dim>& hp_fe_values = scratch_data.hp_fe_values;
+      hp_fe_values.reinit(cell);
+      const FEValues<dim>& fe_values = hp_fe_values.get_present_fe_values();
 
       copy_data.cell_index = cell->active_cell_index();
 
@@ -430,7 +460,9 @@ namespace Amr
     };
 
     const UpdateFlags cell_flags = update_quadrature_points;
-    ScratchData<dim> scratch_data(*fe[0], n_q_points_amr_1d, cell_flags);
+    hp::QCollection<dim> quadrature;
+    quadrature.push_back(QGauss<dim>(n_q_points_1d));
+    ScratchData<dim> scratch_data(*fe[0], quadrature, cell_flags);
     CopyData copy_data;
     MeshWorker::mesh_loop(dof[0]->begin_active(),
                           dof[0]->end(),
@@ -442,5 +474,60 @@ namespace Amr
   }
 #endif
 
-} // namespace Amr
-#endif //AMR_HPP
+
+
+  // The smoothness estimator tracks wet-dry fronts where the solution lacks
+  // of regularity. We use a simple proxy based on the water depth.
+  template <int dim, typename Number>
+    void hpTuner::estimate_smoothness(
+      const hp::FECollection<dim>*                      fe,
+      const DoFHandler<dim>*                            dof,
+      const LinearAlgebra::distributed::Vector<Number> &solution,
+      const Function<dim>                              &data,
+      Vector<float>                                    &smoothness_estimate) const
+  {
+    const unsigned int n_q_points_1d        = fe->max_degree() + 1;
+    using Iterator = typename DoFHandler<dim>::active_cell_iterator;
+
+    auto cell_worker = [&](const Iterator   &cell,
+                           ScratchData<dim> &scratch_data,
+                           CopyData&         copy_data) {
+      hp::FEValues<dim>& hp_fe_values = scratch_data.hp_fe_values;
+      hp_fe_values.reinit(cell);
+      const FEValues<dim>& fe_values = hp_fe_values.get_present_fe_values();
+
+      std::vector<Number> values(fe_values.n_quadrature_points);
+      fe_values.get_function_values(solution, values);
+
+      copy_data.cell_index = cell->active_cell_index();
+
+      double min_depth = std::numeric_limits<double>::max();
+      for(unsigned q = 0; q < fe_values.n_quadrature_points; ++q)
+        {
+          min_depth = std::min(
+            values[q] + data.value(fe_values.quadrature_point(q), 0),
+            min_depth);
+        }
+      copy_data.value = std::max(min_depth, 0.);
+    };
+
+    auto copier = [&](const CopyData &copy_data) {
+      if(copy_data.cell_index != numbers::invalid_unsigned_int)
+        smoothness_estimate[copy_data.cell_index] += copy_data.value;
+    };
+
+    const UpdateFlags cell_flags = update_values | update_quadrature_points;
+    hp::QCollection<dim> quadrature;
+    quadrature.push_back(QGauss<dim>(n_q_points_1d));
+    ScratchData<dim> scratch_data(*fe, quadrature, cell_flags);
+    CopyData copy_data;
+    MeshWorker::mesh_loop(dof->begin_active(),
+                          dof->end(),
+                          cell_worker,
+                          copier,
+                          scratch_data,
+                          copy_data,
+                          MeshWorker::assemble_own_cells);
+  }
+} // namespace hpOceano
+#endif //HP_HPPOCEANO

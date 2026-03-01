@@ -38,9 +38,12 @@ namespace Model
   // @sect3{Implementation of point-wise operations of the Shallow Water equations}
 
   // In the following functions, we implement the various problem-specific
-  // operators pertaining to the Shallow Water equations. Each function acts on the
-  // vector of prognostic variables $[\zeta, h\mathbf{u}]$ that we hold in
-  // the two solution vectors for the water height and the discharge.
+  // operators pertaining to the Shallow Water equations. The Shallow Water
+  // equations may be implemented in different ways. In this class we
+  // implement the Shallow Water equation in conservative form and using as
+  // prognostic variables the water height and the discharge. As a result each
+  // function acts on the vector of prognostic variables $[\zeta, h\mathbf{u}]$,
+  // on their gradients and on the bathymetry function.
   // From the solution we computes various derived quantities.
   //
   // First out is the computation of the velocity, that we derive from the
@@ -93,6 +96,7 @@ namespace Model
     ~ShallowWater(){};
  
     double g;
+    double cu4;
 
     std::vector<std::string> vars_name;
     std::vector<std::string> postproc_vars_name;
@@ -133,6 +137,14 @@ namespace Model
       void
       set_vars_name();
 
+    // The next function computes the depth from the vector of conserved
+    // variables
+    template <typename Number>
+    inline DEAL_II_ALWAYS_INLINE //
+      Number
+      depth(const Number height,
+            const Number bathymetry) const;
+
     // The next function computes the velocity from the vector of conserved
     // variables
     template <int dim, typename Number>
@@ -164,7 +176,9 @@ namespace Model
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Number>
-      mass_flux(const Tensor<1, dim, Number> &discharge) const;
+      mass_flux(const Number                  height,
+                const Tensor<1, dim, Number> &discharge,
+                const Number                  bathymetry) const;
 
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
@@ -266,6 +280,8 @@ namespace Model
   {
     prm.enter_subsection("Physical constants");
     g = prm.get_double("g");
+    double cu = prm.get_double("Threshold_for_wetdry");
+    cu4 = cu*cu*cu*cu;
     prm.leave_subsection();
   }
 
@@ -279,18 +295,30 @@ namespace Model
       vars_name.push_back("hu");
     for (unsigned int d = 0; d < dim; ++d)
       postproc_vars_name.push_back("velocity");
-    postproc_vars_name.push_back("depth");
+    postproc_vars_name.push_back("bathymetry");
+  }
+
+  template <typename Number>
+  inline DEAL_II_ALWAYS_INLINE //
+    Number
+    ShallowWater::depth(
+      const Number height,
+      const Number bathymetry) const
+  {
+    return std::max(height + bathymetry, Number(1e-12));
   }
 
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
-    ShallowWater::velocity(const Number                  height,
-                           const Tensor<1, dim, Number> &discharge,
-                           const Number                  bathymetry) const
+    ShallowWater::velocity(
+      const Number                  height,
+      const Tensor<1, dim, Number> &discharge,
+      const Number                  bathymetry) const
   {
-    const Number inverse_depth
-      = Number(1.) / (height + bathymetry);
+    const Number h = depth(height, bathymetry);
+    const Number h4 = h*h*h*h;
+    const Number inverse_depth = sqrt(2.) * h / sqrt(h4 + std::max(h4, Number(cu4)));
 
     return discharge * inverse_depth;
   }
@@ -298,31 +326,37 @@ namespace Model
   template <typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Number
-    ShallowWater::pressure(const Number height,
-                           const Number bathymetry) const
+    ShallowWater::pressure(
+      const Number height,
+      const Number bathymetry) const
   {
-    const Number depth = height + bathymetry;
-    return 0.5 * g * depth*depth;
+    const Number h = depth(height, bathymetry);
+    return 0.5 * g * h*h;
   }
 
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
-    ShallowWater::mass_flux(const Tensor<1, dim, Number> &discharge) const
+    ShallowWater::mass_flux(
+      const Number                  height,
+      const Tensor<1, dim, Number> &discharge,
+      const Number                  bathymetry) const
   {
-    return discharge;
+    return depth(height, bathymetry) * velocity<dim>(height, discharge, bathymetry);
+
   }
 
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Tensor<1, dim, Number>>
-    ShallowWater::momentum_adv_flux(const Number                  height,
-                                    const Tensor<1, dim, Number> &discharge,
-                                    const Number                  bathymetry) const
+    ShallowWater::momentum_adv_flux(
+      const Number                  height,
+      const Tensor<1, dim, Number> &discharge,
+      const Number                  bathymetry) const
   {
     const Tensor<1, dim, Number> v =
       velocity<dim>(height, discharge, bathymetry);
-    
+
     Tensor<1, dim, Tensor<1, dim, Number>> flux;
     for (unsigned int d = 0; d < dim; ++d)
       for (unsigned int e = 0; e < dim; ++e)
@@ -361,24 +395,25 @@ namespace Model
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
-    ShallowWater::source(const Number                    height,
-                         const Tensor<1, dim, Number>   &discharge,
-                         const Tensor<1, dim, Number>   &gradient_height,
-                         const Tensor<1, dim+3, Number> &parameters) const
+    ShallowWater::source(
+      const Number                    height,
+      const Tensor<1, dim, Number>   &discharge,
+      const Tensor<1, dim, Number>   &gradient_height,
+      const Tensor<1, dim+3, Number> &parameters) const
   {
     const Tensor<1, dim, Number> v =
       velocity<dim>(height, discharge, parameters[0]);
-    const Number depth = height + parameters[0];
+    const Number h = depth(height, parameters[0]);
 
     const Tensor<1, dim, Number> bottomfric =
-      bottom_friction.source<dim, Number>(v, parameters[1], depth);
+      bottom_friction.source<dim, Number>(v, parameters[1], h);
     const Tensor<1, dim, Number> windstress =
       wind_stress.source<dim, Number>(&parameters[2]);
     const Tensor<1, dim, Number> coriolis =
       coriolis_force.source<dim, Number>(discharge, parameters[4]);
 
     Tensor<1, dim, Number> source =
-        - g * depth * gradient_height
+        - g * h * gradient_height
 	- bottomfric
         + windstress
         + coriolis;
@@ -395,7 +430,7 @@ namespace Model
       const Tensor<1, dim, Number>   &gradient_height,
       const Tensor<1, dim+3, Number> &parameters) const
   {
-    const Number depth = height + parameters[0];
+    const Number h = depth(height, parameters[0]);
 
     const Tensor<1, dim, Number> windstress =
       wind_stress.source<dim, Number>(&parameters[2]);
@@ -403,7 +438,7 @@ namespace Model
       coriolis_force.source<dim, Number>(discharge, parameters[4]);
 
     Tensor<1, dim, Number> source =
-        - g * depth * gradient_height
+        - g * h * gradient_height
         + windstress
         + coriolis;
 
@@ -421,9 +456,9 @@ namespace Model
   {
     const Tensor<1, dim, Number> v =
       velocity<dim>(height, discharge, bathymetry);
-    const Number depth = height + bathymetry;
+    const Number h = depth(height, bathymetry);
 
-    return -bottom_friction.source<dim, Number>(v, drag_coefficient, depth);
+    return -bottom_friction.source<dim, Number>(v, drag_coefficient, h);
   }
 
   template <typename Number>
@@ -433,7 +468,7 @@ namespace Model
       const Number                  height,
       const Number                  bathymetry) const
   {
-    return g * (height + bathymetry);
+    return g * depth(height, bathymetry);
   }
 
   template <int dim, typename Number>

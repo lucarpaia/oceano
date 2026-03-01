@@ -59,6 +59,94 @@ namespace ICBC
   constexpr double D      = 1000.; 
     
   // @sect3{Equation data}
+  //
+  // We need a class to handle the problem data. Problem data are case dependent; for this
+  // reason it appears inside the `ICBC` namespace. The data in general depends on
+  // both time and space. Deal.II has a class `Function` which returns function
+  // of space and time, thus we simply create a derived class. The size of the data is
+  // fixed to `dim+3=5` scalar quantities. The first component is the bathymetry.
+  // The second is the bottom friction coefficient. The third and fourth components
+  // are the cartesian components of the wind velocity (in order, eastward and northward).
+  // The fifth one is the Coriolis parameter. The test-dependent functions `stommelGyre_wind()`
+  // and `stommelGyre_coriolis()` contain the definition of analytical functions for the
+  // different data. The call to `value()` returns all the external data necessary to
+  // complete the computation.
+  //
+  // Finally the parameter handler class allows to read constants from the prm file.
+  // The parameter handler class may seems redundant but it is not! Constants that appears
+  // in you data may be easily recovered from the configuration file. More important file
+  // names which contains the may be imported too.
+  //
+  // For the stommel gyre we define the zonal wind field, a friction coefficient and
+  // the coriolis parameter. Note also how we define the $f$ and $\beta$ parameters. They are
+  // members of the `ProblemData` class and they are initialized in the constructor
+  // thanks to the parameter handler class.
+  template <int dim>
+  class ProblemData : public Function<dim>
+  {
+  public:
+    ProblemData(IO::ParameterHandler &prm);
+    ~ProblemData(){};
+
+    double f0;
+    double beta;
+
+    inline double stommelGyre_wind(const Point<dim> & p,
+                                   const unsigned int component = 0) const;
+
+    inline double stommelGyre_coriolis(const Point<dim> & p) const;
+
+    virtual double value(const Point<dim> & p,
+                         const unsigned int component = 0) const override;
+  };
+
+  template <int dim>
+  ProblemData<dim>::ProblemData(IO::ParameterHandler &prm)
+    : Function<dim>(dim+3)
+  {
+    prm.enter_subsection("Physical constants");
+    f0 = prm.get_double("coriolis_f0");
+    beta = prm.get_double("coriolis_beta");
+    prm.leave_subsection();
+  }
+
+
+
+  template <int dim>
+  inline double ProblemData<dim>::stommelGyre_wind(
+    const Point<dim> & x,
+    const unsigned int component) const
+  {
+    if (component == 0)
+      return F * std::sin( M_PI * ( x[1] - 0.5*b ) / b );
+    else
+      return 0.;
+  }
+
+  template <int dim>
+  inline double ProblemData<dim>::stommelGyre_coriolis(
+    const Point<dim> & x) const
+  {
+    return f0 + beta * x[1];
+  }
+
+  template <int dim>
+  double ProblemData<dim>::value(const Point<dim> & x,
+                                 const unsigned int component) const
+  {
+    if (component == 1)
+      return R;
+    else if (component == 2)
+      return stommelGyre_wind(x, 0);
+    else if (component == 3)
+      return stommelGyre_wind(x, 1);
+    else if (component == 4)
+      return stommelGyre_coriolis(x);
+    else
+      return 0.;
+  }
+
+
 
   // The class `ExactSolution` defines analytical functions that can be useful
   // to define initial and boundary conditions. For the gyre test it only defines
@@ -192,106 +280,13 @@ namespace ICBC
          
     void set_boundary_conditions() override;
 
-  }; 
+  };
 
   template <int dim, int n_vars>
   void BcStommelGyre<dim, n_vars>::set_boundary_conditions()
   {
     this->set_wall_boundary(0);
-  }         
-
-
-
-  // We need a class to handle the problem data. Problem data are case dependent; for this 
-  // reason it appears inside the `ICBC` namespace. The data in general depends on
-  // both time and space. Deal.II has a class `Function` which returns function
-  // of space and time, thus we simply create a derived class. The size of the data is 
-  // fixed to `dim+3=5` scalar quantities. The first component is the bathymetry. 
-  // The second is the bottom friction coefficient. The third and fourth components 
-  // are the cartesian components of the wind velocity (in order, eastward and northward).
-  // The fifth one is the Coriolis parameter. The test-dependent functions `stommelGyre_wind()`
-  // and `stommelGyre_coriolis()` contain the definition of analytical functions for the 
-  // different data. The call to `value()` returns all the external data necessary to 
-  // complete the computation. 
-  //
-  // Finally the parameter handler class allows to read constants from the prm file.
-  // The parameter handler class may seems redundant but it is not! Constants that appears
-  // in you data may be easily recovered from the configuration file. More important file 
-  // names which contains the may be imported too.
-  //
-  // For the stommel gyre we define the zonal wind field, a friction coefficient and
-  // the coriolis parameter. Note also how we define the $f$ and $\beta$ parameters. They are
-  // members of the `ProblemData` class and they are initialized in the constructor
-  // thanks to the parameter handler class.
-  template <int dim>
-  class ProblemData : public Function<dim>
-  {
-  public:
-    ProblemData(IO::ParameterHandler &prm);
-    ~ProblemData(){};
-    
-    double f0;
-    double beta;
-
-    inline double stommelGyre_wind(const Point<dim> & p,
-                                   const unsigned int component = 0) const;
-
-    inline double stommelGyre_coriolis(const Point<dim> & p) const;
-
-    virtual double value(const Point<dim> & p,
-                         const unsigned int component = 0) const override;
-  };
-
-  template <int dim>
-  ProblemData<dim>::ProblemData(IO::ParameterHandler &prm)
-    : Function<dim>(dim+3)
-  {
-    prm.enter_subsection("Physical constants");
-    f0 = prm.get_double("coriolis_f0");
-    beta = prm.get_double("coriolis_beta");
-    prm.leave_subsection();  
   }
-
-
-
-  template <int dim>
-  inline double ProblemData<dim>::stommelGyre_wind(
-    const Point<dim> & x,
-    const unsigned int component) const
-  {
-    if (component == 0) 
-      return F * std::sin( M_PI * ( x[1] - 0.5*b ) / b );
-    else
-      return 0.;
-  }
-
-
-
-  template <int dim>
-  inline double ProblemData<dim>::stommelGyre_coriolis(
-    const Point<dim> & x) const
-  {
-    return f0 + beta * x[1];
-  }
-  
-  
-  
-  template <int dim>
-  double ProblemData<dim>::value(const Point<dim> & x,
-                                 const unsigned int component) const
-  {
-    if (component == 1)
-      return R;
-    else if (component == 2)
-      return stommelGyre_wind(x, 0);
-    else if (component == 3)
-      return stommelGyre_wind(x, 1);
-    else if (component == 4)
-      return stommelGyre_coriolis(x);
-    else
-      return 0.;  
-  }
-
 } // namespace ICBC
 
 #endif //ICBC_STOMMELGYRE_HPP
