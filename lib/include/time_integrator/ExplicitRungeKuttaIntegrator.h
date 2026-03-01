@@ -96,10 +96,10 @@ namespace TimeIntegrator
                            VectorType              &solution_height,
                            VectorType              &solution_discharge,
                            VectorType              &solution_tracer,
+                           VectorType              &postprocess_velocity,
                            VectorType              &vec_ri_height,
                            VectorType              &vec_ri_discharge,
                            VectorType              &vec_ri_tracer,
-                           VectorType              &postprocess_velocity,
                            std::vector<VectorType> &vec_ki_height,
                            std::vector<VectorType> &vec_ki_discharge,
                            std::vector<VectorType> &vec_ki_tracer) const;
