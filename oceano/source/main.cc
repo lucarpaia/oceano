@@ -708,7 +708,7 @@ namespace Problem
   {
     data_bathymetry = 0.; //lrp:bathy
     oceano_operator.project_hydro(
-      ic, solution_height, solution_discharge);
+      ic, solution_height, solution_discharge, data_bathymetry);
 #ifdef OCEANO_WITH_TRACERS
     oceano_operator.project_tracers(
       ic, solution_tracer);
@@ -716,7 +716,8 @@ namespace Problem
     oceano_operator.evaluate_velocity_field(
       solution_height,
       solution_discharge,
-      postprocess_velocity);
+      postprocess_velocity,
+      data_bathymetry);
   }
 
 
@@ -853,7 +854,8 @@ namespace Problem
       postprocess_velocity.reinit(solution_discharge);
       oceano_operator.evaluate_velocity_field(solution_height,
                                               solution_discharge,
-                                              postprocess_velocity);
+                                              postprocess_velocity,
+                                              data_bathymetry);
     }
   }
 
@@ -972,7 +974,8 @@ namespace Problem
       postprocess_velocity.reinit(solution_discharge);
       oceano_operator.evaluate_velocity_field(solution_height,
                                               solution_discharge,
-                                              postprocess_velocity);
+                                              postprocess_velocity,
+                                              data_bathymetry);
     }
   }
 
@@ -992,15 +995,16 @@ namespace Problem
     const unsigned int                                result_number,
     const LinearAlgebra::distributed::Vector<Number> &postprocess_velocity)
   {
-    if (postprocessor.do_reinit_data)
+    /*if (postprocessor.do_reinit_data)
     {
       oceano_operator.initialize_data_at_dofs(mapping, dof_handler_height);
-      postprocessor.do_reinit_data = false;
-    }
+      postprocessor.do_reinit_data = false; //lrp:bathy
+    }*/
     std::vector<LinearAlgebra::distributed::Vector<Number>>
       postprocess_scalar_variables(postprocessor.n_postproc_vars-dim, solution_height);
     oceano_operator.evaluate_postprocess_field(dof_handler_height,
                                                solution_height,
+                                               data_bathymetry,
                                                postprocess_scalar_variables);
 
     if (postprocessor.do_solution)
@@ -1015,7 +1019,7 @@ namespace Problem
       const std::array<double,2> errors_hydro =
         oceano_operator.compute_errors_hydro(
           ICBC::ExactSolution<dimension, n_variables>(time,prm),
-          solution_height, solution_discharge);
+          solution_height, solution_discharge, data_bathymetry);
 #ifdef OCEANO_WITH_TRACERS
       const double errors_tracers =
         oceano_operator.compute_errors_tracers(
@@ -1151,7 +1155,7 @@ namespace Problem
           reference_discharge.reinit(solution_discharge);
           oceano_operator.project_hydro(
             ICBC::ExactSolution<dimension, n_variables>(time,prm),
-            reference_height, reference_discharge);
+            reference_height, reference_discharge, data_bathymetry);
           reference_height.sadd(-1., 1, solution_height);
           reference_discharge.sadd(-1., 1, solution_discharge);
 
@@ -1453,12 +1457,14 @@ namespace Problem
 
     time_step = courant_number  /
       oceano_operator.compute_cell_transport_speed(solution_height,
-                                                   solution_discharge);
+                                                   solution_discharge,
+                                                   data_bathymetry);
     pcout << "Time step size: " << time_step
           << ", initial minimal h: " << min_vertex_distance
           << ", initial transport scaling: "
           << 1. / oceano_operator.compute_cell_transport_speed(solution_height,
-                                                               solution_discharge)
+                                                               solution_discharge,
+                                                               data_bathymetry)
           << "\n" << std::endl;
 
     // We have moved the constructor of the `Postprocessor` class in this
@@ -1502,7 +1508,8 @@ namespace Problem
             courant_number /
             Utilities::truncate_to_n_digits(
               oceano_operator.compute_cell_transport_speed(solution_height,
-                                                           solution_discharge), 3);
+                                                           solution_discharge,
+                                                           data_bathymetry), 3);
 
         {
           TimerOutput::Scope t(timer, "rk time stepping total");
@@ -1523,7 +1530,8 @@ namespace Problem
 
           oceano_operator.evaluate_velocity_field(solution_height,
                                                   solution_discharge,
-                                                  postprocess_velocity);
+                                                  postprocess_velocity,
+                                                  data_bathymetry);
         }
 
         time += time_step;
