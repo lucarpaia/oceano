@@ -316,6 +316,7 @@ namespace Problem
     LinearAlgebra::distributed::Vector<Number> solution_height;
     LinearAlgebra::distributed::Vector<Number> solution_discharge;
     LinearAlgebra::distributed::Vector<Number> solution_tracer;
+    LinearAlgebra::distributed::Vector<Number> data_bathymetry;
 
     ParameterHandler &prm;
 
@@ -688,6 +689,7 @@ namespace Problem
                                     dof_handler_discharge,
                                     dof_handler_tracer);
     oceano_operator.initialize_vector(solution_height, 0);
+    oceano_operator.initialize_vector(data_bathymetry, 0);
     oceano_operator.initialize_vector(solution_discharge, 1);
 #ifdef OCEANO_WITH_TRACERS
     oceano_operator.initialize_vector(solution_tracer, 2);
@@ -704,6 +706,7 @@ namespace Problem
     const ICBC::Ic<dim, 1+dim+n_tra>            ic,
     LinearAlgebra::distributed::Vector<Number> &postprocess_velocity)
   {
+    data_bathymetry = 0.; //lrp:bathy
     oceano_operator.project_hydro(
       ic, solution_height, solution_discharge);
 #ifdef OCEANO_WITH_TRACERS
@@ -1510,6 +1513,7 @@ namespace Problem
                                        solution_discharge,
                                        solution_tracer,
                                        postprocess_velocity,
+                                       data_bathymetry,
                                        rk_register_height_1,
                                        rk_register_discharge_1,
                                        rk_register_tracer_1,

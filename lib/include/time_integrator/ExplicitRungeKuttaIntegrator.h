@@ -96,10 +96,11 @@ namespace TimeIntegrator
                            VectorType              &solution_height,
                            VectorType              &solution_discharge,
                            VectorType              &solution_tracer,
+                           VectorType              &postprocess_velocity,
+                           const VectorType        &data_bathymetry,
                            VectorType              &vec_ri_height,
                            VectorType              &vec_ri_discharge,
                            VectorType              &vec_ri_tracer,
-                           VectorType              &postprocess_velocity,
                            std::vector<VectorType> &vec_ki_height,
                            std::vector<VectorType> &vec_ki_discharge,
                            std::vector<VectorType> &vec_ki_tracer) const;
@@ -222,6 +223,7 @@ namespace TimeIntegrator
     VectorType              &solution_discharge,
     VectorType              &solution_tracer,
     VectorType              &postprocess_velocity,
+    const VectorType        &data_bathymetry,
     VectorType              &vec_ri_height,
     VectorType              &vec_ri_discharge,
     VectorType              &vec_ri_tracer,
@@ -244,7 +246,8 @@ namespace TimeIntegrator
     std::vector<VectorType> vec_ri = {solution_height,
                                       solution_discharge,
                                       solution_tracer,
-                                      postprocess_velocity};
+                                      postprocess_velocity,
+                                      data_bathymetry};
 
     pde_operator.perform_stage_hydro(0,
                                      current_time,
@@ -292,7 +295,8 @@ namespace TimeIntegrator
         vec_ri = {vec_ri_height,
                   vec_ri_discharge,
                   vec_ri_tracer,
-                  postprocess_velocity};
+                  postprocess_velocity,
+                  data_bathymetry};
 
         pde_operator.perform_stage_hydro(stage,
                                          current_time + c_i * time_step,
