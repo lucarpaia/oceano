@@ -113,6 +113,10 @@
 #endif
 // Activate global mass conservation checks:
 #undef  OCEANO_WITH_MASSCONSERVATIONCHECK
+// How we compute nodal values of the polynomial bathymetry: with a projection approach or
+// by interpolating the reference bathymetry at the degrees of freedom.
+#undef  OCEANO_WITH_BATHYMETRYPROJECTION
+#define OCEANO_WITH_BATHYMETRYINTERPOLATION
 
 // The include files are similar to the previous matrix-free tutorial programs with
 // hp-adaptation
@@ -706,7 +710,8 @@ namespace Problem
     const ICBC::Ic<dim, 1+dim+n_tra>            ic,
     LinearAlgebra::distributed::Vector<Number> &postprocess_velocity)
   {
-    data_bathymetry = 0.; //lrp:bathy
+    oceano_operator.project_bathymetry(
+      *oceano_operator.bc->problem_data, data_bathymetry);
     oceano_operator.project_hydro(
       ic, solution_height, solution_discharge, data_bathymetry);
 #ifdef OCEANO_WITH_TRACERS
@@ -851,6 +856,10 @@ namespace Problem
 
       solution_tracer = transfer_tracer;
 #endif
+
+      oceano_operator.project_bathymetry(
+        *oceano_operator.bc->problem_data, data_bathymetry);
+
       postprocess_velocity.reinit(solution_discharge);
       oceano_operator.evaluate_velocity_field(solution_height,
                                               solution_discharge,
@@ -971,6 +980,10 @@ namespace Problem
 
       solution_tracer = transfer_tracer;
 #endif
+
+      oceano_operator.project_bathymetry(
+        *oceano_operator.bc->problem_data, data_bathymetry);
+
       postprocess_velocity.reinit(solution_discharge);
       oceano_operator.evaluate_velocity_field(solution_height,
                                               solution_discharge,

@@ -221,6 +221,11 @@ namespace SpaceDiscretization
       LinearAlgebra::distributed::Vector<Number>              &solution_discharge,
       const LinearAlgebra::distributed::Vector<Number>        &data_bathymetry) const;
 
+
+    void project_bathymetry(
+      const Function<dim>                                     &function,
+      LinearAlgebra::distributed::Vector<Number>              &data_bathymetry) const;
+
     std::array<double, 2> compute_errors_hydro(
       const Function<dim>                                     &function,
       const LinearAlgebra::distributed::Vector<Number>        &solution_height,
@@ -456,7 +461,8 @@ namespace SpaceDiscretization
       constraints = {&dummy, &dummy};
     const std::vector<Quadrature<1>> quadratures = {QGauss<1>(n_points_1d),
                                                     QGaussLobatto<1>(degree + 2),
-                                                    QGauss<1>(degree + 1)};
+                                                    QGauss<1>(degree + 1),
+                                                    QGaussLobatto<1>(degree + 1)};
 
     typename MatrixFree<dim, Number>::AdditionalData additional_data;
     additional_data.mapping_update_flags =
@@ -2428,6 +2434,64 @@ namespace SpaceDiscretization
             }
         },
         solution_discharge,
+        dummy);
+  }
+
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_tra, degree, n_points_1d>::project_bathymetry(
+    const Function<dim> &                       function,
+    LinearAlgebra::distributed::Vector<Number> &data_bathymetry) const
+  {
+    const unsigned int dummy = 0;
+
+    data_bathymetry.zero_out_ghost_values();
+    data.template cell_loop<LinearAlgebra::distributed::Vector<Number>, unsigned int>(
+        [&](const MatrixFree<dim, Number> &,
+            LinearAlgebra::distributed::Vector<Number>       &dst,
+            const unsigned int &,
+            const std::pair<unsigned int, unsigned int>      &cell_range) {
+
+#if defined OCEANO_WITH_BATHYMETRYPROJECTION
+          FEEvaluation<dim, -1, degree + 1, 1, Number> phi_bathymetry(data, cell_range, 0, 2);
+#elif defined OCEANO_WITH_BATHYMETRYINTERPOLATION
+          FEEvaluation<dim, -1, degree + 1, 1, Number> phi_bathymetry(data, cell_range, 0, 3);
+#endif
+          MatrixFreeOperators::CellwiseInverseMassMatrix<dim, degree, 1, Number>
+            inverse(phi_bathymetry);
+          for (unsigned int cell = 0; cell < data.n_cell_batches(); ++cell)
+            {
+              phi_bathymetry.reinit(cell);
+              if (phi_bathymetry.get_active_fe_index())
+                {
+                  for (unsigned int q = 0; q < phi_bathymetry.n_q_points; ++q)
+                    phi_bathymetry.submit_dof_value(evaluate_function<dim, Number>(
+                                                       function,
+                                                       phi_bathymetry.quadrature_point(q),
+                                                       0),
+                                                q);
+                  inverse.transform_from_q_points_to_basis(1,
+                                                       phi_bathymetry.begin_dof_values(),
+                                                       phi_bathymetry.begin_dof_values());
+                }
+              else
+                {
+                  VectorizedArray<Number> inv_area = 0.;
+                  for (unsigned int q = 0; q < phi_bathymetry.n_q_points; ++q)
+                    inv_area += phi_bathymetry.JxW(q);
+                  inv_area = 1./inv_area;
+                  for (unsigned int q = 0; q < phi_bathymetry.n_q_points; ++q)
+                    phi_bathymetry.submit_value(evaluate_function<dim, Number>(
+                                                           function,
+                                                           phi_bathymetry.quadrature_point(q),
+                                                           0) * inv_area,
+                                            q);
+                  phi_bathymetry.integrate(EvaluationFlags::values);
+                }
+
+              phi_bathymetry.set_dof_values(dst);
+            }
+        },
+        data_bathymetry,
         dummy);
   }
 
