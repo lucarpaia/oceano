@@ -28,6 +28,7 @@
 #include <deal.II/base/time_stepping.h>
 #include <deal.II/base/utilities.h>
 #include <deal.II/base/vectorization.h>
+#include <deal.II/base/function_lib.h>
 
 #include <deal.II/distributed/tria.h>
 
@@ -2472,6 +2473,50 @@ namespace SpaceDiscretization
                   inverse.transform_from_q_points_to_basis(1,
                                                        phi_bathymetry.begin_dof_values(),
                                                        phi_bathymetry.begin_dof_values());
+
+#if defined OCEANO_WITH_BATHYMETRYLIMITING
+                  AlignedVector<VectorizedArray<Number>> bathy_limited(phi_bathymetry.n_q_points);
+                  QGaussLobatto<1> quadrature(degree + 1);
+                  for (unsigned int v = 0; v < data.n_active_entries_per_cell_batch(cell); ++v)
+                    {
+                      std::vector<double> bathy_at_vertex;
+                      bathy_at_vertex.push_back(phi_bathymetry.get_dof_value(0)[v]);
+                      bathy_at_vertex.push_back(phi_bathymetry.get_dof_value(degree*(degree+1))[v]);
+                      bathy_at_vertex.push_back(phi_bathymetry.get_dof_value(degree)[v]);
+                      bathy_at_vertex.push_back(phi_bathymetry.get_dof_value(degree*(degree+2))[v]);
+
+                      std::array<std::pair<double,double>, dim> endpoints;
+                      for (unsigned int d = 0; d < dim; ++d)
+                        endpoints[d] = {0., 1.};
+
+                      std::array<unsigned int, dim> nintervals;
+                      for (unsigned int d = 0; d < dim; ++d)
+                        nintervals[d] = 1;
+
+                      Functions::InterpolatedUniformGridData<dim> interpolate(
+                        endpoints,
+                        nintervals,
+                        Table<dim, double>(nintervals.front()+1, nintervals.back()+1, bathy_at_vertex.begin()));
+
+                      for (unsigned int q = 0; q < phi_bathymetry.n_q_points; ++q)
+                        {
+                          if (q != 0 and q != degree and q != degree*(degree+1) and q != degree*(degree+2))
+                            {
+                              Point<2,Number> x;
+                              x[0] = quadrature.point( q%(degree+1)        )[0];
+                              x[1] = quadrature.point( floor(q/(degree+1)) )[0];
+                              bathy_limited[q][v] = interpolate.value(x);
+                            }
+                          else
+                            {
+                              bathy_limited[q][v] = phi_bathymetry.get_dof_value(q)[v];
+                            }
+                        }
+                    }
+
+                  for (unsigned int q = 0; q < phi_bathymetry.n_q_points; ++q)
+                    phi_bathymetry.submit_dof_value(bathy_limited[q], q);
+#endif
                 }
               else
                 {

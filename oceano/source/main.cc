@@ -114,9 +114,13 @@
 // Activate global mass conservation checks:
 #undef  OCEANO_WITH_MASSCONSERVATIONCHECK
 // How we compute nodal values of the polynomial bathymetry: with a projection approach or
-// by interpolating the reference bathymetry at the degrees of freedom.
+// by interpolating the reference bathymetry at the degrees of freedom. Define one of the first
+// two preprocessors. This may not be enough. High-order polynomials are not good for rough
+// bathymetries: limiting is necessary. A standard choice is to use a piecewice polynomial
+// bathymetry also for high order. This is the third preprocessor:
 #undef  OCEANO_WITH_BATHYMETRYPROJECTION
 #define OCEANO_WITH_BATHYMETRYINTERPOLATION
+#define OCEANO_WITH_BATHYMETRYLIMITING
 
 // The include files are similar to the previous matrix-free tutorial programs with
 // hp-adaptation
