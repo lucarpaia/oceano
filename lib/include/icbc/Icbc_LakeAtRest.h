@@ -44,11 +44,11 @@ namespace ICBC
   // a numerical scheme to catch smooth wave patterns and the lake at rest state in
   // the unperturbed regions. To use the discontinuous bathymetry use the following
   // cpp key:
-#undef  ICBC_LAKEATREST_BATHYMETRYDISCONTINUOUS
+#define ICBC_LAKEATREST_BATHYMETRYDISCONTINUOUS
   // You can also check the well-balanced property of the scheme with respect to the
   // "water-at-rest" state, without the perturbation. Define one of the following cpp key,
   // depending if you want to test the wet or the dry lake at rest test.
-#undef  ICBC_LAKEATREST_WATERATRESTWET
+#define ICBC_LAKEATREST_WATERATRESTWET
 #undef  ICBC_LAKEATREST_WATERATRESTDRY
 
   using namespace dealii;
