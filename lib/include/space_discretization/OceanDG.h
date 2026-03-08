@@ -2459,7 +2459,7 @@ namespace SpaceDiscretization
 #endif
           MatrixFreeOperators::CellwiseInverseMassMatrix<dim, degree, 1, Number>
             inverse(phi_bathymetry);
-          for (unsigned int cell = 0; cell < data.n_cell_batches(); ++cell)
+          for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
             {
               phi_bathymetry.reinit(cell);
               if (phi_bathymetry.get_active_fe_index())
