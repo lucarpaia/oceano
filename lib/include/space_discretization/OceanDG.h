@@ -2245,7 +2245,7 @@ namespace SpaceDiscretization
       data.cell_loop(&OceanoOperator::local_apply_cell_mass_height,
                      this,
                      integral_depth,
-                     {solution_height, solution_height}, //lrp:bathy: add bathymetry if you want mass-conservation in this branch
+                     {solution_height, current_ri.back()},
                      std::function<void(const unsigned int, const unsigned int)>(),
                      [&](const unsigned int start_range, const unsigned int end_range) {
                        /* DEAL_II_OPENMP_SIMD_PRAGMA */
