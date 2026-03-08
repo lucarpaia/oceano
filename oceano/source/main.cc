@@ -1041,7 +1041,7 @@ namespace Problem
       const double errors_tracers =
         oceano_operator.compute_errors_tracers(
           ICBC::ExactSolution<dimension, n_variables>(time,prm),
-          solution_height, solution_tracer);
+          solution_height, solution_tracer, data_bathymetry);
 #endif
 
       const std::string quantity_name =

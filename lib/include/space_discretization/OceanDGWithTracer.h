@@ -167,14 +167,15 @@ namespace SpaceDiscretization
     double compute_errors_tracers(
       const Function<dim> &                             function,
       const LinearAlgebra::distributed::Vector<Number> &solution_height,
-      const LinearAlgebra::distributed::Vector<Number> &solution_tracer) const;
+      const LinearAlgebra::distributed::Vector<Number> &solution_tracer,
+      const LinearAlgebra::distributed::Vector<Number> &data_bathymetry) const;
 
     using OceanoOperator<dim, n_tra, degree, n_points_1d>::bc;
 
-    using OceanoOperator<dim, n_tra, degree, n_points_1d>::data_quadrature_cell_0;
-    using OceanoOperator<dim, n_tra, degree, n_points_1d>::data_quadrature_cell_1;
-    using OceanoOperator<dim, n_tra, degree, n_points_1d>::data_quadrature_face;
-    using OceanoOperator<dim, n_tra, degree, n_points_1d>::data_quadrature_boundary;
+    //using OceanoOperator<dim, n_tra, degree, n_points_1d>::data_quadrature_cell_0;
+    //using OceanoOperator<dim, n_tra, degree, n_points_1d>::data_quadrature_cell_1;
+    //using OceanoOperator<dim, n_tra, degree, n_points_1d>::data_quadrature_face;
+    //using OceanoOperator<dim, n_tra, degree, n_points_1d>::data_quadrature_boundary;
 
     using OceanoOperator<dim, n_tra, degree, n_points_1d>::model;
 
@@ -258,7 +259,8 @@ namespace SpaceDiscretization
       constraints = {&dummy, &dummy, &dummy};
     const std::vector<Quadrature<1>> quadratures = {QGauss<1>(n_points_1d),
                                                     QGaussLobatto<1>(degree + 2),
-                                                    QGauss<1>(degree + 1)};
+                                                    QGauss<1>(degree + 1),
+                                                    QGaussLobatto<1>(degree + 1)};
 
     typename MatrixFree<dim, Number>::AdditionalData additional_data;
     additional_data.mapping_update_flags =
@@ -295,7 +297,8 @@ namespace SpaceDiscretization
     const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
     const std::pair<unsigned int, unsigned int>                   &cell_range) const
   {
-    FEEvaluation<dim, -1, n_points_1d, 1, Number> phi_height(data,cell_range,0);
+    FEEvaluation<dim, -1, n_points_1d, 1, Number> phi_height(data,cell_range,0),
+                                                  phi_bathymetry(data,cell_range,0);
     FEEvaluation<dim, -1, n_points_1d, dim, Number> phi_discharge(data,cell_range,1);
     FEEvaluation<dim, -1, n_points_1d, n_tra, Number> phi_tracer(data,cell_range,2);
     FEEvaluation<dim, -1, n_points_1d, dim, Number> phi_velocity(data,cell_range,1);
@@ -311,7 +314,9 @@ namespace SpaceDiscretization
         phi_tracer.reinit(cell);
         phi_tracer.gather_evaluate(src[2], EvaluationFlags::values | EvaluationFlags::gradients);
         phi_velocity.reinit(cell);
-        phi_velocity.gather_evaluate(src.back(), EvaluationFlags::gradients);
+        phi_velocity.gather_evaluate(src[3], EvaluationFlags::gradients);
+        phi_bathymetry.reinit(cell);
+        phi_bathymetry.gather_evaluate(src.back(), EvaluationFlags::values);
 
         VectorizedArray<Number> area_cell;
         for (unsigned int v = 0; v < data.n_active_entries_per_cell_batch(cell); ++v)
@@ -324,7 +329,7 @@ namespace SpaceDiscretization
             const auto t_q = phi_tracer.get_value(q);
             const auto dt_q = phi_tracer.get_gradient(q);
             const auto du_q = phi_velocity.get_gradient(q);
-            const auto zb_q = data_quadrature_cell_0.get_data(cell, q)[0];
+            const auto zb_q = phi_bathymetry.get_value(q); //data_quadrature_cell_0.get_data(cell, q)[0];
 
             phi_tracer.submit_gradient(
               model.tracer_adv_diff_flux(z_q, q_q, t_q, du_q, dt_q, zb_q, area_cell),
@@ -343,7 +348,8 @@ namespace SpaceDiscretization
     const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
     const std::pair<unsigned int, unsigned int>                   &cell_range) const
   {
-    FEEvaluation<dim, -1, degree + 2, 1, Number> phi_height(data, cell_range, 0, 1);
+    FEEvaluation<dim, -1, degree + 2, 1, Number> phi_height(data, cell_range, 0, 1),
+                                                 phi_bathymetry(data, cell_range, 0, 1);
     FEEvaluation<dim, -1, degree + 2, n_tra, Number> phi_tracer(data, cell_range, 2, 1);
 
     for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
@@ -352,12 +358,14 @@ namespace SpaceDiscretization
         phi_tracer.gather_evaluate(src[0], EvaluationFlags::values);
         phi_height.reinit(cell);
         phi_height.gather_evaluate(src[1], EvaluationFlags::values);
+        phi_bathymetry.reinit(cell);
+        phi_bathymetry.gather_evaluate(src.back(), EvaluationFlags::values);
 
         for (unsigned int q = 0; q < phi_tracer.n_q_points; ++q)
           {
             const auto z_q = phi_height.get_value(q);
             const auto t_q = phi_tracer.get_value(q);
-            const auto zb_q = data_quadrature_cell_1.get_data(cell, q);
+            const auto zb_q = phi_bathymetry.get_value(q); //data_quadrature_cell_1.get_data(cell, q);
 
             phi_tracer.submit_value(
               model.depth(z_q, zb_q)*t_q,
@@ -379,8 +387,12 @@ namespace SpaceDiscretization
     const std::pair<unsigned int, unsigned int>                   &face_range) const
   {
     FEFaceEvaluation<dim, -1, degree + 2, 1, Number> phi_height_m(data, face_range,
+                                                                      true, 0, 1),
+                                                     phi_bathymetry_m(data, face_range,
                                                                       true, 0, 1);
     FEFaceEvaluation<dim, -1, degree + 2, 1, Number> phi_height_p(data, face_range,
+                                                                      false, 0, 1),
+                                                     phi_bathymetry_p(data, face_range,
                                                                       false, 0, 1);
     FEFaceEvaluation<dim, -1, degree + 2, dim, Number> phi_discharge_m(data, face_range,
                                                                       true, 1, 1);
@@ -399,6 +411,8 @@ namespace SpaceDiscretization
         phi_discharge_p.gather_evaluate(src[1], EvaluationFlags::values);
         phi_tracer_p.reinit(face);
         phi_tracer_p.gather_evaluate(src[2], EvaluationFlags::values);
+        phi_bathymetry_p.reinit(face);
+        phi_bathymetry_p.gather_evaluate(src.back(), EvaluationFlags::values);
 
         phi_height_m.reinit(face);
         phi_height_m.gather_evaluate(src[0], EvaluationFlags::values);
@@ -406,6 +420,8 @@ namespace SpaceDiscretization
         phi_discharge_m.gather_evaluate(src[1], EvaluationFlags::values);
         phi_tracer_m.reinit(face);
         phi_tracer_m.gather_evaluate(src[2], EvaluationFlags::values);
+        phi_bathymetry_m.reinit(face);
+        phi_bathymetry_m.gather_evaluate(src.back(), EvaluationFlags::values);
 
         for (unsigned int q = 0; q < phi_tracer_m.n_q_points; ++q)
           {
@@ -417,8 +433,10 @@ namespace SpaceDiscretization
                                                phi_tracer_m.get_value(q),
                                                phi_tracer_p.get_value(q),
                                                phi_tracer_m.normal_vector(q),
-                                               data_quadrature_face.get_data(face, 2*q),
-                                               data_quadrature_face.get_data(face, 2*q+1));
+                                               phi_bathymetry_m.get_value(q),
+                                               phi_bathymetry_p.get_value(q));
+                                               //data_quadrature_face.get_data(face, 2*q),
+                                               //data_quadrature_face.get_data(face, 2*q+1));
 
             phi_tracer_m.submit_value(-numerical_flux_p, q);
             phi_tracer_p.submit_value(numerical_flux_p, q);
@@ -449,7 +467,8 @@ namespace SpaceDiscretization
     const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
     const std::pair<unsigned int, unsigned int>                   &face_range) const
   {
-    FEFaceEvaluation<dim, -1, n_points_1d, 1, Number> phi_height(data, face_range, true, 0);
+    FEFaceEvaluation<dim, -1, n_points_1d, 1, Number> phi_height(data, face_range, true, 0),
+                                                      phi_bathymetry(data, face_range, true, 0);
     FEFaceEvaluation<dim, -1, n_points_1d, dim, Number> phi_discharge(data, face_range, true, 1);
     FEFaceEvaluation<dim, -1, n_points_1d, n_tra, Number> phi_tracer(data, face_range, true, 2);
 
@@ -463,6 +482,8 @@ namespace SpaceDiscretization
         phi_discharge.gather_evaluate(src[1], EvaluationFlags::values);
         phi_tracer.reinit(face);
         phi_tracer.gather_evaluate(src[2], EvaluationFlags::values);
+        phi_bathymetry.reinit(face);
+        phi_bathymetry.gather_evaluate(src.back(), EvaluationFlags::values);
 
         for (unsigned int q = 0; q < phi_tracer.n_q_points; ++q)
           {
@@ -471,8 +492,8 @@ namespace SpaceDiscretization
             const auto t_m    = phi_tracer.get_value(q);
 
             const auto normal = phi_tracer.normal_vector(q);
-            const auto zb_m   =
-              data_quadrature_boundary.get_data(face-data.n_inner_face_batches(), q);
+            const auto zb_m   = phi_bathymetry.get_value(q);
+              //data_quadrature_boundary.get_data(face-data.n_inner_face_batches(), q);
 
             auto rho_u_dot_n = q_m * normal;
 
@@ -652,7 +673,8 @@ namespace SpaceDiscretization
     const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
     const std::pair<unsigned int, unsigned int>                   &cell_range) const
   {
-    FEEvaluation<dim, -1, degree + 2, 1, Number> phi_height(data, cell_range, 0, 1);
+    FEEvaluation<dim, -1, degree + 2, 1, Number> phi_height(data, cell_range, 0, 1),
+                                                 phi_bathymetry(data, cell_range, 0, 1);
     FEEvaluation<dim, -1, degree + 2, n_tra, Number> phi_tracer(data, cell_range, 2, 1);
 
     const VectorizedArray<Number> epsilon_dry = 1e-11;
@@ -664,13 +686,15 @@ namespace SpaceDiscretization
           inverse(phi_tracer);
         phi_height.reinit(cell);
         phi_height.gather_evaluate(src[1], EvaluationFlags::values);
+        phi_bathymetry.reinit(cell);
+        phi_bathymetry.gather_evaluate(src.back(), EvaluationFlags::values);
 
         VectorizedArray<Number> n_dry_points = 0;
         AlignedVector<VectorizedArray<Number>> h(phi_height.n_q_points);
         for (unsigned int q = 0; q < phi_tracer.n_q_points; ++q)
           {
             const auto z_q = phi_height.get_value(q);
-            const auto zb_q = data_quadrature_cell_1.get_data(cell, q);
+            const auto zb_q = phi_bathymetry.get_value(q);//data_quadrature_cell_1.get_data(cell, q);
             const auto mask_q =
             compare_and_apply_mask<SIMDComparison::less_than_or_equal>(
               z_q, -zb_q + epsilon_dry, 0., 1.);
@@ -841,7 +865,7 @@ namespace SpaceDiscretization
         &OceanoOperatorWithTracer::local_apply_cell_mass_tracer,
         this,
         vec_ki_tracer.front(),
-        {solution_tracer, solution_height},
+        {solution_tracer, solution_height, current_ri.back()},
         [&](const unsigned int start_range, const unsigned int end_range) {
           /* DEAL_II_OPENMP_SIMD_PRAGMA */
           for (unsigned int i = start_range; i < end_range; ++i)
@@ -864,7 +888,7 @@ namespace SpaceDiscretization
             &OceanoOperatorWithTracer::local_apply_inverse_modified_mass_matrix_tracer,
             this,
             solution_tracer,
-            {vec_ki_tracer.front(), next_ri_height});
+            {vec_ki_tracer.front(), next_ri_height, current_ri.back()});
         }
       else
         {
@@ -874,7 +898,7 @@ namespace SpaceDiscretization
             &OceanoOperatorWithTracer::local_apply_inverse_modified_mass_matrix_tracer,
             this,
             next_ri_tracer,
-            {vec_ki_tracer.front(), next_ri_height});
+            {vec_ki_tracer.front(), next_ri_height, current_ri.back()});
         }
     }
   }
@@ -926,7 +950,7 @@ namespace SpaceDiscretization
         &OceanoOperatorWithTracer::local_apply_cell_mass_tracer,
         this,
         integral_tracer,
-        {solution_tracer, solution_height},
+        {solution_tracer, solution_height, current_ri.back()},
         std::function<void(const unsigned int, const unsigned int)>(),
         [&](const unsigned int start_range, const unsigned int end_range) {
           /* DEAL_II_OPENMP_SIMD_PRAGMA */
@@ -1012,7 +1036,8 @@ namespace SpaceDiscretization
   double OceanoOperatorWithTracer<dim, n_tra, degree, n_points_1d>::compute_errors_tracers(
     const Function<dim> &                             function,
     const LinearAlgebra::distributed::Vector<Number> &solution_height,
-    const LinearAlgebra::distributed::Vector<Number> &solution_tracer) const
+    const LinearAlgebra::distributed::Vector<Number> &solution_tracer,
+    const LinearAlgebra::distributed::Vector<Number> &data_bathymetry) const
   {
     TimerOutput::Scope t(timer, "compute errors");
 
@@ -1025,7 +1050,8 @@ namespace SpaceDiscretization
             const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
             const std::pair<unsigned int, unsigned int>                   &cell_range) {
 
-          FEEvaluation<dim, -1, n_points_1d, 1, Number> phi_height(data, cell_range, 0, 1, 0);
+          FEEvaluation<dim, -1, n_points_1d, 1, Number> phi_height(data, cell_range, 0, 1, 0),
+                                                        phi_bathymetry(data, cell_range, 0, 1, 0);
           FEEvaluation<dim, -1, n_points_1d, n_tra, Number> phi_tracer(data, cell_range, 2, 0);
 
           for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
@@ -1036,11 +1062,14 @@ namespace SpaceDiscretization
               phi_tracer.reinit(cell);
               phi_tracer.gather_evaluate(src[1], EvaluationFlags::values);
 
+              phi_bathymetry.reinit(cell);
+              phi_bathymetry.gather_evaluate(data_bathymetry, EvaluationFlags::values);
+
               VectorizedArray<Number> local_errors_squared = 0.;
               for (unsigned int q = 0; q < phi_tracer.n_q_points; ++q)
                 {
                   const auto z_q = phi_height.get_value(q);
-                  const auto zb_q = data_quadrature_cell_0.get_data(cell, q)[0];
+                  const auto zb_q = phi_bathymetry.get_value(q); //data_quadrature_cell_0.get_data(cell, q)[0];
                   const auto mask_q =
                     compare_and_apply_mask<SIMDComparison::less_than_or_equal>(
                       z_q, -zb_q, 0., 1.);
