@@ -144,7 +144,7 @@ namespace ICBC
     if (component == 0)
       return 0.;
     else if (component == 1)
-      return hoo * uoo;
+      return uoo;
     else if (component == 2)
       return 0.;
     else if (component == 3)
