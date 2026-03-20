@@ -1070,8 +1070,9 @@ namespace SpaceDiscretization
   // The next function implements a conservative tracer correction to be applied with the
   // deal.ii `SolutionTransfer` class, before the call to `prepare_for_coarsening_and_refinement`.
   // It is the equivalent of `prepare_for_conservative_coarsening()` of the base class. Refer to
-  // that comments. Notice only the trick to initialize the cell integral to zero for a
-  // multi-component system.
+  // that comments. Notice a consequence of this operations: the tracer is reset to zero in
+  // dry areas, as it should be. Notice also the trick to initialize the cell integral to zero for
+  // a multi-component system.
   template <int dim, int n_tra, int degree, int n_points_1d>
   void OceanoOperatorWithTracer<dim, n_tra, degree, n_points_1d>::prepare_for_conservative_coarsening_tracer(
     const LinearAlgebra::distributed::Vector<Number> &solution_height,
@@ -1106,7 +1107,6 @@ namespace SpaceDiscretization
                   inv_area += h_q * phi_tracer.JxW(q);
                   integral_cell += t_q * h_q * phi_tracer.JxW(q);
                 }
-              inv_area = 1./inv_area;
 
               std::bitset<phi_tracer.n_lanes> mask_cell;
               for (unsigned int v = 0; v < data.n_active_entries_per_cell_batch(cell); ++v)
@@ -1115,6 +1115,7 @@ namespace SpaceDiscretization
                         data.get_cell_iterator(cell,v)->future_fe_index() == 0)
                     mask_cell[v] = true;
                 }
+              inv_area = 1./(inv_area + 1e-12);
 
               for (unsigned int i = 0; i < phi_tracer.dofs_per_component; ++i)
                 phi_tracer.submit_dof_value(integral_cell * inv_area, i);

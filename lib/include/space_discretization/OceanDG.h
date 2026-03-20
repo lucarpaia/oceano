@@ -2747,9 +2747,11 @@ namespace SpaceDiscretization
   // deal.ii `SolutionTransfer` class, before the call to `prepare_for_coarsening_and_refinement`.
   // It simply averages a high order solution so that the the application of
   // `solution_transfer.interpolate()` is conservative. Land-sea masks are applied to average
-  // only the physical portion of the free-surface. With a non-polynomial batymetry the mass
-  // is the mass computed at Gauss-Lobatto quadrature points, for this reason this
-  // specific integrator is retrieved.
+  // only the physical portion of the free-surface. Remaps are not needed in dry cells and are
+  // excluded by checking the element wet area. Still, with a bit of paranoia, we desingularize
+  // a potential division by zero.
+  // With a non-polynomial batymetry the mass is the mass computed at Gauss-Lobatto quadrature
+  // points, for this reason this specific integrator is retrieved.
   template <int dim, int n_tra, int degree, int n_points_1d>
   void OceanoOperator<dim, n_tra, degree, n_points_1d>::prepare_for_conservative_coarsening(
     LinearAlgebra::distributed::Vector<Number> &solution_height) const
@@ -2781,15 +2783,16 @@ namespace SpaceDiscretization
                   inv_area += mask_q * phi_height.JxW(q);
                   integral_cell += z_q * mask_q * phi_height.JxW(q);
                 }
-              inv_area = 1./(inv_area + 1e-12);
 
               std::bitset<phi_height.n_lanes> mask_cell;
               for (unsigned int v = 0; v < data.n_active_entries_per_cell_batch(cell); ++v)
                 {
                   if (data.get_cell_iterator(cell,v)->active_fe_index() == 1 &&
-                        data.get_cell_iterator(cell,v)->future_fe_index() == 0)
+                        data.get_cell_iterator(cell,v)->future_fe_index() == 0 &&
+                          inv_area[v] > 0.)
                     mask_cell[v] = true;
                 }
+              inv_area = 1./(inv_area + 1e-12);
 
               for (unsigned int i = 0; i < phi_height.dofs_per_cell; ++i)
                 phi_height.submit_dof_value(integral_cell * inv_area, i);
