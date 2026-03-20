@@ -929,6 +929,7 @@ namespace Problem
 #ifdef OCEANO_WITH_TRACERS
       parallel::distributed::SolutionTransfer<dim, LinearAlgebra::distributed::Vector<Number>>
         solution_transfer_tracer(dof_handler_tracer);
+      oceano_operator.prepare_for_conservative_coarsening_tracer(solution_height, solution_tracer);
       solution_transfer_tracer.prepare_for_coarsening_and_refinement(solution_tracer);
 #endif
 

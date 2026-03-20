@@ -161,13 +161,18 @@ namespace SpaceDiscretization
       const LinearAlgebra::distributed::Vector<Number>              &solution_height,
       const LinearAlgebra::distributed::Vector<Number>              &solution_tracer);
 
-    void project_tracers(const Function<dim> &                       function,
-                         LinearAlgebra::distributed::Vector<Number> &solution_tracer) const;
+    void project_tracers(
+      const Function<dim>                              &function,
+      LinearAlgebra::distributed::Vector<Number>       &solution_tracer) const;
 
     double compute_errors_tracers(
-      const Function<dim> &                             function,
+      const Function<dim>                              &function,
       const LinearAlgebra::distributed::Vector<Number> &solution_height,
       const LinearAlgebra::distributed::Vector<Number> &solution_tracer) const;
+
+    void prepare_for_conservative_coarsening_tracer(
+      const LinearAlgebra::distributed::Vector<Number> &solution_height,
+      LinearAlgebra::distributed::Vector<Number>       &solution_tracer) const;
 
     using OceanoOperator<dim, n_tra, degree, n_points_1d>::bc;
 
@@ -1062,6 +1067,63 @@ namespace SpaceDiscretization
     return std::sqrt(Utilities::MPI::sum(errors_squared, MPI_COMM_WORLD));
   }
 
+  // The next function implements a conservative tracer correction to be applied with the
+  // deal.ii `SolutionTransfer` class, before the call to `prepare_for_coarsening_and_refinement`.
+  // It is the equivalent of `prepare_for_conservative_coarsening()` of the base class. Refer to
+  // that comments. Notice only the trick to initialize the cell integral to zero for a
+  // multi-component system.
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperatorWithTracer<dim, n_tra, degree, n_points_1d>::prepare_for_conservative_coarsening_tracer(
+    const LinearAlgebra::distributed::Vector<Number> &solution_height,
+    LinearAlgebra::distributed::Vector<Number>       &solution_tracer) const
+  {
+    data.template cell_loop<LinearAlgebra::distributed::Vector<Number>,
+                            std::vector<LinearAlgebra::distributed::Vector<Number>>>(
+        [&](const MatrixFree<dim, Number> &,
+            LinearAlgebra::distributed::Vector<Number>                    &dst,
+            const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
+            const std::pair<unsigned int, unsigned int>                   &cell_range) {
+
+          FEEvaluation<dim, -1, degree + 2, 1, Number> phi_height(data, cell_range, 0, 1);
+          FEEvaluation<dim, -1, degree + 2, n_tra, Number> phi_tracer(data, cell_range, 2, 1);
+
+          for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
+            {
+              phi_height.reinit(cell);
+              phi_height.gather_evaluate(src[0], EvaluationFlags::values);
+              phi_tracer.reinit(cell);
+              phi_tracer.gather_evaluate(src[1], EvaluationFlags::values);
+
+              VectorizedArray<Number> inv_area = 0.;
+              auto integral_cell = 0. * phi_tracer.get_value(0);
+              for (unsigned int q = 0; q < phi_tracer.n_q_points; ++q)
+                {
+                  const auto z_q = phi_height.get_value(q);
+                  const auto t_q = phi_tracer.get_value(q);
+                  const auto zb_q = data_quadrature_cell_1.get_data(cell, q);
+                  const auto h_q = model.depth(z_q, zb_q);
+
+                  inv_area += h_q * phi_tracer.JxW(q);
+                  integral_cell += t_q * h_q * phi_tracer.JxW(q);
+                }
+              inv_area = 1./inv_area;
+
+              std::bitset<phi_tracer.n_lanes> mask_cell;
+              for (unsigned int v = 0; v < data.n_active_entries_per_cell_batch(cell); ++v)
+                {
+                  if (data.get_cell_iterator(cell,v)->active_fe_index() == 1 &&
+                        data.get_cell_iterator(cell,v)->future_fe_index() == 0)
+                    mask_cell[v] = true;
+                }
+
+              for (unsigned int i = 0; i < phi_tracer.dofs_per_component; ++i)
+                phi_tracer.submit_dof_value(integral_cell * inv_area, i);
+              phi_tracer.set_dof_values(dst, 0, mask_cell);
+            }
+        },
+        solution_tracer,
+        {solution_height, solution_tracer});
+  }
 } // namespace SpaceDiscretization
 
 #endif //OCEANDGWITHTRACER_HPP
