@@ -2748,8 +2748,7 @@ namespace SpaceDiscretization
   // It simply averages a high order solution so that the the application of
   // `solution_transfer.interpolate()` is conservative. Land-sea masks are applied to average
   // only the physical portion of the free-surface. Remaps are not needed in dry cells and are
-  // excluded by checking the element wet area. Still, with a bit of paranoia, we desingularize
-  // a potential division by zero with a very very small number (1e-16).
+  // excluded by checking the element wet area.
   // With a non-polynomial batymetry the mass is the mass computed at Gauss-Lobatto quadrature
   // points, for this reason this specific integrator is retrieved.
   template <int dim, int n_tra, int degree, int n_points_1d>
@@ -2792,7 +2791,7 @@ namespace SpaceDiscretization
                           inv_area[v] > 0.)
                     mask_cell[v] = true;
                 }
-              inv_area = 1./(inv_area + 1e-16);
+              inv_area = 1./inv_area;
 
               for (unsigned int i = 0; i < phi_height.dofs_per_cell; ++i)
                 phi_height.submit_dof_value(integral_cell * inv_area, i);
