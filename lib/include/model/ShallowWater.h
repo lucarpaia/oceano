@@ -94,7 +94,7 @@ namespace Model
   public:
     ShallowWater(IO::ParameterHandler &prm);
     ~ShallowWater(){};
- 
+
     double g;
     double cu4;
 
@@ -264,12 +264,12 @@ namespace Model
   // For the model class we do not use an implementation file. This
   // is because of the fact the all the function called are templated
   // or inlined. Both templated and inlined functions are hard to be separated
-  // between declaration and implementation. We keep them in the header file. 
-  
+  // between declaration and implementation. We keep them in the header file.
+
   // The constructor of the model class takes as arguments the parameters handler
   // class in order to read the test-case/user dependent parameters. These
-  // parameters are stored as class members. In this way they are defined/read 
-  // from file in one place and then used whenever needed  with `model.param`, 
+  // parameters are stored as class members. In this way they are defined/read
+  // from file in one place and then used whenever needed  with `model.param`,
   // instead of being read/defined multiple times.
   ShallowWater::ShallowWater(
     IO::ParameterHandler &prm)
@@ -318,7 +318,8 @@ namespace Model
   {
     const Number h = depth(height, bathymetry);
     const Number h4 = h*h*h*h;
-    const Number inverse_depth = sqrt(2.) * h / sqrt(h4 + std::max(h4, Number(cu4)));
+    const Number inverse_depth = std::sqrt(2.) * h / std::sqrt(h4 + std::max(h4, Number(cu4)));
+
 
     return discharge * inverse_depth;
   }
