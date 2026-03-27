@@ -84,9 +84,10 @@ namespace SpaceDiscretization
   // VectorizedArray argument (see the step-37 tutorial for details). This
   // functions are used for inquiry the data for the source terms and the
   // initial/boundary conditions. The first one request a single data
-  // component. The second one requests the solution on all
-  // components and it is used for supercritical inflow flow boundaries
-  // where all components of the solution are set.
+  // component. The second one requests the solution on multiple components.
+  // The number of components requested is specified via the template
+  // `nvar`. Optionally, you can also select the initial component via the
+  // optional argument `first_component`.
   template <int dim, typename Number>
   VectorizedArray<Number>
   evaluate_function(const Function<dim>                       &function,
@@ -108,7 +109,8 @@ namespace SpaceDiscretization
   template <int dim, typename Number, int n_vars>
   Tensor<1, n_vars, VectorizedArray<Number>>
   evaluate_function(const Function<dim>                       &function,
-                    const Point<dim, VectorizedArray<Number>> &p_vectorized)
+                    const Point<dim, VectorizedArray<Number>> &p_vectorized,
+                    const unsigned int                         first_component = 0)
   {
     Assert(function.n_components >= n_vars, ExcInternalError());
     Tensor<1, n_vars, VectorizedArray<Number>> result;
@@ -118,7 +120,7 @@ namespace SpaceDiscretization
         for (unsigned int d = 0; d < dim; ++d)
           p[d] = p_vectorized[d][v];
         for (unsigned int d = 0; d < n_vars; ++d)
-          result[d][v] = function.value(p, d);
+          result[d][v] = function.value(p, d+first_component);
       }
     return result;
   }
@@ -254,11 +256,11 @@ namespace SpaceDiscretization
 
     ICBC::BcBase<dim, 1+dim+n_tra> *bc;
 
-    CellDataStorage<Tensor<1, dim+3, VectorizedArray<Number>>> data_quadrature_cell_0;
-    CellDataStorage<VectorizedArray<Number>>                   data_quadrature_cell_1;
-    CellDataStorage<Tensor<1, 2, VectorizedArray<Number>>>     data_quadrature_cell_2;
-    CellDataStorage<VectorizedArray<Number>>                   data_quadrature_face;
-    CellDataStorage<VectorizedArray<Number>>                   data_quadrature_boundary;
+    CellDataStorage<Tensor<1, 2, VectorizedArray<Number>>> data_quadrature_cell_0;
+    CellDataStorage<VectorizedArray<Number>>               data_quadrature_cell_1;
+    CellDataStorage<Tensor<1, 2, VectorizedArray<Number>>> data_quadrature_cell_2;
+    CellDataStorage<VectorizedArray<Number>>               data_quadrature_face;
+    CellDataStorage<VectorizedArray<Number>>               data_quadrature_boundary;
     CellDataStorage<Number> data_dofs;
 
     // The switch between the different models is realized with
@@ -508,7 +510,7 @@ namespace SpaceDiscretization
         for (unsigned int q = 0; q < phi_cell_0.n_q_points; ++q)
           {
             data_quadrature_cell_0.submit_data(
-              evaluate_function<dim, Number, dim+3>(
+              evaluate_function<dim, Number, 2>(
                 *bc->problem_data, phi_cell_0.quadrature_point(q))
               );
           }
@@ -632,13 +634,14 @@ namespace SpaceDiscretization
   // further changes, thus there is no need to specify it. For the Gauss-Lobatto
   // quadrature we select 1 and for the fast inversion we select 2.
   //
-  // When it comes to the evaluation of the body force vector, we need to call
-  // the `evaluate_function()` method we provided above; Since the body force,
-  // in the general case is not a constant, we must call it inside the loop over
-  // quadrature point data, which of course is quite expensive.
-  // Once the body force has been computed we compute the body force term associated
-  // the right-hand side of the shallow water equation inside the `source()` function,
-  // a member function of the model class.
+  // When it comes to the evaluation of the source term vector, we call an
+  // `evaluate_function()` method and a `data_quadrature_cell_0`, both provided above;
+  // The first one is used for test-specific data that is evaluated on the fly, typically
+  // unsteady data. The latter is used to retrieve steady data that have been computed at the
+  // beginning of the simulation and properly stored.
+  // Once all the test-specific data has been computed we compute the body force term
+  // associated the right-hand side of the shallow water equation inside the `source()`
+  // function, a member function of the model class.
   //
   // The rest follows the other tutorial programs. Since we have implemented
   // all physics for the governing equations in the separate `model.flux()`
@@ -732,15 +735,18 @@ namespace SpaceDiscretization
             const auto dz_q = phi_height.get_gradient(q);
             const auto q_q = phi_discharge.get_value(q);
             const auto du_q = phi_velocity.get_gradient(q);
-            const auto data_q = data_quadrature_cell_0.get_data(cell, q);
+            const auto data_stored_q = data_quadrature_cell_0.get_data(cell, q);
+            const auto zb_q = data_stored_q[0];
+            const auto data_onthefly_q = evaluate_function<dim, Number, dim+1>(
+                *bc->problem_data, phi_discharge.quadrature_point(q), 2);
 
             phi_discharge.submit_gradient(
               model.momentum_adv_diff_flux<dim>(
-                z_q, q_q, model.depth(z_q, data_q[0])*du_q, data_q[0], area_cell),
+                z_q, q_q, model.depth(z_q, zb_q)*du_q, zb_q, area_cell),
               q);
 
             phi_discharge.submit_value(
-              model.source<dim>(z_q, q_q, dz_q, data_q),
+              model.source<dim>(z_q, q_q, dz_q, data_stored_q, data_onthefly_q),
               q);
           }
 
@@ -782,15 +788,18 @@ namespace SpaceDiscretization
             const auto dz_q = phi_height.get_gradient(q);
             const auto q_q = phi_discharge.get_value(q);
             const auto du_q = phi_velocity.get_gradient(q);
-            const auto data_q = data_quadrature_cell_0.get_data(cell, q);
+            const auto data_stored_q = data_quadrature_cell_0.get_data(cell, q);
+            const auto zb_q = data_stored_q[0];
+            const auto data_onthefly_q = evaluate_function<dim, Number, dim+1>(
+                *bc->problem_data, phi_discharge.quadrature_point(q), 2);
 
             phi_discharge.submit_gradient(
               model.momentum_adv_diff_flux<dim>(
-                z_q, q_q, model.depth(z_q, data_q[0])*du_q, data_q[0], area_cell),
+                z_q, q_q, model.depth(z_q, zb_q)*du_q, zb_q, area_cell),
               q);
 
             phi_discharge.submit_value(
-              model.source_nonstiff<dim>(z_q, q_q, dz_q, data_q),
+              model.source_nonstiff<dim>(z_q, q_q, dz_q, data_stored_q, data_onthefly_q),
               q);
           }
 

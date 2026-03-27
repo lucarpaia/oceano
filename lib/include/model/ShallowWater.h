@@ -208,7 +208,8 @@ namespace Model
       source(const Number                    height,
              const Tensor<1, dim, Number>   &discharge,
              const Tensor<1, dim, Number>   &gradient_height,
-             const Tensor<1, dim+3, Number> &parameters) const;
+             const Tensor<1, 2, Number>     &data_type1,
+             const Tensor<1, dim+1, Number> &data_type2) const;
 
     // For ImEx time integration strategy, we separate the source term in a stiff and
     // a non-stiff part. For now the stiff part of the source term is only the bottom friction.
@@ -220,7 +221,8 @@ namespace Model
       source_nonstiff(const Number                    height,
                       const Tensor<1, dim, Number>   &discharge,
                       const Tensor<1, dim, Number>   &gradient_height,
-                      const Tensor<1, dim+3, Number> &parameters) const;
+                      const Tensor<1, 2, Number>     &data_type1,
+                      const Tensor<1, dim+1, Number> &data_type2) const;
 
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
@@ -265,12 +267,19 @@ namespace Model
   // is because of the fact the all the function called are templated
   // or inlined. Both templated and inlined functions are hard to be separated
   // between declaration and implementation. We keep them in the header file.
-
+  //
   // The constructor of the model class takes as arguments the parameters handler
   // class in order to read the test-case/user dependent parameters. These
   // parameters are stored as class members. In this way they are defined/read
   // from file in one place and then used whenever needed  with `model.param`,
   // instead of being read/defined multiple times.
+  //
+  // The source takes as input test-specific data with two different arrays
+  // (represented by Tensor in deal.ii). The dimension of these arrays, although
+  // fixed, could have been templated just for better readability and for a simpler
+  // code management. For now such dimensions have been hard-coded: the first array
+  // contains two doubles, the bathymetry and the bottom friction coefficient. The
+  // second array contins all the rest of the data.
   ShallowWater::ShallowWater(
     IO::ParameterHandler &prm)
     : bottom_friction(prm)
@@ -400,18 +409,19 @@ namespace Model
       const Number                    height,
       const Tensor<1, dim, Number>   &discharge,
       const Tensor<1, dim, Number>   &gradient_height,
-      const Tensor<1, dim+3, Number> &parameters) const
+      const Tensor<1, 2, Number>     &data_type1,
+      const Tensor<1, dim+1, Number> &data_type2) const
   {
     const Tensor<1, dim, Number> v =
-      velocity<dim>(height, discharge, parameters[0]);
-    const Number h = depth(height, parameters[0]);
+      velocity<dim>(height, discharge, data_type1[0]);
+    const Number h = depth(height, data_type1[0]);
 
     const Tensor<1, dim, Number> bottomfric =
-      bottom_friction.source<dim, Number>(v, parameters[1], h);
+      bottom_friction.source<dim, Number>(v, data_type1[1], h);
     const Tensor<1, dim, Number> windstress =
-      wind_stress.source<dim, Number>(&parameters[2]);
+      wind_stress.source<dim, Number>(&data_type2[0]);
     const Tensor<1, dim, Number> coriolis =
-      coriolis_force.source<dim, Number>(discharge, parameters[4]);
+      coriolis_force.source<dim, Number>(discharge, data_type2[2]);
 
     Tensor<1, dim, Number> source =
         - g * h * gradient_height
@@ -429,14 +439,15 @@ namespace Model
       const Number                    height,
       const Tensor<1, dim, Number>   &discharge,
       const Tensor<1, dim, Number>   &gradient_height,
-      const Tensor<1, dim+3, Number> &parameters) const
+      const Tensor<1, 2, Number>     &data_type1,
+      const Tensor<1, dim+1, Number> &data_type2) const
   {
-    const Number h = depth(height, parameters[0]);
+    const Number h = depth(height, data_type1[0]);
 
     const Tensor<1, dim, Number> windstress =
-      wind_stress.source<dim, Number>(&parameters[2]);
+      wind_stress.source<dim, Number>(&data_type2[0]);
     const Tensor<1, dim, Number> coriolis =
-      coriolis_force.source<dim, Number>(discharge, parameters[4]);
+      coriolis_force.source<dim, Number>(discharge, data_type2[2]);
 
     Tensor<1, dim, Number> source =
         - g * h * gradient_height
