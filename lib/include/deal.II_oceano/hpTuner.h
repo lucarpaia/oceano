@@ -505,7 +505,8 @@ namespace hpOceano
       for(unsigned q = 0; q < fe_values.n_quadrature_points; ++q)
         {
           min_depth = std::min(
-            values[q] + data.value(fe_values.quadrature_point(q), 0),
+            values[q] + data.value(fe_values.quadrature_point(q), 0)
+              + data.value(fe_values.quadrature_point(q), 5),
             min_depth);
         }
       copy_data.value = std::max(min_depth, 0.);
