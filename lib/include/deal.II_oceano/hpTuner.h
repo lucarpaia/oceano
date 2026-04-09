@@ -476,8 +476,14 @@ namespace hpOceano
 
 
 
-  // The smoothness estimator tracks wet-dry fronts where the solution lacks
-  // of regularity. We use a simple proxy based on the water depth.
+  // The smoothness estimator tracks wet-dry and dry elements where the solution lacks
+  // of regularity. We detect such elements with a simple proxy based on the water depth.
+  // A difference with respect to the previous estimators is the quadrature formula.
+  // Here, a more expensive Gauss-Lobatto quadrature with $r+2$ nodes is mandatory
+  // because the wet-dry algorithm with high-order polynomial is singular on elements
+  // where some of the LGL $r+2$ nodes are dry. To avoid singular elements and switch
+  // correcty to $r=0$, it is better to evaluate the dry/non-dry state precisely at
+  // these nodes.
   template <int dim, typename Number>
     void hpTuner::estimate_smoothness(
       const hp::FECollection<dim>*                      fe,
@@ -486,7 +492,7 @@ namespace hpOceano
       const Function<dim>                              &data,
       Vector<float>                                    &smoothness_estimate) const
   {
-    const unsigned int n_q_points_1d        = fe->max_degree() + 1;
+    const unsigned int n_q_points_1d        = fe->max_degree() + 2;
     using Iterator = typename DoFHandler<dim>::active_cell_iterator;
 
     auto cell_worker = [&](const Iterator   &cell,
@@ -518,7 +524,7 @@ namespace hpOceano
 
     const UpdateFlags cell_flags = update_values | update_quadrature_points;
     hp::QCollection<dim> quadrature;
-    quadrature.push_back(QGauss<dim>(n_q_points_1d));
+    quadrature.push_back(QGaussLobatto<dim>(n_q_points_1d));
     ScratchData<dim> scratch_data(*fe, quadrature, cell_flags);
     CopyData copy_data;
     MeshWorker::mesh_loop(dof->begin_active(),
