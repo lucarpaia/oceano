@@ -486,7 +486,7 @@ namespace hpOceano
       const Function<dim>                              &data,
       Vector<float>                                    &smoothness_estimate) const
   {
-    const unsigned int n_q_points_1d        = fe->max_degree() + 1;
+    const unsigned int n_q_points_1d        = fe->max_degree() + 2;
     using Iterator = typename DoFHandler<dim>::active_cell_iterator;
 
     auto cell_worker = [&](const Iterator   &cell,
@@ -518,7 +518,7 @@ namespace hpOceano
 
     const UpdateFlags cell_flags = update_values | update_quadrature_points;
     hp::QCollection<dim> quadrature;
-    quadrature.push_back(QGauss<dim>(n_q_points_1d));
+    quadrature.push_back(QGaussLobatto<dim>(n_q_points_1d));
     ScratchData<dim> scratch_data(*fe, quadrature, cell_flags);
     CopyData copy_data;
     MeshWorker::mesh_loop(dof->begin_active(),

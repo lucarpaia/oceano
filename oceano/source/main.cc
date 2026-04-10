@@ -227,7 +227,7 @@ namespace Problem
   using Number = double;
   // Besides the problem dimension, which is two, and polynomial degree we want to run with:
   constexpr unsigned int dimension            = 2;
-  constexpr unsigned int fe_degree            = 1;
+  constexpr unsigned int fe_degree            = 3;
   // we also specify a number of points in the Gauss-Legendre quadrature formula we
   // want to use for the volume terms:
   constexpr unsigned int n_q_points_1d        = floor(1.5*fe_degree) + 1;
@@ -937,7 +937,7 @@ namespace Problem
       // enforce mass conservation.
       parallel::distributed::SolutionTransfer<dim, LinearAlgebra::distributed::Vector<Number>>
         solution_transfer_height(dof_handler_height);
-      oceano_operator.prepare_for_conservative_coarsening(solution_height);
+      oceano_operator.prepare_for_conservative_coarsening(solution_height, data_bathymetry);
       solution_transfer_height.prepare_for_coarsening_and_refinement(solution_height);
 
       parallel::distributed::SolutionTransfer<dim, LinearAlgebra::distributed::Vector<Number>>

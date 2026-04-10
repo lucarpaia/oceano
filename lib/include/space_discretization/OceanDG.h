@@ -251,7 +251,8 @@ namespace SpaceDiscretization
       std::vector<LinearAlgebra::distributed::Vector<Number>> &computed_scalar_quantities) const;
 
     void prepare_for_conservative_coarsening(
-      LinearAlgebra::distributed::Vector<Number>              &solution_height) const;
+      LinearAlgebra::distributed::Vector<Number>              &solution_height,
+      const LinearAlgebra::distributed::Vector<Number>        &data_bathymetry) const;
 
     void
     initialize_vector(LinearAlgebra::distributed::Vector<Number> &vector,
@@ -2933,7 +2934,8 @@ namespace SpaceDiscretization
   // `solution_transfer.interpolate()` is conservative.
   template <int dim, int n_tra, int degree, int n_points_1d>
   void OceanoOperator<dim, n_tra, degree, n_points_1d>::prepare_for_conservative_coarsening(
-    LinearAlgebra::distributed::Vector<Number> &solution_height) const
+    LinearAlgebra::distributed::Vector<Number>       &solution_height,
+    const LinearAlgebra::distributed::Vector<Number> &data_bathymetry) const
   {
     data.template cell_loop<LinearAlgebra::distributed::Vector<Number>,
                             LinearAlgebra::distributed::Vector<Number>>(
@@ -2942,30 +2944,41 @@ namespace SpaceDiscretization
             const LinearAlgebra::distributed::Vector<Number> &src,
             const std::pair<unsigned int, unsigned int>      &cell_range) {
 
-          FEEvaluation<dim, -1, degree + 1, 1, Number> phi_height(data, cell_range, 0, 2);
+          FEEvaluation<dim, -1, degree + 2, 1, Number> phi_height(data, cell_range, 0, 1),
+                                                       phi_bathymetry(data, cell_range, 0, 1);
 
           for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
             {
               phi_height.reinit(cell);
               phi_height.gather_evaluate(src, EvaluationFlags::values);
 
+              phi_bathymetry.reinit(cell);
+              phi_bathymetry.gather_evaluate(data_bathymetry, EvaluationFlags::values);
+
+              VectorizedArray<Number> inv_area = 0.;
               VectorizedArray<Number> integral_cell = 0.;
               for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
                 {
                   const auto z_q = phi_height.get_value(q);
-                  integral_cell += z_q * phi_height.JxW(q);
+                  const auto zb_q = phi_bathymetry.get_value(q);
+                  const auto mask_q =
+                    compare_and_apply_mask<SIMDComparison::less_than_or_equal>(
+                      z_q, -zb_q, 0., 1.);
+
+                  inv_area += mask_q * phi_height.JxW(q);
+                  integral_cell += z_q * mask_q * phi_height.JxW(q);
                 }
 
-              VectorizedArray<Number> inv_area = 0.;
               std::bitset<phi_height.n_lanes> mask_cell;
               for (unsigned int v = 0; v < data.n_active_entries_per_cell_batch(cell); ++v)
                 {
-                  inv_area[v] = data.get_cell_iterator(cell,v)->measure();
                   if (data.get_cell_iterator(cell,v)->active_fe_index() == 1 &&
-                        data.get_cell_iterator(cell,v)->future_fe_index() == 0)
+                        data.get_cell_iterator(cell,v)->future_fe_index() == 0 &&
+                          inv_area[v] > 0.)
                     mask_cell[v] = true;
                 }
               inv_area = 1./inv_area;
+
               for (unsigned int i = 0; i < phi_height.dofs_per_cell; ++i)
                 phi_height.submit_dof_value(integral_cell * inv_area, i);
               phi_height.set_dof_values(dst, 0, mask_cell);
