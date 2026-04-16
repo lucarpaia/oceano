@@ -133,8 +133,7 @@ namespace SpaceDiscretization
     OceanoOperatorWithTracer(IO::ParameterHandler           &param,
                              ICBC::BcBase<dim, 1+dim+n_tra> *bc,
                              TimerOutput                    &timer_output,
-                             const unsigned int              max_iteration_height,
-                             const unsigned int              max_iteration_tracer);
+                             const unsigned int              max_iteration_height);
 
     void reinit(const Mapping<dim> &   mapping,
                 const DoFHandler<dim> &dof_handler_height,
@@ -190,8 +189,6 @@ namespace SpaceDiscretization
 
     using OceanoOperator<dim, n_tra, degree, n_points_1d>::timer;
 
-    unsigned int max_iteration_tracer;
-
     void local_apply_inverse_modified_mass_matrix_tracer(
       const MatrixFree<dim, Number>                                 &data,
       LinearAlgebra::distributed::Vector<Number>                    &dst,
@@ -236,11 +233,9 @@ namespace SpaceDiscretization
     IO::ParameterHandler             &param,
     ICBC::BcBase<dim, 1+dim+n_tra>   *bc,
     TimerOutput                      &timer,
-    const unsigned int                max_iteration_height,
-    const unsigned int                max_iteration_tracer)
+    const unsigned int                max_iteration_height)
     : OceanoOperator<dim, n_tra, degree, n_points_1d>(
-      param, bc, timer, max_iteration_height, max_iteration_tracer)
-    , max_iteration_tracer(max_iteration_tracer)
+      param, bc, timer, max_iteration_height)
   {
      check_tracer_mass_cell_integral = 0.;
      check_tracer_mass_boundary_integral = 0.;
@@ -629,14 +624,12 @@ namespace SpaceDiscretization
   // For coastal applications with a free-surface almost constant on a cell, intuition
   // suggests that the aliasing error, coming from under-integration, should stay small.
   //
-  // To exploit vectorization, we invert the mass-matrix in a similar manner of the
-  // continuity equation, with a Jacobi method. The first iteration corresponds to mass
-  // lumping, the successive ones can be seen as corrections. Jacobi is very slow but here
-  // we need only a few iterations to go beyond mass-lumping.
+  // Differently from the continuity equation, we do not use the Jacobi method
+  // for the inversion; instead, we perform an exact inversion using the class
+  // `CellwiseInverseMassMatrix`. This is because the Jacobi diagonal matrix is
+  // a lumped mass-matrix weighted by the condensed water depth. Mass-lumping is
+  // not robust in this case.
   //
-  // We precompute the diagonal mass-matrix outside the Jacobi iterator. Later into the
-  // iterator, we read the residual, we sum the tracer mass term which depend on the
-  // iterative solution. Finally we invert the mass-matrix and update the solution.
   // For the inversion we introduce a second small tolerance parameter, chosen to be
   // close to machine precision (1e-11). This parameter is required
   // for the treatment of dry cells. In fully dry cells, the Newton iteration converges
@@ -644,12 +637,6 @@ namespace SpaceDiscretization
   // matrix can be singular if the water depth is close to roundoff. To prevent the
   // generation of spurious wet cells, quadrature points are classified as dry whenever
   // $h<\epsilon$.
-  //
-  // A last comment is on the access to `phi_tracer.begin_dof_values` which is by pointer
-  // and not, as usual, by value. This is necessary because the function returns a
-  // different type (double or Tensor) depending on the number of tracer and it is too
-  // complicated to catch the correct case. With pointer we access directly to the tracer
-  // value at the dof.
   template <int dim, int n_tra, int degree, int n_points_1d>
   void OceanoOperatorWithTracer<dim, n_tra, degree, n_points_1d>::local_apply_inverse_modified_mass_matrix_tracer(
     const MatrixFree<dim, Number> &,
@@ -664,64 +651,58 @@ namespace SpaceDiscretization
 
     for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
       {
-        phi_tracer.reinit(cell);
-        MatrixFreeOperatorsOceano::CellwiseInverseMassMatrixLumped<dim, -1, n_tra, Number>
-          inverse(phi_tracer);
         phi_height.reinit(cell);
+
         phi_height.gather_evaluate(src[1], EvaluationFlags::values);
 
         VectorizedArray<Number> n_dry_points = 0;
         AlignedVector<VectorizedArray<Number>> h(phi_height.n_q_points);
-        for (unsigned int q = 0; q < phi_tracer.n_q_points; ++q)
+        for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
           {
             const auto z_q = phi_height.get_value(q);
             const auto zb_q = data_quadrature_cell_1.get_data(cell, q);
             const auto mask_q =
-            compare_and_apply_mask<SIMDComparison::less_than_or_equal>(
-              z_q, -zb_q + epsilon_dry, 0., 1.);
-            n_dry_points += 1.-mask_q;
+              compare_and_apply_mask<SIMDComparison::less_than_or_equal>(
+                z_q, -zb_q + epsilon_dry, 0., 1.);
 
+            n_dry_points += 1. - mask_q;
             h[q] = model.depth(z_q, zb_q);
-            phi_height.submit_value(h[q], q);
           }
 
-        phi_height.integrate(EvaluationFlags::values);
 
-        const auto dofs_per_component = phi_tracer.dofs_per_component;
-        const auto dofs_per_cell = phi_tracer.dofs_per_cell;
-        AlignedVector<VectorizedArray<Number>> cell_matrix(dofs_per_component);
-        for (unsigned int i = 0; i < dofs_per_component; ++i)
-          cell_matrix[phi_height.get_internal_dof_numbering()[i]]
-            = phi_height.get_dof_value(i);
-
-        AlignedVector<VectorizedArray<Number>> rhs_cell(dofs_per_cell);
-        for (unsigned int k = 0; k < max_iteration_tracer; ++k)
+        const auto dofs_per_cell = phi_height.dofs_per_cell;
+        AlignedVector<VectorizedArray<Number>>
+          cell_matrix(dofs_per_cell*dofs_per_cell);
+        for (unsigned int i = 0; i < dofs_per_cell; ++i)
           {
-            phi_tracer.read_dof_values(src[0]);
+            for (unsigned int j = 0; j < dofs_per_cell; ++j)
+              phi_height.submit_dof_value(VectorizedArray<double>(), j);
+            phi_height.submit_dof_value(1., i);
 
-            for (unsigned int i = 0; i < dofs_per_cell; ++i)
-              rhs_cell[i] = phi_tracer.begin_dof_values()[i];
+            phi_height.evaluate(EvaluationFlags::values);
 
+            for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
+              phi_height.submit_value(phi_height.get_value(q) * h[q], q);
 
-            phi_tracer.gather_evaluate(dst, EvaluationFlags::values);
+            phi_height.integrate(EvaluationFlags::values);
 
-            for (unsigned int q = 0; q < phi_tracer.n_q_points; ++q)
-              {
-                const auto t_q = phi_tracer.get_value(q);
-
-                phi_tracer.submit_value(-h[q]*t_q, q);
-              }
-
-            phi_tracer.integrate(EvaluationFlags::values,
-                                   &rhs_cell[0],
-                                   true);
-
-
-            inverse.apply(&cell_matrix[0], &rhs_cell[0],
-              phi_tracer.begin_dof_values(), n_dry_points);
-
-            phi_tracer.distribute_local_to_global(dst);
+            for (unsigned int j = 0; j < dofs_per_cell; ++j)
+              cell_matrix[phi_height.get_internal_dof_numbering()[j]
+                + phi_height.get_internal_dof_numbering()[i] * dofs_per_cell]
+                  = phi_height.get_dof_value(j);
           }
+
+        phi_tracer.reinit(cell);
+        MatrixFreeOperatorsOceano::CellwiseInverseMassMatrix<dim, -1, n_tra, Number>
+          inverse(phi_tracer);
+
+        phi_tracer.read_dof_values(src[0]);
+
+        for (unsigned int v = 0; v < data.n_active_entries_per_cell_batch(cell); ++v)
+          inverse.apply(&cell_matrix[0], phi_tracer.begin_dof_values(),
+            phi_tracer.begin_dof_values(), v, n_dry_points);
+
+        phi_tracer.set_dof_values(dst);
       }
   }
 
@@ -873,7 +854,6 @@ namespace SpaceDiscretization
         }
       else
         {
-          next_ri_tracer = solution_tracer;
           next_ri_tracer.zero_out_ghost_values();
           data.cell_loop(
             &OceanoOperatorWithTracer::local_apply_inverse_modified_mass_matrix_tracer,

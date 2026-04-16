@@ -169,8 +169,7 @@ namespace SpaceDiscretization
     OceanoOperator(IO::ParameterHandler      &param,
                    ICBC::BcBase<dim, 1+dim+n_tra> *bc,
                    TimerOutput               &timer_output,
-                   const unsigned int         max_iteration_height,
-                   const unsigned int         max_iteration_tracer);
+                   const unsigned int         max_iteration_height);
 
     void reinit(const Mapping<dim> &   mapping,
                 const DoFHandler<dim> &dof_handler_height,
@@ -395,8 +394,7 @@ namespace SpaceDiscretization
     IO::ParameterHandler             &param,
     ICBC::BcBase<dim, 1+dim+n_tra>   *bc,
     TimerOutput                      &timer,
-    const unsigned int                max_iteration_height,
-    const unsigned int                /*max_iteration_tracer*/)
+    const unsigned int                max_iteration_height)
     : bc(bc)
     , model(param)
     , num_flux(param)
@@ -1466,8 +1464,8 @@ namespace SpaceDiscretization
         // to go beyond mass-lumping, increasing accuracy for fast and
         // under-resolved flow features. For wet-dry cells, inversion is exact
         // and we iterate to conserve the mass. In both cases convergence is
-        // quite fast and we exit, in any case, the loop after maximum three
-        // iterations.
+        // quite fast and we exit the loop after maximum three iterations,
+        // in any case.
         for (unsigned int k = 0; (k < max_iteration_height) && (norm_rhs_in_lane > 1e-16); ++k)
           {
             phi_height.gather_evaluate(dst, EvaluationFlags::values);

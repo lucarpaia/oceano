@@ -228,12 +228,11 @@ namespace Problem
   constexpr unsigned int n_tracers            = 1;
 #endif
   // and the maximum number of iterations for the iterative method that invert the
-  // mass matrix in the continuity and in the tracer equation. For wet-dry cells convergence
+  // mass matrix in the continuity equation. For wet-dry cells convergence
   // is fast so a few iterations are enough, for wet cells the iterative method is basically
   // a Jacobi method that allows to go beyond first order mass lumping. Again a few iterations
   // are a good threshold beteween the error constant and computational efficiency:
   constexpr unsigned int max_iteration_height = 3;
-  constexpr unsigned int max_iteration_tracer = 5;
   // Next off is the choice of the time integrator scheme: please check the time integrator
   // class to see the list of all possible time integrators:
 #if defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
@@ -581,7 +580,7 @@ namespace Problem
     , dof_handler_discharge(triangulation)
     , dof_handler_tracer(triangulation)
     , timer(pcout, TimerOutput::never, TimerOutput::wall_times)
-    , oceano_operator(param, bc, timer, max_iteration_height, max_iteration_tracer)
+    , oceano_operator(param, bc, timer, max_iteration_height)
     , time(0)
     , time_step(0)
   {
