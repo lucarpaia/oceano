@@ -759,7 +759,7 @@ namespace SpaceDiscretization
     FEEvaluation<dim, -1, n_points_1d, dim, Number> phi_discharge(data,cell_range,1);
     FEEvaluation<dim, -1, n_points_1d, dim, Number> phi_velocity(data,cell_range,1);
 
-    const auto inv_degree = 1./degree;
+    const auto inv_degree = 1./(degree*degree);
 
     for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
       {
