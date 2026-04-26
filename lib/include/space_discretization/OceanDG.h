@@ -1427,34 +1427,10 @@ namespace SpaceDiscretization
             phi_height.set_dof_values(dst, 0, mask_cell);
           }
 
+
         // Here we enter the Newton loop: first we read the residual,
         // and we sum the water mass term which depend on the iterative solution.
-        // Note that to reduce the operation at a minimum these two operations
-        // are implemented twice: outside the Newtoon loop and inside.
-        phi_height.read_dof_values(src);
-
-        Number norm_rhs_in_lane = 1.;
-        AlignedVector<VectorizedArray<Number>> rhs_cell(dofs_per_cell);
-
-        for (unsigned int i = 0; i < dofs_per_cell; ++i)
-          rhs_cell[i] = phi_height.get_dof_value(i);
-
-
-        phi_height.gather_evaluate(dst, EvaluationFlags::values);
-
-        for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
-          {
-            const auto z_q = phi_height.get_value(q);
-            const auto zb_q = data_quadrature_cell_1.get_data(cell, q);
-
-            phi_height.submit_value(-model.depth(z_q, zb_q), q);
-          }
-
-        phi_height.integrate(EvaluationFlags::values,
-                                   &rhs_cell[0],
-                                   true);
-
-        // The Newton loop is essentially the inversion of the mass-matrix.
+        // Finally we inverse the mass-matrix.
         // Please note that if all points are dry it means that the iterative
         // method reached the dry state and we nullify the right-hand-side,
         // so no need to invert the singular matrix. The variable `n_dry_points`
@@ -1465,10 +1441,38 @@ namespace SpaceDiscretization
         // under-resolved flow features. For wet-dry cells, inversion is exact
         // and we iterate to conserve the mass. In both cases convergence is
         // quite fast and we exit the loop after maximum three iterations,
-        // in any case.
+        // in any case. Convergence is measured with the l1 norm of the solution.
+        Number norm_rhs_in_lane = 1.;
+        AlignedVector<VectorizedArray<Number>> rhs_cell(dofs_per_cell);
+        AlignedVector<VectorizedArray<Number>> residual_cell(dofs_per_cell);
+
         for (unsigned int k = 0; (k < max_iteration_height) && (norm_rhs_in_lane > 1e-16); ++k)
           {
+            phi_height.read_dof_values(src);
+
+            for (unsigned int i = 0; i < dofs_per_cell; ++i)
+              rhs_cell[i] = phi_height.get_dof_value(i);
+
+
             phi_height.gather_evaluate(dst, EvaluationFlags::values);
+
+            for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
+              {
+                const auto z_q = phi_height.get_value(q);
+                const auto zb_q = data_quadrature_cell_1.get_data(cell, q);
+
+                phi_height.submit_value(-model.depth(z_q, zb_q), q);
+              }
+
+            phi_height.integrate(EvaluationFlags::values,
+                                       &rhs_cell[0],
+                                       true);
+
+
+            phi_height.gather_evaluate(dst, EvaluationFlags::values);
+
+            for (unsigned int i = 0; i < dofs_per_cell; ++i)
+              residual_cell[i] = phi_height.get_dof_value(i);
 
             VectorizedArray<Number> n_dry_points = 0;
             for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
@@ -1495,31 +1499,15 @@ namespace SpaceDiscretization
 
             phi_height.distribute_local_to_global(dst);
 
-
-            phi_height.read_dof_values(src);
-
+            phi_height.read_dof_values(dst);
             for (unsigned int i = 0; i < dofs_per_cell; ++i)
-              rhs_cell[i] = phi_height.get_dof_value(i);
+              residual_cell[i] -= phi_height.get_dof_value(i);
 
-
-            phi_height.gather_evaluate(dst, EvaluationFlags::values);
-
-            for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
-              {
-                const auto z_q = phi_height.get_value(q);
-                const auto zb_q = data_quadrature_cell_1.get_data(cell, q);
-
-                phi_height.submit_value(-model.depth(z_q, zb_q), q);
-              }
-
-            phi_height.integrate(EvaluationFlags::values,
-                                       &rhs_cell[0],
-                                       true);
 
             norm_rhs_in_lane = 0.;
             for (unsigned int v = 0; v < data.n_active_entries_per_cell_batch(cell); ++v)
               for (unsigned int i = 0; i < dofs_per_cell; ++i)
-                norm_rhs_in_lane += std::abs(rhs_cell[i][v]);
+                norm_rhs_in_lane += std::abs(residual_cell[i][v]);
         }
       }
   }
