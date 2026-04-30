@@ -94,7 +94,7 @@ namespace Model
   public:
     ShallowWater(IO::ParameterHandler &prm);
     ~ShallowWater(){};
- 
+
     double g;
     double cu4;
 
@@ -142,17 +142,19 @@ namespace Model
     template <typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Number
-      depth(const Number height,
-            const Number bathymetry) const;
+      depth(
+        const Number height,
+        const Number bathymetry) const;
 
     // The next function computes the velocity from the vector of conserved
     // variables
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Number>
-      velocity(const Number                  height,
-               const Tensor<1, dim, Number> &discharge,
-               const Number                  bathymetry) const;
+      velocity(
+        const Number                  height,
+        const Tensor<1, dim, Number> &discharge,
+        const Number                  bathymetry) const;
 
     // The next function computes the pressure from the vector of conserved
     // variables, using the formula $p = g \frac{h^2}{2}$. As explained above, we use the
@@ -163,8 +165,9 @@ namespace Model
     template <typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Number
-      pressure(const Number height,
-               const Number bathymetry) const;
+      pressure(
+        const Number height,
+        const Number bathymetry) const;
 
     // Here is the definition of the flux functions, i.e., the definition
     // of the actual equation. We have the mass and the advective flux. Mass flux
@@ -176,25 +179,26 @@ namespace Model
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Number>
-      mass_flux(const Number                  height,
-                const Tensor<1, dim, Number> &discharge,
-                const Number                  bathymetry) const;
+      mass_flux(
+        const Tensor<1, dim, Number> &discharge) const;
 
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Tensor<1, dim, Number>>
-      momentum_adv_flux(const Number                  height,
-                        const Tensor<1, dim, Number> &discharge,
-                        const Number                  bathymetry) const;
+      advective_flux(
+        const Number                  height,
+        const Tensor<1, dim, Number> &discharge,
+        const Number                  bathymetry) const;
 
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Tensor<1, dim, Number>>
-      momentum_adv_diff_flux(const Number                    height,
-                             const Tensor<1, dim, Number>   &discharge,
-                             const Tensor<dim, dim, Number> &gradient_velocity,
-                             const Number                    bathymetry,
-                             const Number                    area) const;
+      advective_diffusive_flux(
+        const Number                    height,
+        const Tensor<1, dim, Number>   &discharge,
+        const Tensor<dim, dim, Number> &gradient_velocity,
+        const Number                    bathymetry,
+        const Number                    area) const;
 
     // Here is the definition of the Shallow Water source function. Thanks to a double
     // integration by parts the pressure appears as a force in the source term and
@@ -205,10 +209,11 @@ namespace Model
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Number>
-      source(const Number                    height,
-             const Tensor<1, dim, Number>   &discharge,
-             const Tensor<1, dim, Number>   &gradient_height,
-             const Tensor<1, dim+3, Number> &parameters) const;
+      source(
+        const Number                    height,
+        const Tensor<1, dim, Number>   &discharge,
+        const Tensor<1, dim, Number>   &gradient_height,
+        const Tensor<1, dim+3, Number> &parameters) const;
 
     // For ImEx time integration strategy, we separate the source term in a stiff and
     // a non-stiff part. For now the stiff part of the source term is only the bottom friction.
@@ -217,18 +222,20 @@ namespace Model
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Number>
-      source_nonstiff(const Number                    height,
-                      const Tensor<1, dim, Number>   &discharge,
-                      const Tensor<1, dim, Number>   &gradient_height,
-                      const Tensor<1, dim+3, Number> &parameters) const;
+      source_nonstiff(
+        const Number                    height,
+        const Tensor<1, dim, Number>   &discharge,
+        const Tensor<1, dim, Number>   &gradient_height,
+        const Tensor<1, dim+3, Number> &parameters) const;
 
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Number>
-      source_stiff(const Number                  height,
-                   const Tensor<1, dim, Number> &discharge,
-                   const Number                  bathymetry,
-                   const Number                  drag_coefficient) const;
+      source_stiff(
+        const Number                  height,
+        const Tensor<1, dim, Number> &discharge,
+        const Number                  bathymetry,
+        const Number                  drag_coefficient) const;
 
     // The next function computes an estimate of the square of the graivty wave speed, from
     // the vector of conserved variables
@@ -264,12 +271,12 @@ namespace Model
   // For the model class we do not use an implementation file. This
   // is because of the fact the all the function called are templated
   // or inlined. Both templated and inlined functions are hard to be separated
-  // between declaration and implementation. We keep them in the header file. 
-  
+  // between declaration and implementation. We keep them in the header file.
+
   // The constructor of the model class takes as arguments the parameters handler
   // class in order to read the test-case/user dependent parameters. These
-  // parameters are stored as class members. In this way they are defined/read 
-  // from file in one place and then used whenever needed  with `model.param`, 
+  // parameters are stored as class members. In this way they are defined/read
+  // from file in one place and then used whenever needed  with `model.param`,
   // instead of being read/defined multiple times.
   ShallowWater::ShallowWater(
     IO::ParameterHandler &prm)
@@ -318,7 +325,8 @@ namespace Model
   {
     const Number h = depth(height, bathymetry);
     const Number h4 = h*h*h*h;
-    const Number inverse_depth = sqrt(2.) * h / sqrt(h4 + std::max(h4, Number(cu4)));
+    const Number inverse_depth = std::sqrt(2.) * h / std::sqrt(h4 + std::max(h4, Number(cu4)));
+
 
     return discharge * inverse_depth;
   }
@@ -338,18 +346,16 @@ namespace Model
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
     ShallowWater::mass_flux(
-      const Number                  height,
-      const Tensor<1, dim, Number> &discharge,
-      const Number                  bathymetry) const
+      const Tensor<1, dim, Number> &discharge) const
   {
-    return depth(height, bathymetry) * velocity<dim>(height, discharge, bathymetry);
+    return discharge;
 
   }
 
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Tensor<1, dim, Number>>
-    ShallowWater::momentum_adv_flux(
+    ShallowWater::advective_flux(
       const Number                  height,
       const Tensor<1, dim, Number> &discharge,
       const Number                  bathymetry) const
@@ -368,7 +374,7 @@ namespace Model
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Tensor<1, dim, Number>>
-    ShallowWater::momentum_adv_diff_flux(
+    ShallowWater::advective_diffusive_flux(
       const Number                    height,
       const Tensor<1, dim, Number>   &discharge,
       const Tensor<dim, dim, Number> &gradient_velocity,

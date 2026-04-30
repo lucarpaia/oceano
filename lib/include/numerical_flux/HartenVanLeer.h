@@ -164,8 +164,8 @@ namespace NumericalFlux
     const auto csquare_m = model.square_wavespeed(z_m, data_m);
     const auto csquare_p = model.square_wavespeed(z_p, data_m);
 
-    const auto flux_m = model.momentum_adv_flux<dim>(z_m, q_m, data_m);
-    const auto flux_p = model.momentum_adv_flux<dim>(z_p, q_p, data_p);
+    const auto flux_m = model.advective_flux<dim>(z_m, q_m, data_m);
+    const auto flux_p = model.advective_flux<dim>(z_p, q_p, data_p);
 
     const auto avg_velocity_normal =
       0.5 * ((velocity_m + velocity_p) * normal);

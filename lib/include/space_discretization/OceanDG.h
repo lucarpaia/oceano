@@ -691,27 +691,19 @@ namespace SpaceDiscretization
     const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
     const std::pair<unsigned int, unsigned int>                   &cell_range) const
   {
-    FEEvaluation<dim, -1, n_points_1d, 1, Number> phi_height(data,cell_range,0),
-                                                  phi_bathymetry(data,cell_range,0);
+    FEEvaluation<dim, -1, n_points_1d, 1, Number> phi_height(data,cell_range,0);
     FEEvaluation<dim, -1, n_points_1d, dim, Number> phi_discharge(data,cell_range,1);
 
     for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
       {
         phi_height.reinit(cell);
-        phi_height.gather_evaluate(src[0], EvaluationFlags::values);
         phi_discharge.reinit(cell);
         phi_discharge.gather_evaluate(src[1], EvaluationFlags::values);
-        phi_bathymetry.reinit(cell);
-        phi_bathymetry.gather_evaluate(src.back(), EvaluationFlags::values);
 
         for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
-          {
-            const auto z_q = phi_height.get_value(q);
-            const auto q_q = phi_discharge.get_value(q);
-            const auto zb_q = phi_bathymetry.get_value(q); //data_quadrature_cell_0.get_data(cell, q)[0];
-
-            phi_height.submit_gradient(model.mass_flux<dim>(z_q, q_q, zb_q), q);
-          }
+          phi_height.submit_gradient(
+            model.mass_flux<dim>(phi_discharge.get_value(q)),
+            q);
 
         phi_height.integrate_scatter(EvaluationFlags::gradients,
                                        dst);
@@ -757,7 +749,7 @@ namespace SpaceDiscretization
             data_q[0] = phi_bathymetry.get_value(q);
 
             phi_discharge.submit_gradient(
-              model.momentum_adv_diff_flux<dim>(
+              model.advective_diffusive_flux<dim>(
                 z_q, q_q, model.depth(z_q, data_q[0])*du_q, data_q[0], area_cell),
               q);
 
@@ -811,7 +803,7 @@ namespace SpaceDiscretization
             data_q[0] = phi_bathymetry.get_value(q);
 
             phi_discharge.submit_gradient(
-              model.momentum_adv_diff_flux<dim>(
+              model.advective_diffusive_flux<dim>(
                 z_q, q_q, model.depth(z_q, data_q[0])*du_q, data_q[0], area_cell),
               q);
 
