@@ -142,17 +142,19 @@ namespace Model
     template <typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Number
-      depth(const Number height,
-            const Number bathymetry) const;
+      depth(
+        const Number height,
+        const Number bathymetry) const;
 
     // The next function computes the velocity from the vector of conserved
     // variables
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Number>
-      velocity(const Number                  height,
-               const Tensor<1, dim, Number> &discharge,
-               const Number                  bathymetry) const;
+      velocity(
+        const Number                  height,
+        const Tensor<1, dim, Number> &discharge,
+        const Number                  bathymetry) const;
 
     // The next function computes the pressure from the vector of conserved
     // variables, using the formula $p = g \frac{h^2}{2}$. As explained above, we use the
@@ -163,38 +165,39 @@ namespace Model
     template <typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Number
-      pressure(const Number height,
-               const Number bathymetry) const;
+      pressure(
+        const Number height,
+        const Number bathymetry) const;
 
     // Here is the definition of the flux functions, i.e., the definition
-    // of the actual equation. We have the mass and the advective flux. Mass flux
-    // implementation is straight-forward, being simply the discharge;
-    // for the advective flux we need to compute the velocity.
-    // The hydrostatic pressure is not included in the flux and it is treated with a
-    // a double integration by parts. We also include a flux function with both
-    // advective and diffusive fluxes.
+    // of the actual equation. We have the mass, the advective and diffusive flux. Mass flux
+    // implementation should be straight-forward, being simply the discharge but here
+    // is redefined as velocity times depth.
+    // For the advective flux we need to compute the velocity. We also define an advective
+    // flux together with a diffusive flux.
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Number>
-      mass_flux(const Number                  height,
-                const Tensor<1, dim, Number> &discharge,
-                const Number                  bathymetry) const;
+      mass_flux(
+        const Tensor<1, dim, Number> &discharge) const;
 
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Tensor<1, dim, Number>>
-      momentum_adv_flux(const Number                  height,
-                        const Tensor<1, dim, Number> &discharge,
-                        const Number                  bathymetry) const;
+      advective_flux(
+        const Number                  height,
+        const Tensor<1, dim, Number> &discharge,
+        const Number                  bathymetry) const;
 
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Tensor<1, dim, Number>>
-      momentum_adv_diff_flux(const Number                    height,
-                             const Tensor<1, dim, Number>   &discharge,
-                             const Tensor<dim, dim, Number> &gradient_velocity,
-                             const Number                    bathymetry,
-                             const Number                    area) const;
+      advective_diffusive_flux(
+        const Number                    height,
+        const Tensor<1, dim, Number>   &discharge,
+        const Tensor<dim, dim, Number> &gradient_velocity,
+        const Number                    bathymetry,
+        const Number                    area) const;
 
     // Here is the definition of the Shallow Water source function. Thanks to a double
     // integration by parts the pressure appears as a force in the source term and
@@ -205,10 +208,11 @@ namespace Model
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Number>
-      source(const Number                    height,
-             const Tensor<1, dim, Number>   &discharge,
-             const Tensor<1, dim, Number>   &gradient_height,
-             const Tensor<1, dim+3, Number> &parameters) const;
+      source(
+        const Number                    height,
+        const Tensor<1, dim, Number>   &discharge,
+        const Tensor<1, dim, Number>   &gradient_height,
+        const Tensor<1, dim+3, Number> &parameters) const;
 
     // For ImEx time integration strategy, we separate the source term in a stiff and
     // a non-stiff part. For now the stiff part of the source term is only the bottom friction.
@@ -217,18 +221,20 @@ namespace Model
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Number>
-      source_nonstiff(const Number                    height,
-                      const Tensor<1, dim, Number>   &discharge,
-                      const Tensor<1, dim, Number>   &gradient_height,
-                      const Tensor<1, dim+3, Number> &parameters) const;
+      source_nonstiff(
+        const Number                    height,
+        const Tensor<1, dim, Number>   &discharge,
+        const Tensor<1, dim, Number>   &gradient_height,
+        const Tensor<1, dim+3, Number> &parameters) const;
 
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Number>
-      source_stiff(const Number                  height,
-                   const Tensor<1, dim, Number> &discharge,
-                   const Number                  bathymetry,
-                   const Number                  drag_coefficient) const;
+      source_stiff(
+        const Number                  height,
+        const Tensor<1, dim, Number> &discharge,
+        const Number                  bathymetry,
+        const Number                  drag_coefficient) const;
 
     // The next function computes an estimate of the square of the graivty wave speed, from
     // the vector of conserved variables
@@ -339,18 +345,16 @@ namespace Model
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
     ShallowWater::mass_flux(
-      const Number                  height,
-      const Tensor<1, dim, Number> &discharge,
-      const Number                  bathymetry) const
+      const Tensor<1, dim, Number> &discharge) const
   {
-    return depth(height, bathymetry) * velocity<dim>(height, discharge, bathymetry);
+    return discharge;
 
   }
 
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Tensor<1, dim, Number>>
-    ShallowWater::momentum_adv_flux(
+    ShallowWater::advective_flux(
       const Number                  height,
       const Tensor<1, dim, Number> &discharge,
       const Number                  bathymetry) const
@@ -369,7 +373,7 @@ namespace Model
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Tensor<1, dim, Number>>
-    ShallowWater::momentum_adv_diff_flux(
+    ShallowWater::advective_diffusive_flux(
       const Number                    height,
       const Tensor<1, dim, Number>   &discharge,
       const Tensor<dim, dim, Number> &gradient_velocity,

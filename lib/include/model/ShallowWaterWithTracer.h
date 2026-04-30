@@ -65,28 +65,29 @@ namespace Model
       void
       set_vars_name();
 
+    // We define an advective flux which is used in the numerical flux
+    // and an advective-diffusive flux used in the volume term.
+    // For consistency with the continuity equation, we have paid
+    // attention to use the same formulation of these fluxes as in
+    // the continuity equation.
     template <int dim, int n_tra, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, n_tra, Tensor<1, dim, Number>>
-      tracer_adv_flux(
-        const Number                    height,
+      tracer_advective_flux(
         const Tensor<1, dim, Number>   &discharge,
-        const Tensor<1, n_tra, Number> &tracer,
-        const Number                    bathymetry) const;
+        const Tensor<1, n_tra, Number> &tracer) const;
 
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Number>
-      tracer_adv_flux(
-        const Number                    height,
+      tracer_advective_flux(
         const Tensor<1, dim, Number>   &discharge,
-        const Number                    tracer,
-        const Number                    bathymetry) const;
+        const Number                    tracer) const;
 
     template <int dim, int n_tra, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, n_tra, Tensor<1, dim, Number>>
-      tracer_adv_diff_flux(
+      tracer_advective_diffusive_flux(
         const Number                                    height,
         const Tensor<1, dim, Number>                   &discharge,
         const Tensor<1, n_tra, Number>                 &tracer,
@@ -98,7 +99,7 @@ namespace Model
     template <int dim, int n_tra, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, n_tra, Tensor<1, dim, Number>>
-      tracer_adv_diff_flux(
+      tracer_advective_diffusive_flux(
         const Number                    height,
         const Tensor<1, dim, Number>   &discharge,
         const Tensor<1, n_tra, Number> &tracer,
@@ -110,7 +111,7 @@ namespace Model
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
       Tensor<1, dim, Number>
-      tracer_adv_diff_flux(
+      tracer_advective_diffusive_flux(
         const Number                    height,
         const Tensor<1, dim, Number>   &discharge,
         const Number                    tracer,
@@ -151,19 +152,14 @@ namespace Model
   template <int dim, int n_tra, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, n_tra, Tensor<1, dim, Number>>
-    ShallowWaterWithTracer::tracer_adv_flux(
-      const Number                    height,
+    ShallowWaterWithTracer::tracer_advective_flux(
       const Tensor<1, dim, Number>   &discharge,
-      const Tensor<1, n_tra, Number> &tracer,
-      const Number                    bathymetry) const
+      const Tensor<1, n_tra, Number> &tracer) const
   {
-    const Tensor<1, dim, Number> q =
-      depth(height, bathymetry) * velocity<dim>(height, discharge, bathymetry);
-
     Tensor<1, n_tra, Tensor<1, dim, Number>> flux;
     for (unsigned int d = 0; d < dim; ++d)
       for (unsigned int e = 0; e < n_tra; ++e)
-        flux[e][d] = tracer[e] * q[d];
+        flux[e][d] = tracer[e] * discharge[d];
 
     return flux;
   }
@@ -171,19 +167,17 @@ namespace Model
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
-    ShallowWaterWithTracer::tracer_adv_flux(
-      const Number                   height,
+    ShallowWaterWithTracer::tracer_advective_flux(
       const Tensor<1, dim, Number>  &discharge,
-      const Number                   tracer,
-      const Number                   bathymetry) const
+      const Number                   tracer) const
   {
-    return tracer * depth(height, bathymetry) * velocity<dim>(height, discharge, bathymetry);
+    return tracer * discharge;
   }
 
   template <int dim, int n_tra, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, n_tra, Tensor<1, dim, Number>>
-    ShallowWaterWithTracer::tracer_adv_diff_flux(
+    ShallowWaterWithTracer::tracer_advective_diffusive_flux(
       const Number                                    height,
       const Tensor<1, dim, Number>                   &discharge,
       const Tensor<1, n_tra, Number>                 &tracer,
@@ -193,14 +187,13 @@ namespace Model
       const Number                                    area) const
   {
     const Number h = depth(height, bathymetry);
-    const Tensor<1, dim, Number> q = h * velocity<dim>(height, discharge, bathymetry);
     const Number nu = diffusion_coefficient.value<dim, Number>(gradient_velocity, area);
     const Tensor<1, n_tra, Tensor<1, dim, Number>> nuhdt = nu * h * gradient_tracer;
 
     Tensor<1, n_tra, Tensor<1, dim, Number>> flux;
     for (unsigned int d = 0; d < dim; ++d)
       for (unsigned int e = 0; e < n_tra; ++e)
-        flux[e][d] = tracer[e] * q[d]
+        flux[e][d] = tracer[e] * discharge[d]
           - nuhdt[e][d];
 
     return flux;
@@ -209,7 +202,7 @@ namespace Model
   template <int dim, int n_tra, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, n_tra, Tensor<1, dim, Number>>
-    ShallowWaterWithTracer::tracer_adv_diff_flux(
+    ShallowWaterWithTracer::tracer_advective_diffusive_flux(
       const Number                    height,
       const Tensor<1, dim, Number>   &discharge,
       const Tensor<1, n_tra, Number> &tracer,
@@ -219,14 +212,13 @@ namespace Model
       const Number                    area) const
   {
     const Number h = depth(height, bathymetry);
-    const Tensor<1, dim, Number> q = h * velocity<dim>(height, discharge, bathymetry);
     const Number nu = diffusion_coefficient.value<dim, Number>(gradient_velocity, area);
     const Tensor<2, dim, Number> nuhdt = nu * h * gradient_tracer;
 
     Tensor<1, n_tra, Tensor<1, dim, Number>> flux;
     for (unsigned int d = 0; d < dim; ++d)
       for (unsigned int e = 0; e < n_tra; ++e)
-        flux[e][d] = tracer[e] * q[d]
+        flux[e][d] = tracer[e] * discharge[d]
           -  nuhdt[e][d];
 
     return flux;
@@ -235,7 +227,7 @@ namespace Model
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
-    ShallowWaterWithTracer::tracer_adv_diff_flux(
+    ShallowWaterWithTracer::tracer_advective_diffusive_flux(
       const Number                    height,
       const Tensor<1, dim, Number>   &discharge,
       const Number                    tracer,
@@ -246,7 +238,7 @@ namespace Model
   {
     const Number h = depth(height, bathymetry);
 
-    return tracer * h * velocity<dim>(height, discharge, bathymetry)
+    return tracer * discharge
       - diffusion_coefficient.value<dim, Number>(gradient_velocity, area)
         * h * gradient_tracer;
   }

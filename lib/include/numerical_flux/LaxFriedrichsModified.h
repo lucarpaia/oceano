@@ -128,7 +128,9 @@ namespace NumericalFlux
   // \mathbf{n^-}$, where the factor $\lambda =
   // \max\left(\|\mathbf{u}^-\|+c^-, \|\mathbf{u}^+\|+c^+\right)$ gives the
   // maximal wave speed and $c = \sqrt{g h}$ is the speed of the gravity
-  // waves. We use the so-called "hydrostatic reconstruction" for a
+  // waves.
+  //
+  // We use the so-called "hydrostatic reconstruction" for a
   // discontinuous bathymetry $z_b=\min\left(z_b^+, z_b^-\right)$. This
   // is necessary, in presence of discontinuous bathymetry, to have positivity
   // but it also avoids spurious fluxes.
@@ -158,10 +160,10 @@ namespace NumericalFlux
       + std::sqrt(model.square_wavespeed(z_p, zb_p));
 
     const auto lambda = std::max(lambda_p, lambda_m);
-
     const auto zb_star = std::min(zb_m, zb_p);
-    const auto flux_m = model.mass_flux<dim>(z_m, q_m, zb_star);
-    const auto flux_p = model.mass_flux<dim>(z_p, q_p, zb_star);
+
+    const auto flux_m = model.depth(z_m, zb_star) * v_m;
+    const auto flux_p = model.depth(z_p, zb_star) * v_p;
 
     const auto zcorr_m = std::max(z_m, -zb_star);
     const auto zcorr_p = std::max(z_p, -zb_star);
@@ -191,12 +193,12 @@ namespace NumericalFlux
       + std::sqrt(model.square_wavespeed(z_p, zb_p));
 
     const auto lambda = std::max(lambda_p, lambda_m);
-
     const auto zb_star = std::min(zb_m, zb_p);
-    const auto hu_m = model.mass_flux<dim>(z_m, q_m, zb_star);
-    const auto hu_p = model.mass_flux<dim>(z_p, q_p, zb_star);
-    const auto flux_m = model.momentum_adv_flux<dim>(z_m, hu_m, zb_m);
-    const auto flux_p = model.momentum_adv_flux<dim>(z_p, hu_p, zb_p);
+
+    const auto hu_m = model.depth(z_m, zb_star) * v_m;
+    const auto hu_p = model.depth(z_p, zb_star) * v_p;
+    const auto flux_m = model.advective_flux<dim>(z_m, hu_m, zb_star);
+    const auto flux_p = model.advective_flux<dim>(z_p, hu_p, zb_star);
 
     return 0.5 * (flux_m * normal + flux_p * normal) +
            0.5 * lambda * (hu_m - hu_p);
@@ -228,10 +230,12 @@ namespace NumericalFlux
       + std::sqrt(model.square_wavespeed(z_p, zb_p));
 
     const auto lambda = std::max(lambda_p, lambda_m);
-
     const auto zb_star = std::min(zb_m, zb_p);
-    const auto flux_m = model.tracer_adv_flux<dim, n_tra>(z_m, q_m, t_m, zb_star);
-    const auto flux_p = model.tracer_adv_flux<dim, n_tra>(z_p, q_p, t_p, zb_star);
+
+    const auto hu_m = model.depth(z_m, zb_star) * v_m;
+    const auto hu_p = model.depth(z_p, zb_star) * v_p;
+    const auto flux_m = model.tracer_advective_flux<dim, n_tra>(hu_m, t_m);
+    const auto flux_p = model.tracer_advective_flux<dim, n_tra>(hu_p, t_p);
 
     const auto h_m = model.depth(z_m, zb_star);
     const auto h_p = model.depth(z_p, zb_star);
@@ -267,10 +271,12 @@ namespace NumericalFlux
       + std::sqrt(model.square_wavespeed(z_p, zb_p));
 
     const auto lambda = std::max(lambda_p, lambda_m);
-
     const auto zb_star = std::min(zb_m, zb_p);
-    const auto flux_m = model.tracer_adv_flux(z_m, q_m, t_m, zb_star);
-    const auto flux_p = model.tracer_adv_flux(z_p, q_p, t_p, zb_star);
+
+    const auto hu_m = model.depth(z_m, zb_star) * v_m;
+    const auto hu_p = model.depth(z_p, zb_star) * v_p;
+    const auto flux_m = model.tracer_advective_flux(hu_m, t_m);
+    const auto flux_p = model.tracer_advective_flux(hu_p, t_p);
 
     const auto h_m = model.depth(z_m, zb_star);
     const auto h_p = model.depth(z_p, zb_star);

@@ -680,18 +680,13 @@ namespace SpaceDiscretization
     for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
       {
         phi_height.reinit(cell);
-        phi_height.gather_evaluate(src[0], EvaluationFlags::values);
         phi_discharge.reinit(cell);
         phi_discharge.gather_evaluate(src[1], EvaluationFlags::values);
 
         for (unsigned int q = 0; q < phi_height.n_q_points; ++q)
-          {
-            const auto z_q = phi_height.get_value(q);
-            const auto q_q = phi_discharge.get_value(q);
-            const auto zb_q = data_quadrature_cell_0.get_data(cell, q)[0];
-
-            phi_height.submit_gradient(model.mass_flux<dim>(z_q, q_q, zb_q), q);
-          }
+          phi_height.submit_gradient(
+            model.mass_flux<dim>(phi_discharge.get_value(q)),
+            q);
 
         phi_height.integrate_scatter(EvaluationFlags::gradients,
                                        dst);
@@ -733,7 +728,7 @@ namespace SpaceDiscretization
             const auto data_q = data_quadrature_cell_0.get_data(cell, q);
 
             phi_discharge.submit_gradient(
-              model.momentum_adv_diff_flux<dim>(
+              model.advective_diffusive_flux<dim>(
                 z_q, q_q, model.depth(z_q, data_q[0])*du_q, data_q[0], area_cell),
               q);
 
@@ -783,7 +778,7 @@ namespace SpaceDiscretization
             const auto data_q = data_quadrature_cell_0.get_data(cell, q);
 
             phi_discharge.submit_gradient(
-              model.momentum_adv_diff_flux<dim>(
+              model.advective_diffusive_flux<dim>(
                 z_q, q_q, model.depth(z_q, data_q[0])*du_q, data_q[0], area_cell),
               q);
 

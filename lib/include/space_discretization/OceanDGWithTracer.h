@@ -327,7 +327,8 @@ namespace SpaceDiscretization
             const auto zb_q = data_quadrature_cell_0.get_data(cell, q)[0];
 
             phi_tracer.submit_gradient(
-              model.tracer_adv_diff_flux(z_q, q_q, t_q, du_q, dt_q, zb_q, area_cell),
+              model.tracer_advective_diffusive_flux(
+                z_q, q_q, t_q, du_q, dt_q, zb_q, area_cell),
               q);
           }
 
