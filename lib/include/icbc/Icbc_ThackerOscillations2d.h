@@ -36,12 +36,7 @@ namespace ICBC
   // effect that here is neglected. The test implemented is the is the Thacker solution
   // with a curved surface with the parameter proposed in the SWASH test suite (Delestre,2016).
   // With respect to the latter we only invert the sign of the bathymetry which is measured
-  // positive downward. We have added an option to compare the solution of
-  // our code, with variable bathyemtry at the grid level, with a standard Finite Volume
-  // with piecewice constant bathymetry.
-  // In that case we have to read a piecewice constant bathymetry per cell and the
-  // code must be slightly changed. You should activate the following preprocessor:
-#undef  ICBC_THACKEROSCILLATIONS2D_FINITEVOLUME
+  // positive downward.
 
   using namespace dealii;
   
@@ -69,7 +64,6 @@ namespace ICBC
   // The parameter handler class may seems redundant but it is not! Constants that appears
   // in you data may be easily recovered from the configuration file. More important file 
   // names which contains the may be imported too. 
-#ifndef ICBC_THACKEROSCILLATIONS2D_FINITEVOLUME
   template <int dim>  
   class ProblemData : public Function<dim>
   {
@@ -102,58 +96,13 @@ namespace ICBC
     return h0 * (1. - inv_a*inv_a * radius*radius);
   }
 
-#else
-  template <int dim>
-  class ProblemData : public Function<dim>
-  {
-  public:
-    ProblemData(IO::ParameterHandler &prm);
-    ~ProblemData(){};
-
-    virtual double value(const Point<dim> & p,
-                         const unsigned int component = 0) const override;
-
-  private:
-    std::string bathymetry_filename(IO::ParameterHandler &prm) const;
-    IO::TxtDataReader<dim> bathymetry_data_reader;
-    const Functions::InterpolatedUniformGridData<dim> bathymetry_data;
-  };
-
-  template <int dim>
-  ProblemData<dim>::ProblemData(IO::ParameterHandler &prm)
-    : Function<dim>(dim+3)
-    , bathymetry_data_reader(bathymetry_filename(prm))
-    , bathymetry_data(
-        bathymetry_data_reader.endpoints,
-        bathymetry_data_reader.n_intervals,
-        Table<dim, double>(bathymetry_data_reader.n_intervals.front()+1,
-                           bathymetry_data_reader.n_intervals.back()+1,
-                           bathymetry_data_reader.get_data(bathymetry_data_reader.filename).begin()))
-  {}
-
-
-  template <int dim>
-  std::string ProblemData<dim>::bathymetry_filename(IO::ParameterHandler &prm) const
-  {
-    prm.enter_subsection("Input data files");
-    std::string filename = prm.get("Bathymetry_filename");
-    prm.leave_subsection();
-
-    return filename;
-  }
-#endif
-
 
   template <int dim>
   double ProblemData<dim>::value(const Point<dim> & x,
                                  const unsigned int component) const
   {
     if (component == 0)
-#ifdef ICBC_THACKEROSCILLATIONS2D_FINITEVOLUME
-      return bathymetry_data.value(x);
-#else
       return thackerOscillations2d_bathymetry(x);
-#endif
     else
       return 0.0;
   }
@@ -185,10 +134,7 @@ namespace ICBC
   };  
 
   // We return either the water depth or the momentum
-  // depending on which component is requested. The initialization
-  // is different if the Finite Volume method is chosen. In that
-  // case, dry cells must be initialized at the bathymetry level,
-  // in order to start to flood from that level.
+  // depending on which component is requested.
   // For our non-linear approach with variable bathymetry we initialize
   // dry cells with a virtual free-surface under the bathymetry level
   // and it is up to the non-linear algorithm to find the "good" water
@@ -222,11 +168,7 @@ namespace ICBC
     double v;
     if (radius > a * std::sqrt(inv_temp))
       {
-#ifdef ICBC_THACKEROSCILLATIONS2D_FINITEVOLUME
-        const double r2 = radius2;
-#else
         const double r2 = a2 * inv_temp;
-#endif
         zb = h0 * (1. - inv_a*inv_a * r2);
         h = 0.;
         u = 0.;
