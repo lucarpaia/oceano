@@ -18,9 +18,8 @@
  *         Luca Arpaia,        2023
  *         Giuseppe Orlando,   2024
  */
-#ifndef OCEANDG_HPP
-#define OCEANDG_HPP
- 
+#pragma once
+
 #include <deal.II/base/conditional_ostream.h>
 #include <deal.II/base/function.h>
 #include <deal.II/base/logstream.h>
@@ -156,6 +155,11 @@ namespace SpaceDiscretization
   // to pass in various forms of boundary conditions on different parts of the
   // domain boundary marked by types::boundary_id variables, as well as
   // possible body forces.
+
+  // GO: Is there a reason for which this is not derived as MatrixFreeOperators::Base?
+  // I do not think that there is a real advantage in terms of performance,
+  // you would avoid maybe soem implementations (reinit, initialize...), but maybe
+  // the interface slightly changes. Just curiosity...
   template <int dim, int n_tra, int degree, int n_points_1d>
   class OceanoOperator
   {
@@ -262,7 +266,7 @@ namespace SpaceDiscretization
     CellDataStorage<Number> data_dofs;
 
     // The switch between the different models is realized with
-    // Preprocessor keys. As already explained we have avoided pointers to 
+    // Preprocessor keys. As already explained we have avoided pointers to
     // interface classes. The Euler and the Shallow Water class must expose
     // the same interfaces with identical member functions. Note that the
     // model class is public beacause it must be accessed, during postprocessing
@@ -500,8 +504,8 @@ namespace SpaceDiscretization
   template <int dim, int n_tra, int degree, int n_points_1d>
   void OceanoOperator<dim, n_tra, degree, n_points_1d>::initialize_data_at_quadrature()
   {
-    data_quadrature_cell_0.initialize(n_points_1d*n_points_1d);
-    FEEvaluation<dim, -1, n_points_1d, 1, Number> phi_cell_0(data,0);
+    data_quadrature_cell_0.initialize(n_points_1d*n_points_1d); //GO: n_point_1d^dim?
+    FEEvaluation<dim, -1, n_points_1d, 1, Number> phi_cell_0(data,0); //GO: again maybe to enahce readiblity, thiknk to some iterator for these indices...
     for (unsigned int cell = 0; cell < data.n_cell_batches(); ++cell)
       {
         phi_cell_0.reinit(cell);
@@ -553,6 +557,7 @@ namespace SpaceDiscretization
             data_quadrature_face.submit_data(
               evaluate_function<dim, Number>(*bc->problem_data,
                 phi_face_1.quadrature_point(q)+1e-12*phi_face_1.normal_vector(q), 0));
+                //GO: Even with hydrostatic reconstruction you need this shift?
           }
       }
 
@@ -617,7 +622,7 @@ namespace SpaceDiscretization
   // multi-component case. One variant utilizes an FEEvaluation
   // object with multiple components embedded into it, specified by an additional
   // template argument `n_vars` for the components in the shallow water system.
-  // The alternative variant followed here uses several FEEvaluation objects, 
+  // The alternative variant followed here uses several FEEvaluation objects,
   // a scalar one for the height and a vector-valued one with `dim` components for the
   // momentum. As
   // we have a single vector for all components, we would go with the second optional
@@ -676,6 +681,8 @@ namespace SpaceDiscretization
     const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
     const std::pair<unsigned int, unsigned int>                   &cell_range) const
   {
+    //GO: You have degree as template parameter, but then you use -1 (which is the automatic detention). Why?
+    //Moreover, the templatized version should be more efficient
     FEEvaluation<dim, -1, n_points_1d, 1, Number> phi_height(data,cell_range,0);
     FEEvaluation<dim, -1, n_points_1d, dim, Number> phi_discharge(data,cell_range,1);
 
@@ -710,6 +717,7 @@ namespace SpaceDiscretization
     FEEvaluation<dim, -1, n_points_1d, 1, Number> phi_height(data,cell_range,0);
     FEEvaluation<dim, -1, n_points_1d, dim, Number> phi_discharge(data,cell_range,1);
     FEEvaluation<dim, -1, n_points_1d, dim, Number> phi_velocity(data,cell_range,1);
+    //GO: Hence, there is a polynomial represnetation of the velocity ofr the diffusion?
 
     const auto inv_degree = 1./degree;
 
@@ -918,12 +926,12 @@ namespace SpaceDiscretization
   // argument in the list. At the quadrature points, we then go to our
   // free-standing functions for the numerical flux. They receives the solution
   // evaluated at quadrature points from both sides (i.e., $\mathbf{w}^-$ and
-  // $\mathbf{w}^+$), as well as the normal vector onto the minus side. 
+  // $\mathbf{w}^+$), as well as the normal vector onto the minus side.
   // We separate numerical fluxes coming from terms written in weak form from
-  // terms written in strong form. A simple trick is used to have  
-  // discontinuous bathymetry at the quadrature points along the edges. The 
+  // terms written in strong form. A simple trick is used to have
+  // discontinuous bathymetry at the quadrature points along the edges. The
   // quadrature point is shifted perpendicularly to the edge direction by a
-  // very small quantity. Givent the outward sign of the normal, the offset is 
+  // very small quantity. Givent the outward sign of the normal, the offset is
   // positive for the "there" side and negative for the "here" side.
   //
   // For the shallow water equations mass-flux
@@ -1022,7 +1030,7 @@ namespace SpaceDiscretization
             const auto z_m    = phi_height_m.get_value(q);
             const auto z_p    = phi_height_p.get_value(q);
             const auto normal = phi_discharge_m.normal_vector(q);
-            const auto zb_m   = data_quadrature_face.get_data(face, 2*q);
+            const auto zb_m   = data_quadrature_face.get_data(face, 2*q); //GO: Why 2 here?
             const auto zb_p   = data_quadrature_face.get_data(face, 2*q+1);
 
             auto numerical_flux_p =
@@ -1235,7 +1243,7 @@ namespace SpaceDiscretization
 
     for (unsigned int face = face_range.first; face < face_range.second; ++face)
       {
-        phi_height.reinit(face);        
+        phi_height.reinit(face);
         phi_height.gather_evaluate(src[0], EvaluationFlags::values);
         phi_discharge.reinit(face);
         phi_discharge.gather_evaluate(src[1], EvaluationFlags::values);
@@ -1393,7 +1401,7 @@ namespace SpaceDiscretization
       {
         phi_height.reinit(cell);
         MatrixFreeOperatorsOceano::CellwiseInverseMassMatrixLumped<dim, -1, 1, Number>
-          inverse(phi_height);
+          inverse(phi_height); //GO: lumped? Is it reported in the preprint? Just curiosity...
         phi_height.gather_evaluate(dst, EvaluationFlags::values);
 
         const auto dofs_per_cell = phi_height.dofs_per_cell;
@@ -1468,6 +1476,8 @@ namespace SpaceDiscretization
         // and we iterate to conserve the mass. In both cases convergence is
         // quite fast and we exit, in any case, the loop after maximum three
         // iterations.
+        // GO: Is this exactly what is stated in the preprint? Because, here you compute the norm
+        // 'norm_rhs_in_line', but it seems to me that this is the discrete l1 norm of the current range of zeta_{k+1}?
         for (unsigned int k = 0; (k < max_iteration_height) && (norm_rhs_in_lane > 1e-16); ++k)
           {
             phi_height.gather_evaluate(dst, EvaluationFlags::values);
@@ -2247,8 +2257,8 @@ namespace SpaceDiscretization
   // this because every vector entry has contributions from only a single
   // cell for discontinuous Galerkin discretizations.
   //
-  // The quadrature choosen to do the integral is the normal one stored in 
-  // the finite element evaluation class, thus a Gaussian quadrature 
+  // The quadrature choosen to do the integral is the normal one stored in
+  // the finite element evaluation class, thus a Gaussian quadrature
   // with the points lying at the interior
   // of the cell. This allows to mantain a discontinuous datum with
   // the jump passing through the edges of the cell.
@@ -2258,6 +2268,8 @@ namespace SpaceDiscretization
   // ghosted during the solution transfer between the grids, which prevents from
   // writing into the solution vector, what we want to do here. A deal.ii
   // error message is raised. The call unlocks the write operation.
+  //
+  // GO: Honestly, I would use the project of deal.II to compact a bit
   template <int dim, int n_tra, int degree, int n_points_1d>
   void OceanoOperator<dim, n_tra, degree, n_points_1d>::project_hydro(
     const Function<dim> &                       function,
@@ -2394,10 +2406,12 @@ namespace SpaceDiscretization
   // number of lanes with valid data. It equals VectorizedArray::size() on
   // most cells, but can be less on the last cell batch if the number of cells
   // has a remainder compared to the SIMD width.
-  // 
+  //
   // Pay also attention to the implementation of the error formula. The error has
   // dimension `2` because we compute only one error for all the
   // momentum components.
+  //
+  // GO: Similarly, I would use VectorTools::integrate_difference()
   template <int dim, int n_tra, int degree, int n_points_1d>
   std::array<double, 2> OceanoOperator<dim, n_tra, degree, n_points_1d>::compute_errors_hydro(
     const Function<dim> &                             function,
@@ -2433,7 +2447,7 @@ namespace SpaceDiscretization
                   error[0] =
                     model.depth(
                          evaluate_function<dim, Number>(  //lrp: if there is no ref solution why evaluate a function?
-                              function, 
+                              function,
               		      phi_height.quadrature_point(q),
               		      0),
               		 data_quadrature_cell_0.get_data(cell, q)[0]) -
@@ -2791,5 +2805,3 @@ namespace SpaceDiscretization
         solution_height);
   }
 } // namespace SpaceDiscretization
-
-#endif //OCEANDG_HPP

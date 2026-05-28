@@ -14,10 +14,9 @@
  * ---------------------------------------------------------------------
 
  *
- * Author: Luca Arpaia,        2023
+ * Author: Luca Arpaia, 2023
  */
-#ifndef SHALLOWWATER_HPP
-#define SHALLOWWATER_HPP
+#pragma once
 
 // The following files include the oceano libraries
 #include <io/ParameterReader.h>
@@ -25,6 +24,14 @@
 #include <physics/WindStress.h>
 #include <physics/ViscosityCoefficient.h>
 #include <physics/Coriolis.h>
+
+// GO: Here I have instead some doubts about the organization.
+// In particular, the fact that the physics is 'detached' from the model.
+// In my opinion we shoudl consider a subfolder for each model and inside each
+// submodel we incldue the 'extra' physics typical of each model.
+// We can discuss it
+
+// GO: Maybe, too many #if defined for the physics for SWE
 
 /**
  * Namespace containing the model equations.
@@ -94,7 +101,7 @@ namespace Model
   public:
     ShallowWater(IO::ParameterHandler &prm);
     ~ShallowWater(){};
- 
+
     double g;
     double cu4;
 
@@ -264,12 +271,12 @@ namespace Model
   // For the model class we do not use an implementation file. This
   // is because of the fact the all the function called are templated
   // or inlined. Both templated and inlined functions are hard to be separated
-  // between declaration and implementation. We keep them in the header file. 
-  
+  // between declaration and implementation. We keep them in the header file.
+
   // The constructor of the model class takes as arguments the parameters handler
   // class in order to read the test-case/user dependent parameters. These
-  // parameters are stored as class members. In this way they are defined/read 
-  // from file in one place and then used whenever needed  with `model.param`, 
+  // parameters are stored as class members. In this way they are defined/read
+  // from file in one place and then used whenever needed  with `model.param`,
   // instead of being read/defined multiple times.
   ShallowWater::ShallowWater(
     IO::ParameterHandler &prm)
@@ -305,7 +312,8 @@ namespace Model
       const Number height,
       const Number bathymetry) const
   {
-    return std::max(height + bathymetry, Number(1e-12));
+    return std::max(height + bathymetry, Number(1e-12)); // GO: If we change the computation of bottm friction, this 1e-12 should no longer be necessary.
+                                                         // Is it correct?
   }
 
   template <int dim, typename Number>
@@ -505,4 +513,3 @@ namespace Model
     return u - 2. * c;
   }
 } // namespace Model
-#endif //SHALLOWWATER_HPP

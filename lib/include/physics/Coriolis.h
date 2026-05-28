@@ -14,10 +14,9 @@
  * ---------------------------------------------------------------------
 
  *
- * Author: Luca Arpaia,        2023
+ * Author: Luca Arpaia, 2023
  */
-#ifndef CORIOLIS_HPP
-#define CORIOLIS_HPP
+#pragma once
 
 /**
  * Namespace containing the so-called phyisics of the governing equations.
@@ -36,10 +35,15 @@ namespace Physics
   class CoriolisBase
   {
   public:
-    CoriolisBase();
-    ~CoriolisBase(){};
+    /**
+     * Default constructor.
+     */
+    CoriolisBase() = default;
 
-
+    /**
+     * Default destructor.
+     */
+    ~CoriolisBase() = default;
 
     // The next function is the one that actually computes the bottom friction.
     // It is overloaded by the same function defined in the derived classes.
@@ -49,29 +53,30 @@ namespace Physics
       source(const Tensor<1, dim, Number> &discharge,
              const Number                  coriolis_parameter) const;
   };
-  
-  // Not surprisingly the constructor of the base class takes as arguments 
-  // only the parameters handler class in order to read the physical constants
-  // from the prm file.
-  CoriolisBase::CoriolisBase()
-  {}
-  
-  
-  // The first formulation is rather the general one. One should 
+
+
+  // The first formulation is rather the general one. One should
   // specify directly the wind stresses. Then this is simply assigned to the source:
   // \[
   // \boldsymbol{F} = \boldsymbol{\tau}
   // \]
-  // where $\boldsymbol{\tau}$ is space and time-varying. The wind stress 
+  // where $\boldsymbol{\tau}$ is space and time-varying. The wind stress
   // components must be given in the test case class. They are then passed
   // as constant pointer to the `source` function. This means
-  // that we can easily move across the memory accessing to the next wind stress 
+  // that we can easily move across the memory accessing to the next wind stress
   // component and, at the same time, that we cannot modify the memory address.
   class CoriolisBeta : public CoriolisBase
   {
   public:
+    /**
+     * Default constructor.
+     */
     CoriolisBeta();
-    ~CoriolisBeta(){};
+
+    /**
+     * Default destructor.
+     */
+    ~CoriolisBeta() = default;
 
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
@@ -83,7 +88,7 @@ namespace Physics
   CoriolisBeta::CoriolisBeta()
     : CoriolisBase()
   {}
-  
+
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
@@ -98,4 +103,3 @@ namespace Physics
   }
 
 } // namespace Physics
-#endif //CORIOLIS_HPP

@@ -14,10 +14,9 @@
  * ---------------------------------------------------------------------
 
  *
- * Author: Luca Arpaia,        2025
+ * Author: Luca Arpaia, 2025
  */
-#ifndef CELLWISEINVERSEMASSMATRIXOCEANO_HPP
-#define CELLWISEINVERSEMASSMATRIXOCEANO_HPP
+#pragma once
 
 #include <deal.II/matrix_free/fe_evaluation.h>
 
@@ -179,6 +178,7 @@ namespace MatrixFreeOperatorsOceano
   * DGQ elements. This algorithm simply inverts the diagonal. Note that it is only first
   * order accurate. However vectorization is supported and enables faster inversion with
   * respect to the first class `CellwiseInverseMassMatrix`.
+  //GO: Why is it denoted as mass lumping? If you are inverting only the diagonal, it is more a Jacobi-type approximation
   *
   */
   template <int dim,

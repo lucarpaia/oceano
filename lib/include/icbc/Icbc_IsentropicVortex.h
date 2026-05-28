@@ -17,8 +17,7 @@
  * Author: Martin Kronbichler, 2020
  *         Luca Arpaia,        2023
  */
-#ifndef ICBC_ISENTROPICVORTEX_HPP
-#define ICBC_ISENTROPICVORTEX_HPP
+#pragma once
 
 #include <deal.II/base/function.h>
 // The following files include the oceano libraries
@@ -32,12 +31,12 @@ namespace ICBC
 
   // The first test case is an isentropic vortex case (see e.g. the book by Hesthaven
   // and Warburton, Example 6.1 in Section 6.6 on page 209) which fulfills the
-  // Euler equations with zero force term on the right hand side. 
+  // Euler equations with zero force term on the right hand side.
 
   using namespace dealii;
-  
+
   // We define global parameters that help in the definition of the initial
-  // and boundary conditions. In  this case $gamma$ is defined also in the main 
+  // and boundary conditions. In  this case $gamma$ is defined also in the main
   // program and we could have recoverd it from there. We redefine $gamma$ here for now.
   constexpr double gamma       = 1.4;
 
@@ -48,8 +47,8 @@ namespace ICBC
   // The class `ExactSolution` defines analytical functions that can be useful
   // to define initial and boundary conditions. Apart for the template for the
   // dimension which is in common with the base `Function` class, we have added
-  // the number of variables. 
-  template <int dim, int n_vars>  
+  // the number of variables.
+  template <int dim, int n_vars>
   class ExactSolution : public Function<dim>
   {
   public:
@@ -59,7 +58,7 @@ namespace ICBC
 
     virtual double value(const Point<dim> & p,
                          const unsigned int component = 0) const override;
-  };  
+  };
 
   // We return either the density, the momentum, or the energy
   // depending on which component is requested. Note that the original
@@ -116,10 +115,10 @@ namespace ICBC
 
   // The `Ic` class define the initial condition for the test-case.
   // In this case it is recovered from the exact solution at time zero.
-  // This is realized here thanks to a derived class of `ExactSolution` that 
-  // overload the the constructor of the base class providing automatically 
+  // This is realized here thanks to a derived class of `ExactSolution` that
+  // overload the the constructor of the base class providing automatically
   // a zero time
-  template <int dim, int n_vars>  
+  template <int dim, int n_vars>
   class Ic : public ExactSolution<dim, n_vars>
   {
   public:
@@ -131,17 +130,17 @@ namespace ICBC
 
 
   // The `Bc` class define the boundary conditions for the test-case.
-  template <int dim, int n_vars>  
+  template <int dim, int n_vars>
   class BcIsentropicVortex : public BcBase<dim, n_vars>
   {
   public:
-  
+
     BcIsentropicVortex(IO::ParameterHandler &/*prm*/){};
     ~BcIsentropicVortex(){};
-         
+
     void set_boundary_conditions() override;
 
-  }; 
+  };
 
   // Dirichlet boundary conditions (inflow) are specified all around the domain.
   template <int dim, int n_vars>
@@ -149,29 +148,29 @@ namespace ICBC
   {
      this->set_supercritical_inflow_boundary(
        0, std::make_unique<ExactSolution<dim, n_vars>>(0));
-  }         
+  }
 
 
 
-  // We need a class to handle the problem data. Problem data are case dependent; for this 
+  // We need a class to handle the problem data. Problem data are case dependent; for this
   // reason it appears inside the `ICBC` namespace. The data in general depends on
   // both time and space. Deal.II has a class `Function` which returns function
-  // of space and time, thus we simply create a derived class. The size of the data is 
-  // fixed to `dim+3=5` scalar quantities. The first component is the bathymetry. 
-  // The second is the bottom friction coefficient. The third and fourth components 
+  // of space and time, thus we simply create a derived class. The size of the data is
+  // fixed to `dim+3=5` scalar quantities. The first component is the bathymetry.
+  // The second is the bottom friction coefficient. The third and fourth components
   // are the cartesian components of the wind velocity (in order, eastward and northward).
   // The fifth one is the Coriolis parameter. The test-dependent functions `stommelGyre_wind()`
-  // and `stommelGyre_coriolis()` contain the definition of analytical functions for the 
-  // different data. The call to `value()` returns all the external data necessary to 
-  // complete the computation. 
+  // and `stommelGyre_coriolis()` contain the definition of analytical functions for the
+  // different data. The call to `value()` returns all the external data necessary to
+  // complete the computation.
   //
   // Finally the parameter handler class allows to read constants from the prm file.
   // The parameter handler class may seems redundant but it is not! Constants that appears
-  // in you data may be easily recovered from the configuration file. More important file 
-  // names which contains the may be imported too. 
+  // in you data may be easily recovered from the configuration file. More important file
+  // names which contains the may be imported too.
   //
   // In this case it is null.
-  template <int dim>  
+  template <int dim>
   class ProblemData : public Function<dim>
   {
   public:
@@ -186,9 +185,9 @@ namespace ICBC
   ProblemData<dim>::ProblemData(IO::ParameterHandler &/*prm*/)
     : Function<dim>(dim+3)
   {}
-  
-  
-  
+
+
+
   template <int dim>
   double ProblemData<dim>::value(const Point<dim> & /*x*/,
                                  const unsigned int component) const
@@ -198,7 +197,5 @@ namespace ICBC
     else
       return 0.;
   }
-    
-} // namespace ICBC
 
-#endif //ICBC_ISENTROPICVORTEX_HPP
+} // namespace ICBC

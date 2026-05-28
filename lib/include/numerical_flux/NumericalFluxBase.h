@@ -17,10 +17,9 @@
  * Author: Martin Kronbichler, 2020
  *         Luca Arpaia,        2023
  */
-#ifndef NUMERICALFLUXBASE_HPP
-#define NUMERICALFLUXBASE_HPP
+#pragma once
 
-// The following files include the oceano libraries 
+// The following files include the oceano libraries
 #if defined MODEL_EULER
 #include <model/Euler.h>
 #elif defined MODEL_SHALLOWWATER
@@ -36,8 +35,8 @@ namespace NumericalFlux
 
   using namespace dealii;
 
- 
-  
+
+
   // This class implements the numerical flux (Riemann solver). It gets the
   // state from the two sides of an interface and the normal vector, oriented
   // from the side of the solution $\mathbf{w}^-$ towards the solution
@@ -65,12 +64,12 @@ namespace NumericalFlux
   // (HLL) flux. For both variants, we first need to get the velocities and
   // pressures from both sides of the interface and evaluate the physical flux.
   //
-  // I would have liked to template the numerical flux class with 
-  // <int dim, typename Number> which would have been cleaner. But I was not able 
+  // I would have liked to template the numerical flux class with
+  // <int dim, typename Number> which would have been cleaner. But I was not able
   // to compile the call to the function `numerical_flux_weak()` which take
   // as argument `Tensor<1, Number>` while is receiving
   // `Tensor<1, VectorizedArray<Number>>`. I don't know why, without
-  // a template class, everything works. I leave this for future work.  
+  // a template class, everything works. I leave this for future work.
   class NumericalFluxBase
   {
   public:
@@ -98,7 +97,7 @@ namespace NumericalFlux
   NumericalFluxBase::NumericalFluxBase(
     IO::ParameterHandler &param)
     : model(param)
-  {} 
+  {}
 
   // We implement the contribution to the numerical flux coming from the terms that
   // have been approximated with the strong formulation of discontinuos Galerkin.
@@ -133,7 +132,5 @@ namespace NumericalFlux
     return model.g * 0.5 * h_p * (zcorr_p - zcorr_m) * normal;
 #endif
   }
-   
-} // namespace NumericalFlux
 
-#endif //NUMERICALFLUXBASE_HPP
+} // namespace NumericalFlux

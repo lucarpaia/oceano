@@ -14,11 +14,10 @@
  * ---------------------------------------------------------------------
 
  *
- * Author: Luca Arpaia,        2023
+ * Author: Luca Arpaia, 2023
  */
- 
-#ifndef TIMESTEPPINGOCEANO_HPP
-#define TIMESTEPPINGOCEANO_HPP
+
+#pragma once
 
 /**
  * Namespace containing the time stepping methods
@@ -268,7 +267,7 @@ namespace TimeSteppingOceano
   }
 
 
-  
+
   // The ImplicitRungeKutta class could have been derived from RungeKutta
   // implementing a specific class of diagonally implicit methods (DIRK).
   // We did something even simpler
@@ -393,7 +392,7 @@ namespace TimeSteppingOceano
 
     d.resize(this->d.size());
     d = this->d;
-  }  
+  }
 } // namespace TimeSteppingOceano
 
 #endif

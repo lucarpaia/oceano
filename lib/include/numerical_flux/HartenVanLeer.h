@@ -17,8 +17,7 @@
  * Author: Martin Kronbichler, 2020
  *         Luca Arpaia,        2023
  */
-#ifndef HARTENVANLEER_HPP
-#define HARTENVANLEER_HPP
+#pragma once
 
 // The following files include the oceano libraries
 #include <numerical_flux/NumericalFluxBase.h>
@@ -31,9 +30,9 @@ namespace NumericalFlux
 {
 
   using namespace dealii;
-  
-  
-  
+
+
+
   // For the model class we do not use an implementation file. This
   // is because of the fact the all the function called are templated
   // or inlined. Both templated and inlined functions are hard to be separated
@@ -79,18 +78,18 @@ namespace NumericalFlux
                              const Number                  data_p) const;
   };
 
- 
- 
+
+
   // For the model class we do not use an implementation file. This
   // is because of the fact the all the function called are templated
   // or inlined. Both templated and inlined functions are hard to be separated
   // between declaration and implementation. We keep them in the header file.
   //
-  // The constructor of the numerical flux class takes as arguments the 
+  // The constructor of the numerical flux class takes as arguments the
   // numerical parameters which may be test-case/user dependent. These
   // parameters are stored as class members.
-  // In this way they are defined/read from file in one place and then used 
-  // whenever needed with `numerical_flux.param`, instead of being read/defined 
+  // In this way they are defined/read from file in one place and then used
+  // whenever needed with `numerical_flux.param`, instead of being read/defined
   // multiple times. I hope this does not add much overhead. The physical parameter
   // `gamma` is also passed to construct the model class.
   HartenVanLeer::HartenVanLeer(

@@ -12,10 +12,11 @@
  * the top level directory of deal.II.
  *
  * ---------------------------------------------------------------------
- 
+
  *
- * Author: Luca Arpaia,	CNR-ISMAR,                2023
+ * Author: Luca Arpaia,	CNR-ISMAR, 2023
  */
+ #pragma once
 
 /**
  * Namespace containing the input/output file handler.
@@ -24,21 +25,21 @@
 namespace IO
 {
 
-  using namespace dealii;
+  using namespace dealii; // GO: Is this needed?
 
 
-  
+
   // The next class is responsible for parsing correctly the command line.
   class CommandLineParser
   {
   public:
     CommandLineParser(){}
     void parse_command_line(int argc, char **argv);
- 
+
   private:
     void usage();
   };
- 
+
 
 
   void CommandLineParser::usage()
@@ -47,11 +48,11 @@ namespace IO
     std::cout << " -i   --input <file>    :"
               << " use a configuration file in deal.II PRM format as input."
               << std::endl;
-    std::cout << " -h   --help            :" << " print this message " 
+    std::cout << " -h   --help            :" << " print this message "
               << std::endl;
   }
- 
-  // The function `parse_command_line` does not output anything. It just 
+
+  // The function `parse_command_line` does not output anything. It just
   // raises messages errors and exit the program in case of wrong usage
   // of the executable.
   void CommandLineParser::parse_command_line(int argc, char **argv)
@@ -88,5 +89,5 @@ namespace IO
                                "Check again your command line."));
       }
   }
-  
+
 } // namespace IO

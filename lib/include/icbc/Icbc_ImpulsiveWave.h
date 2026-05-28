@@ -14,10 +14,9 @@
  * ---------------------------------------------------------------------
 
  *
- * Author: Luca Arpaia,        2023
+ * Author: Luca Arpaia, 2023
  */
-#ifndef ICBC_IMPULSIVEWAVE_HPP
-#define ICBC_IMPULSIVEWAVE_HPP
+#pragma once
 
 #include <deal.II/base/function.h>
 // The following files include the oceano libraries
@@ -29,15 +28,15 @@
 namespace ICBC
 {
 
-  // The first test case is an impulsive wave in a closed square basin with dimensions 
-  // $[−5m, 5m] \times [−5m, 5m]$ and with constant bathymetry $z_b = 1 m$. 
-  // The basin is initially at rest and the free surface is perturbed by 
+  // The first test case is an impulsive wave in a closed square basin with dimensions
+  // $[−5m, 5m] \times [−5m, 5m]$ and with constant bathymetry $z_b = 1 m$.
+  // The basin is initially at rest and the free surface is perturbed by
   // the following Gaussian hump $\zeta(x, t = 0) = A \exp(−r^2 /\tau)$,
   // with $A = 0.5 m$, $\tau = 2.0 m^2 and $r =\sqrt{ x^2 + y^2 }$.
   using namespace dealii;
-  
+
   // We define global parameters that help in the definition of the initial
-  // and boundary conditions. They are the initial wave parameters, namely 
+  // and boundary conditions. They are the initial wave parameters, namely
   // the amplitude $A$ and the decay rate $\tau$.
   constexpr double A         = 0.5;
   constexpr double tau       = 2.0;
@@ -170,7 +169,7 @@ namespace ICBC
   {
     Assert(dim == 2, ExcNotImplemented());
     Assert(n_vars == 3, ExcNotImplemented());
-    
+
     Point<dim> x0;
     x0[0] = 0.; x0[1] = 0.;
     const double radius_sqr = (x - x0).norm_square();
@@ -186,14 +185,14 @@ namespace ICBC
 
 
 
-  template <int dim, int n_vars>  
+  template <int dim, int n_vars>
   class BcImpulsiveWave : public BcBase<dim, n_vars>
   {
   public:
 
     BcImpulsiveWave(IO::ParameterHandler &/*prm*/){};
     ~BcImpulsiveWave(){};
-         
+
     void set_boundary_conditions() override;
 
   };
@@ -204,5 +203,3 @@ namespace ICBC
     this->set_wall_boundary(0);
   }
 } // namespace ICBC
-
-#endif //ICBC_ISENTROPICVORTEX_HPP

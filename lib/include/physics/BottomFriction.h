@@ -14,13 +14,12 @@
  * ---------------------------------------------------------------------
 
  *
- * Author: Luca Arpaia,        2023
+ * Author: Luca Arpaia, 2023
  */
-#ifndef BOTTOMFRICTION_HPP
-#define BOTTOMFRICTION_HPP
+#pragma once
 
 /**
- * Namespace containing the so-called phyisics of the governing equations.
+ * Namespace containing the so-called physics of the governing equations.
  * They are the different parametrizations.
  */
 
@@ -33,14 +32,14 @@ namespace Physics
 
   // In the following classes, we implement the different formulations
   // of the bottom friction. We use a base class that is used to store the
-  // physical constants appearing into the different formulations. 
+  // physical constants appearing into the different formulations.
   class BottomFrictionBase
   {
   public:
     BottomFrictionBase(IO::ParameterHandler &prm);
     ~BottomFrictionBase(){};
 
-    double g;
+    double g; //GO: double or template Number?
 
     // The next function is the one that actually computes the bottom friction.
     // It is overloaded by the same function defined in the derived classes.
@@ -63,9 +62,9 @@ namespace Physics
                const Number                  drag_parameter,
                const Number                  depth) const;
   };
-    
-  // Not surprisingly, the constructor of the base class takes as arguments 
-  // only the parameters handler class in order to read the test-case/user 
+
+  // Not surprisingly, the constructor of the base class takes as arguments
+  // only the parameters handler class in order to read the test-case/user
   // dependent parameters.
   BottomFrictionBase::BottomFrictionBase(
     IO::ParameterHandler &prm)
@@ -74,16 +73,16 @@ namespace Physics
     g = prm.get_double("g");
     prm.leave_subsection();
   }
-  
-  
+
+
 #if defined PHYSICS_BOTTOMFRICTIONLINEAR
-  // The first bottom friction formulation is the simpler one. A linear 
+  // The first bottom friction formulation is the simpler one. A linear
   // friction model of the form:
   // \[
   // \boldsymbol{F} = C_D \boldsymbol{u}
   // \]
-  // with $C_D$ the drag coefficient that can vary in space. This is a highly 
-  // simplified model given the turbulent nature of the ocean bottom 
+  // with $C_D$ the drag coefficient that can vary in space. This is a highly
+  // simplified model given the turbulent nature of the ocean bottom
   // boundary layers.
   class BottomFrictionLinear : public BottomFrictionBase
   {
@@ -110,7 +109,7 @@ namespace Physics
     IO::ParameterHandler &param)
     : BottomFrictionBase(param)
   {}
-  
+
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
@@ -140,7 +139,7 @@ namespace Physics
 
 
 #elif defined PHYSICS_BOTTOMFRICTIONMANNING
-  // The third bottom friction formulation is the Manning friction. 
+  // The third bottom friction formulation is the Manning friction.
   // The Manning friction takes the form:
   // \[
   // \boldsymbol{F} = g n^2 \frac{||\boldsymbol{u}||}{h^{1/3}} \boldsymbol{u}
@@ -148,12 +147,12 @@ namespace Physics
   // with $n$ the Manning coefficient that can vary in space. Manning
   // friction is recommended in shallow water simulations. Note that the original
   // formulation involves the $\frac{1}{3}$-th power of the water depth.
-  // Since `std::pow()` has pretty slow implementations on some systems, we replace 
-  // it by logarithm followed by exponentiation, which is mathematically equivalent 
+  // Since `std::pow()` has pretty slow implementations on some systems, we replace
+  // it by logarithm followed by exponentiation, which is mathematically equivalent
   // but usually much better optimized. This formula might lose accuracy in the last digits
   // for very small numbers compared to `std::pow()`, but we are happy with
-  // it anyway, since small numbers map to data close to 1. The inverse of is also 
-  // a quite expensive operation and we compute it, as well as the velocity norm just once 
+  // it anyway, since small numbers map to data close to 1. The inverse of is also
+  // a quite expensive operation and we compute it, as well as the velocity norm just once
   // before looping on the dimensions.
   class BottomFrictionManning : public BottomFrictionBase
   {
@@ -179,8 +178,8 @@ namespace Physics
   BottomFrictionManning::BottomFrictionManning(
     IO::ParameterHandler &param)
     : BottomFrictionBase(param)
-  {}  
-  
+  {}
+
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
@@ -190,7 +189,7 @@ namespace Physics
       const Number                  depth) const
   {
     Tensor<1, dim, Number> source;
-    Number inv_depth = 1. / ( std::exp( std::log(depth) * 0.33333333333 ) );
+    Number inv_depth = 1. / ( std::exp( std::log(depth) * 0.33333333333 ) ); // GO: Desingularize?
     Number velocity_norm = velocity.norm();
     Number hcf = g * manning * manning * inv_depth * velocity_norm;
     for (unsigned int d = 0; d < dim; ++d)

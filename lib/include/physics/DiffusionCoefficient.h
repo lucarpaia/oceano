@@ -14,10 +14,9 @@
  * ---------------------------------------------------------------------
 
  *
- * Author: Luca Arpaia,        2025
+ * Author: Luca Arpaia, 2025
  */
-#ifndef DIFFUSIONCOEFFICIENT_HPP
-#define DIFFUSIONCOEFFICIENT_HPP
+#pragma once
 
 /**
  * Namespace containing the so-called phyisics of the governing equations.
@@ -37,14 +36,14 @@ namespace Physics
   // In coastal flows, transport brings closer water masses with different
   // properties, continuously building up strong gradients. These can be
   // accurately simulated with TVD schemes or with an horizontal "eddy" diffusion.
-  // The next class and its derived classes, basically compute the eddy diffusivity. 
+  // The next class and its derived classes, basically compute the eddy diffusivity.
   class DiffusionCoefficientBase
   {
   public:
     DiffusionCoefficientBase(IO::ParameterHandler &prm);
     ~DiffusionCoefficientBase(){};
 
-    double c_m;
+    double c_m; //GO: double or template Number?
 
     // The next function is the one that actually computes the diffusion coefficient.
     // It is overloaded by the same function defined in the derived classes.
@@ -54,8 +53,8 @@ namespace Physics
       value(const Tensor<dim, dim, Number> &gradient_velocity,
             const Number                    area) const;
   };
-  
-  // Not surprisingly the constructor of the base class takes as arguments 
+
+  // Not surprisingly the constructor of the base class takes as arguments
   // only the parameters handler class in order to read the physical constants
   // from the prm file. Note that $C_M$ will have different meaning depending
   // on the diffusivity formulation.
@@ -90,7 +89,7 @@ namespace Physics
     IO::ParameterHandler &param)
     : DiffusionCoefficientBase(param)
   {}
-  
+
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Number
@@ -163,4 +162,3 @@ namespace Physics
 #endif
 
 } // namespace Physics
-#endif //DIFFUSIONCOEFFICIENT_HPP

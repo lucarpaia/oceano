@@ -12,11 +12,13 @@
  * the top level directory of deal.II.
  *
  * ---------------------------------------------------------------------
- 
+
  *
- * Author: Moritz Allmaras, Texas A&M University, 2007
- 	   Luca Arpaia,	CNR-ISMAR,                2023
+ * Authors: Moritz Allmaras, Texas A&M University, 2007
+ 	          Luca Arpaia, CNR-ISMAR, 2023
  */
+#pragma once
+ 
 #include <deal.II/base/parameter_handler.h>
 
 /**
@@ -29,35 +31,35 @@ namespace IO
   using namespace dealii;
 
 
- 
-  // The next class is responsible for preparing the `ParameterHandler` 
-  // object and reading parameters from an input file. It includes a 
-  // function `declare_parameters` that declares all the necessary 
-  // parameters and a `read_parameters` function that is called from 
+
+  // The next class is responsible for preparing the `ParameterHandler`
+  // object and reading parameters from an input file. It includes a
+  // function `declare_parameters` that declares all the necessary
+  // parameters and a `read_parameters` function that is called from
   // outside to initiate the parameter reading process.
   class ParameterReader : public Subscriptor
   {
   public:
     ParameterReader(ParameterHandler &);
     void read_parameters(const std::string &);
- 
+
   private:
     void              declare_parameters();
     ParameterHandler &prm;
   };
- 
-  // The constructor stores a reference to the `ParameterHandler` object 
-  // that is passed to it: 
+
+  // The constructor stores a reference to the `ParameterHandler` object
+  // that is passed to it:
   ParameterReader::ParameterReader(ParameterHandler &paramhandler)
     : prm(paramhandler)
   {}
- 
-  // The `declare_parameters` function declares all the parameters that 
-  // our `ParameterHandler` object will be able to read from input files, 
-  // along with their types, range conditions and the subsections they 
-  // appear in. We will wrap all the entries that go into a section in a 
-  // pair of braces to force the editor to indent them by one level, making 
-  // it simpler to read which entries together form a section: 
+
+  // The `declare_parameters` function declares all the parameters that
+  // our `ParameterHandler` object will be able to read from input files,
+  // along with their types, range conditions and the subsections they
+  // appear in. We will wrap all the entries that go into a section in a
+  // pair of braces to force the editor to indent them by one level, making
+  // it simpler to read which entries together form a section:
   void ParameterReader::declare_parameters()
   {
 
@@ -66,16 +68,16 @@ namespace IO
     // coarse mesh.
     prm.enter_subsection("Mesh & hp parameters");
     {
-    
+
       prm.declare_entry("Mesh_filename",
                         "meshfile.msh",
                         Patterns::Anything(),
                         "Mesh filename in Gmsh format "
                         "version >= 4.1");
-    
-      // For the number of refinement steps, we allow integer values 
-      // in the range $[0,\infty)$, where the omitted second argument to the 
-      // `Patterns::Integer` object denotes the half-open interval.    
+
+      // For the number of refinement steps, we allow integer values
+      // in the range $[0,\infty)$, where the omitted second argument to the
+      // `Patterns::Integer` object denotes the half-open interval.
       prm.declare_entry("Global_level_of_mesh_refinement",
                         "6", Patterns::Integer(0),
                         "Number of global mesh refinement steps "
@@ -172,10 +174,10 @@ namespace IO
      }
     prm.leave_subsection();
 
-    // The next subsection is devoted to the physical parameters appearing 
+    // The next subsection is devoted to the physical parameters appearing
     // in the equation.
     // Most of them lies in the half-open interval $[0,\infty)$,
-    // represented by calling the `Patterns::Double` class with only the 
+    // represented by calling the `Patterns::Double` class with only the
     // left end-point as argument.
     prm.enter_subsection("Physical constants");
     {
@@ -349,7 +351,7 @@ namespace IO
     }
     prm.leave_subsection();
   }
- 
+
   // This is the main function in the ParameterReader class. It gets called
   // from outside, first declares all the parameters, and then reads them from
   // the input file whose filename is provided by the caller. After the call
@@ -358,8 +360,8 @@ namespace IO
   void ParameterReader::read_parameters(const std::string &parameter_file)
   {
     declare_parameters();
- 
+
     prm.parse_input(parameter_file);
   }
-  
+
 } // namespace IO

@@ -14,16 +14,15 @@
  * ---------------------------------------------------------------------
 
  *
- * Author: Luca Arpaia,        2025
+ * Author: Luca Arpaia, 2025
  */
-#ifndef VISCOSITYCOEFFICIENT_HPP
-#define VISCOSITYCOEFFICIENT_HPP
+#pragma once
 
 /**
  * Namespace containing the so-called phyisics of the governing equations.
  * They are the different parametrizations.
  */
-
+// GO: Which is the difference with DiffusionCoefficient?
 namespace Physics
 {
 
@@ -37,11 +36,11 @@ namespace Physics
   // In coastal flows, strong shear currents maybe under-resolved. This fact,
   // toghether with the low diffusion offered by high order finite elements may lead
   // to spurious modes at the grid scale. These modes can be cured either with
-  // standard TVD schemes or with an horizontal "eddy" viscosity. At state of 
+  // standard TVD schemes or with an horizontal "eddy" viscosity. At state of
   // the art, a rigorous theory to model eddy viscosity in coastal flow is missing.
   // Coastal models use either constant viscosity or simple turbulence model based
   // on the mixing length.
-  // The next class and its derived classes, basically compute the eddy viscosity. 
+  // The next class and its derived classes, basically compute the eddy viscosity.
   class ViscosityCoefficientBase
   {
   public:
@@ -58,8 +57,8 @@ namespace Physics
       value(const Tensor<dim, dim, Number> &gradient_velocity,
             const Number                    area) const;
   };
-  
-  // Not surprisingly the constructor of the base class takes as arguments 
+
+  // Not surprisingly the constructor of the base class takes as arguments
   // only the parameters handler class in order to read the physical constants
   // from the prm file.
   ViscosityCoefficientBase::ViscosityCoefficientBase(
@@ -94,7 +93,7 @@ namespace Physics
     IO::ParameterHandler &param)
     : ViscosityCoefficientBase(param)
   {}
-  
+
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Number
@@ -167,4 +166,3 @@ namespace Physics
 #endif
 
 } // namespace Physics
-#endif //VISCOSITYCOEFFICIENT_HPP

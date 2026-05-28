@@ -14,10 +14,9 @@
  * ---------------------------------------------------------------------
 
  *
- * Author: Luca Arpaia,        2023
+ * Author: Luca Arpaia, 2023
  */
-#ifndef SHALLOWWATERWITHTRACER_HPP
-#define SHALLOWWATERWITHTRACER_HPP
+#pragma once
 
 // The following files include the oceano libraries
 #include <model/ShallowWater.h>
@@ -125,12 +124,12 @@ namespace Model
   // For the model class we do not use an implementation file. This
   // is because of the fact the all the function called are templated
   // or inlined. Both templated and inlined functions are hard to be separated
-  // between declaration and implementation. We keep them in the header file. 
-  
+  // between declaration and implementation. We keep them in the header file.
+
   // The constructor of the model class takes as arguments the parameters handler
   // class in order to read the test-case/user dependent parameters. These
-  // parameters are stored as class members. In this way they are defined/read 
-  // from file in one place and then used whenever needed  with `model.param`, 
+  // parameters are stored as class members. In this way they are defined/read
+  // from file in one place and then used whenever needed  with `model.param`,
   // instead of being read/defined multiple times.
   ShallowWaterWithTracer::ShallowWaterWithTracer(
     IO::ParameterHandler &prm)
@@ -251,4 +250,3 @@ namespace Model
         * h * gradient_tracer;
   }
 } // namespace Model
-#endif //SHALLOWWATERWITHTRACER_HPP

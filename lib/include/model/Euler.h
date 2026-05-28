@@ -17,8 +17,7 @@
  * Author: Martin Kronbichler, 2020
  *         Luca Arpaia,        2023
  */
-#ifndef EULER_HPP
-#define EULER_HPP
+#pragma once
 
 // The following files include the oceano libraries
 #include <io/ParameterReader.h>
@@ -30,6 +29,12 @@
 namespace Model
 {
 
+  //GO: This is an excellent idea. In principle we could think to upscale and abstract, making a base class
+  // with the function flux virtual and then eahc model derives from that implementing (at least) flux
+  // as well as the other functions. Moreover we could think to make the choice of the model runtime.
+  // We can discuss when you have time.
+  //
+  //GO: Maybe use an enumerator to clarify instead of conserved_variables[0], conserved_variables[1] for the sake of clarity
   using namespace dealii;
 
   // @sect3{Implementation of point-wise operations of the Euler equations}
@@ -78,14 +83,14 @@ namespace Model
   // that the code maps to excellent machine code.
   //
   // I would have liked to template the model class with <int dim, typename Number>
-  // which would have been cleaner. But I was not able to compile a templated 
-  // numerical flux class. For now I have left both classes without template  
+  // which would have been cleaner. But I was not able to compile a templated
+  // numerical flux class. For now I have left both classes without template
   class Euler
   {
   public:
     Euler(IO::ParameterHandler &prm);
     ~Euler(){};
- 
+
     double gamma;
 
     std::vector<std::string> vars_name;
@@ -114,7 +119,7 @@ namespace Model
 
     // Here is the definition of the Euler flux function, i.e., the definition
     // of the actual equation. Given the velocity and pressure (that the
-    // compiler optimization will make sure are done only once), this is 
+    // compiler optimization will make sure are done only once), this is
     // straight-forward given the equation stated in the introduction.
     template <int dim, int n_vars, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
@@ -139,18 +144,18 @@ namespace Model
         const Tensor<1, n_vars, Number> &conserved_variables,
         const Number                     data) const;
   };
-  
-  
-  
+
+
+
   // For the model class we do not use an implementation file. This
   // is because of the fact the all the function called are templated
   // or inlined. Both templated and inlined functions are hard to be separated
-  // between declaration and implementation. We keep them in the header file. 
-  
+  // between declaration and implementation. We keep them in the header file.
+
   // The constructor of the model class takes as arguments the parameters handler
   // class in order to read the test-case/user dependent parameters. These
-  // parameters are stored as class members. In this way they are defined/read 
-  // from file in one place and then used whenever needed  with `model.param`, 
+  // parameters are stored as class members. In this way they are defined/read
+  // from file in one place and then used whenever needed  with `model.param`,
   // instead of being read/defined multiple times.
   Euler::Euler(
     IO::ParameterHandler &prm)
@@ -162,7 +167,7 @@ namespace Model
     vars_name = {"density", "momentum", "momentum", "energy"};
     postproc_vars_name = {"velocity", "velocity", "pressure", "speed_of_sound"};
   }
-  
+
   template <int dim, int n_vars, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>
@@ -242,9 +247,8 @@ namespace Model
                             const Number                     data) const
   {
     const auto p = pressure<dim, n_vars>(conserved_variables, data);
-    
+
     return gamma * p * (1. / conserved_variables[0]);
   }
 
 } // namespace Model
-#endif //EULER_HPP

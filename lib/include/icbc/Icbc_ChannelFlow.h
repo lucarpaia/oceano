@@ -17,8 +17,7 @@
  * Author: Martin Kronbichler, 2020
  *         Luca Arpaia,        2023
  */
-#ifndef ICBC_CHANNELFLOW_HPP
-#define ICBC_CHANNELFLOW_HPP
+#pragma once
 
 #include <deal.II/base/function.h>
 // The following files include the oceano libraries
@@ -216,7 +215,7 @@ namespace ICBC
   // interpolation of the data read from file. If tracers are added they are
   // taken constant to check the tracer consistency with the continuity when
   // a non-polynomial bathymetry is present.
-  template <int dim, int n_vars>  
+  template <int dim, int n_vars>
   class ExactSolution : public Function<dim>
   {
   public:
@@ -329,11 +328,11 @@ namespace ICBC
 
 
 
-  template <int dim, int n_vars>  
+  template <int dim, int n_vars>
   class BcChannelFlow : public BcBase<dim, n_vars>
   {
   public:
-  
+
     BcChannelFlow(IO::ParameterHandler &prm);
     ~BcChannelFlow(){};
 
@@ -342,7 +341,7 @@ namespace ICBC
   private:
     ParameterHandler &prm;
   };
-  
+
   template <int dim, int n_vars>
   BcChannelFlow<dim, n_vars>::BcChannelFlow(IO::ParameterHandler &prm)
     : prm(prm)
@@ -358,4 +357,3 @@ namespace ICBC
     this->set_wall_boundary(0);
   }
 } // namespace ICBC
-#endif //ICBC_CHANNELFLOW_HPP

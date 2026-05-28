@@ -17,10 +17,9 @@
  * Author: Martin Kronbichler, 2020
  *         Luca Arpaia,        2023
  */
-#ifndef LAXFRIEDRICHSMODIFIED_HPP
-#define LAXFRIEDRICHSMODIFIED_HPP
+#pragma once
 
-// The following files include the oceano libraries 
+// The following files include the oceano libraries
 #include <numerical_flux/NumericalFluxBase.h>
 
 /**
@@ -31,9 +30,9 @@ namespace NumericalFlux
 {
 
   using namespace dealii;
-  
-  
-  
+
+
+
   // For the model class we do not use an implementation file. This
   // is because of the fact the all the function called are templated
   // or inlined. Both templated and inlined functions are hard to be separated

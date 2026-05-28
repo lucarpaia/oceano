@@ -17,8 +17,7 @@
  * Author: Martin Kronbichler, 2020
  *         Luca Arpaia,        2023
  */
-#ifndef ICBC_SHALLOWWATERVORTEX_HPP
-#define ICBC_SHALLOWWATERVORTEX_HPP
+#pragma once
 
 #include <deal.II/base/function.h>
 // The following files include the oceano libraries
@@ -49,7 +48,7 @@ namespace ICBC
 #define ICBC_SHALLOWWATERVORTEX_REGULARITYP2
 
   using namespace dealii;
-  
+
   // We define constant parameters that help in the definition of the initial
   // and boundary conditions. These are the parameters of the vortex
   // such as the undisturbed water depth and the free-strem velocity.
@@ -57,7 +56,7 @@ namespace ICBC
   // amplitude of 1 and a radius less than half of the channel width.
   constexpr double h0      = 1.0;
   constexpr double uoo     = 6.0;
-  // the depth at the center:  
+  // the depth at the center:
   constexpr double hmin    = 0.9;
   // the radius:
   constexpr double radius0 = 0.25;
@@ -115,7 +114,7 @@ namespace ICBC
   // to define initial and boundary conditions. Apart for the template for the
   // dimension which is in common with the base `Function` class, we have added
   // the number of variables.
-  template <int dim, int n_vars>  
+  template <int dim, int n_vars>
   class ExactSolution : public Function<dim>
   {
   public:
@@ -131,9 +130,9 @@ namespace ICBC
     virtual double value(const Point<dim> & p,
                          const unsigned int component = 0) const override;
 
-  private: 
+  private:
     double g;
-  };  
+  };
 
   // We return either the water depth or the velocity
   // depending on which component is requested.
@@ -146,7 +145,7 @@ namespace ICBC
     Assert(dim == 2, ExcNotImplemented());
 
     Point<dim> x0;
-    x0[0] = 0.5 + uoo *t; 
+    x0[0] = 0.5 + uoo *t;
     x0[1] = 0.5;
 
 #if defined ICBC_SHALLOWWATERVORTEX_REGULARITYP1
@@ -162,7 +161,7 @@ namespace ICBC
 #elif defined ICBC_SHALLOWWATERVORTEX_REGULARITYP2
     const double Gamma = M_PI/(twoPowp*radius0) * std::sqrt( 1./corr* g*(h0-hmin)/(0.034179687*M_PI*M_PI-0.222222222));
 #endif
-        
+
     const double radius = (x - x0).norm();
 
     const double pi_half = 0.5*M_PI;
@@ -175,17 +174,17 @@ namespace ICBC
     double x2 = pi_half*pi_half;
 
 #if defined ICBC_SHALLOWWATERVORTEX_REGULARITYP1
-    double H_pi_half = 0.125*cos2x + 0.25*pi_half*sin2x 
+    double H_pi_half = 0.125*cos2x + 0.25*pi_half*sin2x
       + 0.015625*cos2x2 + 0.1875*x2 + 0.0625*pi_half*cos2x*sin2x;
 #elif defined ICBC_SHALLOWWATERVORTEX_REGULARITYP2
     double sinx = std::sin(pi_half);
-    double H_pi_half = 0.091145833*cos2x + 0.182291667*pi_half*sin2x 
-      + std::pow(cosx,6)* (0.015625*cosx2 + 0.024305556) + 0.011393229*cos2x2 
+    double H_pi_half = 0.091145833*cos2x + 0.182291667*pi_half*sin2x
+      + std::pow(cosx,6)* (0.015625*cosx2 + 0.024305556) + 0.011393229*cos2x2
       + 0.13671875*x2 + 0.045572917*pi_half*cos2x*sin2x + 0.125*pi_half*std::pow(cosx,5)*sinx*(cosx2 + 1.166666667);
 #endif
     H_pi_half *= corr;
 
-    const double rho_half = 0.5*M_PI*radius/radius0; 
+    const double rho_half = 0.5*M_PI*radius/radius0;
 
     cosx = std::cos(rho_half);
     cos2x = std::cos(2.*rho_half);
@@ -195,12 +194,12 @@ namespace ICBC
     x2 = rho_half*rho_half;
 
 #if defined ICBC_SHALLOWWATERVORTEX_REGULARITYP1
-    double H_rho_half = 0.125*cos2x + 0.25*rho_half*sin2x 
+    double H_rho_half = 0.125*cos2x + 0.25*rho_half*sin2x
       + 0.015625*cos2x2 + 0.1875*x2 + 0.0625*rho_half*cos2x*sin2x;
 #elif defined ICBC_SHALLOWWATERVORTEX_REGULARITYP2
     sinx = std::sin(rho_half);
-    double H_rho_half = 0.091145833*cos2x + 0.182291667*rho_half*sin2x 
-      + std::pow(cosx,6)* (0.015625*cosx2 + 0.024305556) + 0.011393229*cos2x2 
+    double H_rho_half = 0.091145833*cos2x + 0.182291667*rho_half*sin2x
+      + std::pow(cosx,6)* (0.015625*cosx2 + 0.024305556) + 0.011393229*cos2x2
       + 0.13671875*x2 + 0.045572917*rho_half*cos2x*sin2x + 0.125*rho_half*std::pow(cosx,5)*sinx*(cosx2 + 1.166666667);
 #endif
     H_rho_half *= corr;
@@ -208,13 +207,13 @@ namespace ICBC
     const double inv_gpi = 1./(g * M_PI * M_PI);
     const double omega = twoPowp * Gamma * std::pow(cosx2,p);
     const double num = twoPowp * Gamma * radius0;
-        
+
     const double depth =
       radius < radius0 ? h0 - inv_gpi * num * num * (H_pi_half - H_rho_half) : h0;
-    const double u     = 
+    const double u     =
       radius < radius0 ? uoo - (x[1]-x0[1]) * omega : uoo;
-    const double v     = 
-      radius < radius0 ? (x[0]-x0[0]) * omega : 0.;             
+    const double v     =
+      radius < radius0 ? (x[0]-x0[0]) * omega : 0.;
 
     if (component == 0)
       return depth;
@@ -234,15 +233,15 @@ namespace ICBC
   // internally. This means that we can read the Parameter file from
   // anywhere when we are implementing ic/bc and we can access constants or
   // filenames from which the initial/boundary data depends.
-  // In this case the intial condition is recovered from the exact solution 
+  // In this case the intial condition is recovered from the exact solution
   // at time zero. This is realized here thanks to a derived class of
-  // `ExactSolution` that overload the the constructor of the base class 
+  // `ExactSolution` that overload the the constructor of the base class
   // providing automatically a zero time.
   // Dirichlet boundary conditions (inflow) are specified on the left boundary of the domain.
   // The right boundary is for outflow. Top and bottom boundaries are wall. Please note that,
-  // for the vortex parameters given above, the flow is supercritical and the choice of 
+  // for the vortex parameters given above, the flow is supercritical and the choice of
   // boundary conditions seems appropriate.
-  template <int dim, int n_vars>  
+  template <int dim, int n_vars>
   class Ic : public ExactSolution<dim, n_vars>
   {
   public:
@@ -254,21 +253,21 @@ namespace ICBC
 
 
 
-  template <int dim, int n_vars>  
+  template <int dim, int n_vars>
   class BcShallowWaterVortex : public BcBase<dim, n_vars>
   {
   public:
- 
+
     BcShallowWaterVortex(IO::ParameterHandler &prm)
       : prm(prm)
     {}
     ~BcShallowWaterVortex(){};
-         
+
     void set_boundary_conditions() override;
 
   private:
     ParameterHandler &prm;
-  }; 
+  };
 
   template <int dim, int n_vars>
   void BcShallowWaterVortex<dim, n_vars>::set_boundary_conditions()
@@ -281,5 +280,3 @@ namespace ICBC
     this->set_wall_boundary(0);
   }
 } // namespace ICBC
-
-#endif //ICBC_SHALLOWWATERVORTEX_HPP

@@ -14,18 +14,17 @@
  * ---------------------------------------------------------------------
 
  *
- * Author: Luca Arpaia,        2023
+ * Author: Luca Arpaia, 2023
  */
-#ifndef HPOCEANO_HPP
-#define HPOCEANO_HPP
+#pragma once
 
 #include <deal.II/meshworker/mesh_loop.h>
 #include <deal.II/hp/fe_values.h>
 #include <io/TxtDataReader.h>
+
 /**
  * Namespace containing the hp-options for the Oceano operator.
  */
-
 namespace hpOceano
 {
 
@@ -46,7 +45,7 @@ namespace hpOceano
   // and then are stored into as classe members.
   // \end{itemize}
   //
-  // The implementation of this class, is not done as
+  // The implementation of this class is not done as
   // in the other namespaces, with base/derived classes or with different
   // classes under the same namespace. Since just one function is changing
   // (the one that estimate the error/smoothness), we simply switches the
@@ -72,20 +71,31 @@ namespace hpOceano
   class hpTuner
   {
   public:
+    /**
+     * Class constructor.
+     *
+     * @param prm Handler of parameter file
+     */
     hpTuner(IO::ParameterHandler &prm);
-    ~hpTuner(){};
 
-    double remesh_tick;
-    float threshold_mesh_refinement;
-    float threshold_mesh_coarsening;
-    float min_mesh_size;
-    unsigned int max_level_mesh_refinement;
-    unsigned int min_level_mesh_refinement;
-    std::string refinement_filename;
+    /**
+     * Default destructor.
+     */
+    ~hpTuner() = default;
+
+    double remesh_tick; // GO: double or unsigned?
+    // GO: Why float for hte thresholds?
+    float threshold_mesh_refinement;        /*!< Threshold for refining the mesh */
+    float threshold_mesh_coarsening;        /*!< Threshold for coarsening the mesh */
+    float min_mesh_size;                    /*!< Minimum resolution to be always employed */
+    unsigned int max_level_mesh_refinement; /*!< Maximum number of allowed refinements */
+    unsigned int min_level_mesh_refinement; /*!< Minimum number of levels to be always employed */
+    std::string refinement_filename; // GO: What is this one?
 
     double redegree_tick;
-    float threshold_degree_coarsening;
+    float threshold_degree_coarsening; /*!< Threshold to reduce polynomial degree to zero */
 
+    // GO: Make it virtual instead of preprocessors? Allow to choose criterion at runtime?
     template <int dim, typename Number>
     void estimate_error(
       const std::vector<hp::FECollection<dim>*>                     &fe,
@@ -131,11 +141,11 @@ namespace hpOceano
       CopyData(const CopyData &) = default;
 
       unsigned int cell_index;
-      float       value;
+      float       value; //GO: Why float?
     };
   };
 
-  // The constructor of the class takes as arguments 
+  // The constructor of the class takes as arguments
   // only the parameters handler class in order to read the
   // parameters that are strongly case dependent and needs some
   // tuning to obtain the desired refinement/coarsening.
@@ -174,7 +184,8 @@ namespace hpOceano
       const Function<dim>                                           &/*data*/,
       Vector<float>                                                 &error_estimate) const
   {
-    const unsigned int n_q_points_1d        = fe[0]->max_degree();
+    const unsigned int n_q_points_1d = fe[0]->max_degree(); // GO: Small suggestion, maybe use an enumerator to clarify the meaning of the indices
+                                                            // instead of fe[0], fe[1], etc...
     using Iterator = typename DoFHandler<dim>::active_cell_iterator;
 
     auto cell_worker = [&](const Iterator   &cell,
@@ -233,7 +244,7 @@ namespace hpOceano
       const Function<dim>                                           &/*data*/,
       Vector<float>                                                 &error_estimate) const
   {
-    const unsigned int n_q_points_1d        = fe[1]->max_degree();
+    const unsigned int n_q_points_1d = fe[1]->max_degree();
     using Iterator = typename DoFHandler<dim>::active_cell_iterator;
 
     auto cell_worker = [&](const Iterator   &cell,
@@ -298,7 +309,7 @@ namespace hpOceano
       const Function<dim>                                           &/*data*/,
       Vector<float>                                                 &error_estimate) const
   {
-    const unsigned int n_q_points_1d        = fe[0]->max_degree();
+    const unsigned int n_q_points_1d = fe[0]->max_degree();
     using Iterator = typename DoFHandler<dim>::active_cell_iterator;
 
     auto cell_worker = [&](const Iterator   &cell,
@@ -364,7 +375,7 @@ namespace hpOceano
       const Function<dim>                                           &data,
       Vector<float>                                                 &error_estimate) const
   {
-    const unsigned int n_q_points_1d        = 10;
+    const unsigned int n_q_points_1d = 10;
     using Iterator = typename DoFHandler<dim>::active_cell_iterator;
 
     auto cell_worker = [&](const Iterator   &cell,
@@ -382,7 +393,7 @@ namespace hpOceano
           const Number zb_q = data.value(fe_values.quadrature_point(q), 0);
           max_bathy = std::max(std::abs(zb_q), max_bathy);
         }
-      copy_data.value = max_bathy;
+      copy_data.value = max_bathy; //GO: here a conversion to float is performed
     };
 
     auto copier = [&](const CopyData &copy_data) {
@@ -530,4 +541,3 @@ namespace hpOceano
                           MeshWorker::assemble_own_cells);
   }
 } // namespace hpOceano
-#endif //HP_HPPOCEANO

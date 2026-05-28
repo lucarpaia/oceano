@@ -17,8 +17,7 @@
  * Author: Martin Kronbichler, 2020
  *         Luca Arpaia,        2023
  */
-#ifndef ICBC_THACKEROSCILLATIONS2D_HPP
-#define ICBC_THACKEROSCILLATIONS2D_HPP
+#pragma once
 
 #include <deal.II/base/function.h>
 // The following files include the oceano libraries
@@ -44,7 +43,7 @@ namespace ICBC
 #undef  ICBC_THACKEROSCILLATIONS2D_FINITEVOLUME
 
   using namespace dealii;
-  
+
   // We define constant parameters that help in the definition of the initial
   // and boundary conditions. We use the same notation and parameter value of the
   // SWASH test case.
@@ -57,20 +56,20 @@ namespace ICBC
 
   // @sect3{Equation data}
   //
-  // We need a class to handle the problem data. Problem data are case dependent; for this 
+  // We need a class to handle the problem data. Problem data are case dependent; for this
   // reason it appears inside the `ICBC` namespace. The data in general depends on
   // both time and space. Deal.II has a class `Function` which returns function
-  // of space and time, thus we simply create a derived class. The size of the data is 
-  // fixed to `dim+3=5` scalar quantities. The first component is the bathymetry. 
+  // of space and time, thus we simply create a derived class. The size of the data is
+  // fixed to `dim+3=5` scalar quantities. The first component is the bathymetry.
   // The second is the bottom friction coefficient. The call to `value()` returns all the
   // external data necessary to complete the computation.
   //
   // Finally the parameter handler class allows to read constants from the prm file.
   // The parameter handler class may seems redundant but it is not! Constants that appears
-  // in you data may be easily recovered from the configuration file. More important file 
-  // names which contains the may be imported too. 
+  // in you data may be easily recovered from the configuration file. More important file
+  // names which contains the may be imported too.
 #ifndef ICBC_THACKEROSCILLATIONS2D_FINITEVOLUME
-  template <int dim>  
+  template <int dim>
   class ProblemData : public Function<dim>
   {
   public:
@@ -164,7 +163,7 @@ namespace ICBC
   // to define initial and boundary conditions. Apart for the template for the
   // dimension which is in common with the base `Function` class, we have added
   // the number of variables.
-  template <int dim, int n_vars>  
+  template <int dim, int n_vars>
   class ExactSolution : public Function<dim>
   {
   public:
@@ -180,9 +179,9 @@ namespace ICBC
     virtual double value(const Point<dim> & p,
                          const unsigned int component = 0) const override;
 
-  private: 
+  private:
     double g;
-  };  
+  };
 
   // We return either the water depth or the momentum
   // depending on which component is requested. The initialization
@@ -199,7 +198,7 @@ namespace ICBC
   {
     const double t = this->get_time();
 
-    Assert(dim == 2, ExcNotImplemented());        
+    Assert(dim == 2, ExcNotImplemented());
 
     Point<dim> x0;
     x0[0] = 0.5 *L;
@@ -238,7 +237,7 @@ namespace ICBC
         h = h0 * (tmp - 1. - radius2*inv_a*inv_a *(tmp*tmp - 1.)) + zb;
         u = denom * 0.5 * omega * (x[0]-x0[0]) * A * std::sin(omega*t);
         v = denom * 0.5 * omega * (x[1]-x0[1]) * A * std::sin(omega*t);
-      }    
+      }
 
     if (component == 0)
       return h - zb;
@@ -258,9 +257,9 @@ namespace ICBC
   // internally. This means that we can read the Parameter file from
   // anywhere when we are implementing ic/bc and we can access constants or
   // filenames from which the initial/boundary data depends.
-  // In this case the intial condition is recovered from the exact solution 
+  // In this case the intial condition is recovered from the exact solution
   // at time zero. This is realized here thanks to a derived class of
-  // `ExactSolution` that overload the the constructor of the base class 
+  // `ExactSolution` that overload the the constructor of the base class
   // providing automatically a zero time.
   // The wave does not interact with the boundaries so we can safely consider
   // wall boundaries.
@@ -276,27 +275,25 @@ namespace ICBC
 
 
 
-  template <int dim, int n_vars>  
+  template <int dim, int n_vars>
   class BcThackerOscillations2d : public BcBase<dim, n_vars>
   {
   public:
- 
+
     BcThackerOscillations2d(IO::ParameterHandler &prm)
       : prm(prm)
     {}
     ~BcThackerOscillations2d(){};
-         
+
     void set_boundary_conditions() override;
 
   private:
     ParameterHandler &prm;
-  }; 
+  };
 
   template <int dim, int n_vars>
   void BcThackerOscillations2d<dim, n_vars>::set_boundary_conditions()
   {
     this->set_wall_boundary(0);
-  }    
+  }
 } // namespace ICBC
-
-#endif //ICBC_THACKEROSCILLATIONS2D_HPP

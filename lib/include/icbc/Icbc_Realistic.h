@@ -14,10 +14,9 @@
  * ---------------------------------------------------------------------
 
  *
- *         Luca Arpaia,        2023
+ *  Luca Arpaia, 2023
  */
-#ifndef ICBC_REALISTIC_HPP
-#define ICBC_REALISTIC_HPP
+#pragma once
 
 #include <deal.II/base/function.h>
 // The following files include the oceano libraries
@@ -40,7 +39,7 @@ namespace ICBC
   using namespace dealii;
 
   // @sect3{Equation data}
-  
+
   // Next we implement a few classes that are useful to represent functions
   // for the initial and boundary conditions. Deal.II has a class `Function`
   // which returns function of space and time, thus we simply create a
@@ -93,7 +92,7 @@ namespace ICBC
   // Last, a note on the `value()` method that actually do the job,
   // specialize the base class method and return all the external data
   // necessary to complete the computation.
-  template <int dim>  
+  template <int dim>
   class ProblemData : public Function<dim>
   {
   public:
@@ -194,7 +193,7 @@ namespace ICBC
   // one dimensional function of time only. The function is constructed
   // taking as input the initial time which is not necessary zero and,
   // in this way, it can be set externally by the user.
-  template <int dim, int n_vars>  
+  template <int dim, int n_vars>
   class BoundaryData : public Function<dim>
   {
   public:
@@ -363,11 +362,11 @@ namespace ICBC
   // example the tidal value for an open boundary or the discharge value
   // for an upstream river boundary), we instantiate one new BoundaryData
   // class to handle this data.
-  template <int dim, int n_vars>  
+  template <int dim, int n_vars>
   class BcRealistic : public BcBase<dim, n_vars>
   {
   public:
-  
+
     BcRealistic(IO::ParameterHandler &prm);
     ~BcRealistic(){};
 
@@ -376,7 +375,7 @@ namespace ICBC
   private:
     ParameterHandler &prm;
   };
-  
+
   template <int dim, int n_vars>
   BcRealistic<dim, n_vars>::BcRealistic(IO::ParameterHandler &prm)
     : prm(prm)
@@ -452,5 +451,3 @@ namespace ICBC
       }
   }
 } // namespace ICBC
-
-#endif //ICBC_REALISTIC_HPP

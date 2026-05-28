@@ -17,8 +17,7 @@
  * Author: Martin Kronbichler, 2020
  *         Luca Arpaia,        2023
  */
-#ifndef ICBC_ICBCBASE_HPP
-#define ICBC_ICBCBASE_HPP
+#pragma once
 
 #include <deal.II/base/conditional_ostream.h>
 #include <deal.II/base/utilities.h>
@@ -34,34 +33,34 @@ namespace ICBC
   using namespace dealii;
 
 
-  
+
   // @sect3{Equation data}
 
   // We now define a base class for the boundary conditions. Given that
   // the Euler equations are a problem with $d+2$ equations in $d$ dimensions,
   // we need to tell the base class about the correct number of
   // components. This is realized templating with the dimension the icbc class.
-  // The base class is overridden by derived classes which contain the  
-  // boundary conditions specific to each test case. 
-  template <int dim, int n_vars>  
+  // The base class is overridden by derived classes which contain the
+  // boundary conditions specific to each test case.
+  template <int dim, int n_vars>
   class BcBase
   {
   public:
-        
+
     BcBase(){};
     virtual ~BcBase(){};
-    
-    // The next members are for the functions that appears into the boundary 
+
+    // The next members are for the functions that appears into the boundary
     // conditions or into the forcing terms. They are defined with the help of the
     // Deal.II `Function<dim>` which can design vector functions of the space and time.
     // The first four members associate, with the aid of a map, each boundary id with the
     // corresponding function for the boundary condition. The last member is used
     // for the problem spatially and time varying parameters, such as friction, bathymetry
-    // or wind. 
-    // Actually we use pointers to Function, but note that we do not use regular 
-    // pointers but `unique_ptr`. These are particular pointers that 
+    // or wind.
+    // Actually we use pointers to Function, but note that we do not use regular
+    // pointers but `unique_ptr`. These are particular pointers that
     // destroy the object to which they point, after use. This avoids
-    // memory leaks with dynamic allocation. No other pointer should point 
+    // memory leaks with dynamic allocation. No other pointer should point
     // to its managed object. For this reason we will see that these particular
     // pointers cannot be copied but they can only be moved with `std::move()`
     std::map<types::boundary_id, std::unique_ptr<Function<dim>>>
@@ -78,8 +77,8 @@ namespace ICBC
 
     std::unique_ptr<Function<dim>> problem_data;
 
-    // The subsequent four member functions are the ones that fill the boundary 
-    // containers. They must be called from outside to specify the various types 
+    // The subsequent four member functions are the ones that fill the boundary
+    // containers. They must be called from outside to specify the various types
     // of boundaries. For an inflow boundary, we must specify all components in
     // terms of free-surface $\zeta$, momentum $h\mathbf{u}$ and, eventually tracers.
     // Given this information, we then store the
@@ -120,10 +119,10 @@ namespace ICBC
 
     void set_problem_data(std::unique_ptr<Function<dim>> problem_data);
 
-    // The next member compose the different boundary conditions for each test case. 
-    // It is overridden by the derived classes specific to each test case. 
-    // In the boundary condition function the user defines the 
-    // composition of the boundary, that is for each boundary id a boundary condition 
+    // The next member compose the different boundary conditions for each test case.
+    // It is overridden by the derived classes specific to each test case.
+    // In the boundary condition function the user defines the
+    // composition of the boundary, that is for each boundary id a boundary condition
     // among the members defined above must be provided.
     virtual void set_boundary_conditions()
     {
@@ -131,11 +130,11 @@ namespace ICBC
             << "The function is not written in the icbc derived class"
             << std::endl;
     }
-        
-  }; 
 
-  
-  
+  };
+
+
+
   // The checks added in each of the four function are used to
   // ensure that boundary conditions are mutually exclusive on the various
   // parts of the boundary, i.e., that a user does not accidentally designate a
@@ -297,5 +296,3 @@ namespace ICBC
   }
 
 } // namespace ICBC
-
-#endif //ICBC_ICBCBASE_HPP

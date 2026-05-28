@@ -17,8 +17,7 @@
  * Author: Martin Kronbichler, 2020
  *         Luca Arpaia,        2023
  */
-#ifndef ICBC_LAKEATREST_HPP
-#define ICBC_LAKEATREST_HPP
+#pragma once
 
 #include <deal.II/base/function.h>
 // The following files include the oceano libraries
@@ -52,7 +51,7 @@ namespace ICBC
 #undef  ICBC_LAKEATREST_WATERATRESTDRY
 
   using namespace dealii;
-  
+
   // We define global parameters that help in the definition of the initial
   // and boundary conditions. The parameters that are needed for this test are
   // the bassin depth far from the hill:
@@ -156,7 +155,7 @@ namespace ICBC
   // to define initial and boundary conditions. Apart for the template for the
   // dimension which is in common with the base `Function` class, we have added
   // the number of variables.
-  template <int dim, int n_vars>  
+  template <int dim, int n_vars>
   class ExactSolution : public Function<dim>
   {
   public:
@@ -167,7 +166,7 @@ namespace ICBC
 
     virtual double value(const Point<dim> & p,
                          const unsigned int component = 0) const override;
-  };  
+  };
 
   // We code the exact solution as the lake at rest state. In the Oceano
   // variables (free-surface and momentum) it is the null vector. If you
@@ -201,7 +200,7 @@ namespace ICBC
   // providing automatically a zero time. Note that, apart for the template for
   // the dimension which is in common with the base `Function` class, we have
   // added the number of variables to construct the base class with the correct
-  // number of dimension and do some sanity checks. 
+  // number of dimension and do some sanity checks.
   // We return either the water depth or the momentum depending on which component
   // is requested. Two sanity checks have been added. One is to control that the
   // space dimension is two (you cannot run this test in one dimension) and
@@ -244,16 +243,16 @@ namespace ICBC
 
 
 
-  template <int dim, int n_vars>  
+  template <int dim, int n_vars>
   class BcLakeAtRest : public BcBase<dim, n_vars>
   {
   public:
-  
+
     BcLakeAtRest(IO::ParameterHandler &prm)
       : prm(prm)
     {}
     ~BcLakeAtRest(){};
-         
+
     void set_boundary_conditions() override;
 
   private:
@@ -272,5 +271,3 @@ namespace ICBC
 #endif
   }
 } // namespace ICBC
-
-#endif //ICBC_LAKEATREST_HPP

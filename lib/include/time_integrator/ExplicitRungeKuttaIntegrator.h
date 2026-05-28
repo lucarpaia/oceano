@@ -17,8 +17,7 @@
  * Author: Martin Kronbichler, 2020
  *         Luca Arpaia,        2023
  */
-#ifndef EXPLICITRUNGEKUTTAINTEGRATOR_HPP
-#define EXPLICITRUNGEKUTTAINTEGRATOR_HPP
+#pragma once
 
 #include <deal.II/base/timer.h>
 #include <deal.II/base/time_stepping.h>
@@ -87,9 +86,9 @@ namespace TimeIntegrator
                 VectorType                    &vec_ri_tracer,
                 std::vector<VectorType>       &vec_ki_height,
                 std::vector<VectorType>       &vec_ki_discharge,
-                std::vector<VectorType>       &vec_ki_tracer) const;
+                std::vector<VectorType>       &vec_ki_tracer) const; // GO: Not 100% clear where and why this routine is needed...
 
-    template <typename VectorType, typename Operator>                                  
+    template <typename VectorType, typename Operator>
     void perform_time_step(Operator                &pde_operator,
                            const double             current_time,
                            const double             time_step,
@@ -131,7 +130,7 @@ namespace TimeIntegrator
 
           // The next scheme is the Strong-Stability-Preserving
           // of order two.
-        case stage_2_order_2: 
+        case stage_2_order_2:
           {
             erk = TimeSteppingOceano::SSP_SECOND_ORDER;
             break;
@@ -139,19 +138,19 @@ namespace TimeIntegrator
 
           // The next scheme is a five-stage scheme of order four, again
           // defined in the paper by Kennedy et al. (2000).
-        case stage_3_order_3: 
+        case stage_3_order_3:
           {
             erk = TimeSteppingOceano::SSP_THIRD_ORDER;
             break;
           }
 
-        case stage_4_order_4: 
+        case stage_4_order_4:
           {
             erk = TimeSteppingOceano::RK_CLASSIC_FOURTH_ORDER;
             break;
           }
 
-        case stage_3_order_2: 
+        case stage_3_order_2:
           {
             erk = TimeSteppingOceano::THREE_STAGE_SECOND_ORDER;
             break;
@@ -335,5 +334,3 @@ namespace TimeIntegrator
   }
 
 } // namespace TimeIntegrator
-
-#endif //EXPLICITRUNGEKUTTAINTEGRATOR_HPP

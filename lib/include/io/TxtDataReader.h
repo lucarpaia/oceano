@@ -12,13 +12,16 @@
  * the top level directory of deal.II.
  *
  * ---------------------------------------------------------------------
- 
+
  *
  * Authors: Wolfgang Bangerth, Texas A&M University, 2014
  *          Luca Heltai, SISSA, 2014
  *          D. Sarah Stamps, MIT, 2014
- *	    Luca Arpaia,CNR-ISMAR, 2023
+ *	        Luca Arpaia, CNR-ISMAR, 2023
  */
+#pragma once
+
+//GO: Is this file needed for the bathymetry?
 
 // Let us start with the include files we need here.The remainder of the
 // include files relate to reading the topography data from a file.
@@ -56,8 +59,17 @@ namespace IO
   class TxtDataReader
   {
   public:
+    /**
+     * Class constructor.
+     *
+     * @param filename Name of the file to be read
+     */
     TxtDataReader(std::string filename);
-    ~TxtDataReader(){};
+
+    /**
+     * Default destructor.
+     */
+    ~TxtDataReader() = default;
 
     std::string filename;
 
@@ -118,7 +130,7 @@ namespace IO
     AssertThrow(f.fail() == false, ExcIO());
 
     std::vector<double> read_data;
- 
+
     boost::iostreams::filtering_istream in;
     in.push(boost::iostreams::basic_gzip_decompressor<>());
     in.push(boost::iostreams::file_source(filename));
@@ -159,7 +171,7 @@ namespace IO
                                    "from the file <"+filename+">!"));
           }
       }
- 
+
     return read_data;
   }
 
@@ -169,7 +181,7 @@ namespace IO
   std::array<std::pair<double,double>, dim> TxtDataReader<dim>::get_endpoints()
   {
     std::array<std::pair<double,double>, dim> read_endpoints;
- 
+
     boost::iostreams::filtering_istream in;
     in.push(boost::iostreams::basic_gzip_decompressor<>());
     in.push(boost::iostreams::file_source(filename));
@@ -182,7 +194,7 @@ namespace IO
             double endleft, endright;
             in >> endleft >> endright;
             endpoints = {endleft,endright};
- 
+
             read_endpoints[line] = endpoints;
           }
         catch (...)
@@ -200,7 +212,7 @@ namespace IO
   std::array<unsigned int, dim> TxtDataReader<dim>::get_nintervals()
   {
     std::array<unsigned int, dim> read_nintervals;
- 
+
     boost::iostreams::filtering_istream in;
     in.push(boost::iostreams::basic_gzip_decompressor<>());
     in.push(boost::iostreams::file_source(filename));
@@ -226,7 +238,7 @@ namespace IO
                         ExcMessage("Could not read the number of intervals "
                                    "from the file <"+filename+">!"));
           }
-      } 
+      }
 
     return read_nintervals;
   }

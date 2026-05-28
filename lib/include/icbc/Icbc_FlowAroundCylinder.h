@@ -17,8 +17,7 @@
  * Author: Martin Kronbichler, 2020
  *         Luca Arpaia,        2023
  */
-#ifndef ICBC_FLOWAROUNDCYLIDER_HPP
-#define ICBC_FLOWAROUNDCYLIDER_HPP
+#pragma once
 
 #include <deal.II/base/function.h>
 // The following files include the oceano libraries
@@ -31,8 +30,8 @@ namespace ICBC
 {
 
  // The second test case start with a cylinder immersed in a
- // channel. Here, we impose a subsonic initial field at Mach number 
- // of $\mathrm{Ma}=0.307$ with a constant velocity in $x$ direction. 
+ // channel. Here, we impose a subsonic initial field at Mach number
+ // of $\mathrm{Ma}=0.307$ with a constant velocity in $x$ direction.
  // At the top and bottom walls as well as at
  // the cylinder, we impose a no-penetration (i.e., tangential flow)
  // condition. This setup forces the flow to re-orient as compared to the initial
@@ -48,7 +47,7 @@ namespace ICBC
 
   // The class `ExactSolution` defines analytical functions that can be useful
   // to define initial and boundary conditions.
-  template <int dim, int n_vars>  
+  template <int dim, int n_vars>
   class ExactSolution : public Function<dim>
   {
   public:
@@ -58,7 +57,7 @@ namespace ICBC
 
     virtual double value(const Point<dim> & p,
                          const unsigned int component = 0) const override;
-  };  
+  };
 
   // For the channel test case, we simply select a density of 1, a velocity of
   // 0.4 in $x$ direction and zero in the other directions, and an energy that
@@ -79,15 +78,15 @@ namespace ICBC
     else
       return 0.;
   }
-    
+
 
 
   // The `Ic` class define the initial condition for the test-case.
   // In this case it is recovered from the exact solution at time zero.
-  // This is realized here thanks to a derived class of `ExactSolution` that 
-  // overload the the constructor of the base class providing automatically 
+  // This is realized here thanks to a derived class of `ExactSolution` that
+  // overload the the constructor of the base class providing automatically
   // a zero time
-  template <int dim, int n_vars>  
+  template <int dim, int n_vars>
   class Ic : public ExactSolution<dim, n_vars>
   {
   public:
@@ -99,17 +98,17 @@ namespace ICBC
 
 
   // The `Bc` class define the boundary conditions for the test-case.
-  template <int dim, int n_vars>  
+  template <int dim, int n_vars>
   class BcFlowAroundCylinder : public BcBase<dim, n_vars>
   {
   public:
-        
+
     BcFlowAroundCylinder(IO::ParameterHandler &/*prm*/){};
     ~BcFlowAroundCylinder(){};
-         
+
     void set_boundary_conditions() override;
-    
-  }; 
+
+  };
 
   // Here, we have a larger variety of boundaries. The inflow
   // part at the left of the channel is given the inflow type, for which we
@@ -127,27 +126,27 @@ namespace ICBC
 
     this->set_wall_boundary(2);
     this->set_wall_boundary(3);
-  }         
+  }
 
 
 
-  // We need a class to handle the problem data. Problem data are case dependent; for this 
+  // We need a class to handle the problem data. Problem data are case dependent; for this
   // reason it appears inside the `ICBC` namespace. The data in general depends on
   // both time and space. Deal.II has a class `Function` which returns function
-  // of space and time, thus we simply create a derived class. The size of the data is 
-  // fixed to `dim+3=5` scalar quantities. The first component is the bathymetry. 
-  // The second is the bottom friction coefficient. The third and fourth components 
+  // of space and time, thus we simply create a derived class. The size of the data is
+  // fixed to `dim+3=5` scalar quantities. The first component is the bathymetry.
+  // The second is the bottom friction coefficient. The third and fourth components
   // are the cartesian components of the wind velocity (in order, eastward and northward).
   // The fifth one is the Coriolis parameter. The test-dependent functions `stommelGyre_wind()`
-  // and `stommelGyre_coriolis()` contain the definition of analytical functions for the 
-  // different data. The call to `value()` returns all the external data necessary to 
-  // complete the computation. 
+  // and `stommelGyre_coriolis()` contain the definition of analytical functions for the
+  // different data. The call to `value()` returns all the external data necessary to
+  // complete the computation.
   //
   // Finally the parameter handler class allows to read constants from the prm file.
   // The parameter handler class may seems redundant but it is not! Constants that appears
-  // in you data may be easily recovered from the configuration file. More important file 
+  // in you data may be easily recovered from the configuration file. More important file
   // names which contains the may be imported too.
-  // 
+  //
   // In this case it is a constant gravity, of course in the vertical
   // direction.
   template <int dim>
@@ -165,9 +164,9 @@ namespace ICBC
   ProblemData<dim>::ProblemData(IO::ParameterHandler &/*prm*/)
     : Function<dim>(dim+3)
   {}
-  
-  
-  
+
+
+
   template <int dim>
   double ProblemData<dim>::value(const Point<dim> & /*x*/,
                                  const unsigned int component) const
@@ -179,5 +178,3 @@ namespace ICBC
   }
 
 } // namespace ICBC
-
-#endif //ICBC_FLOWAROUNDCYLIDER_HPP

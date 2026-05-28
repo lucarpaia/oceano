@@ -17,8 +17,7 @@
  * Author: Martin Kronbichler, 2020
  *         Luca Arpaia,        2023
  */
-#ifndef ICBC_TRACERADVECTION_HPP
-#define ICBC_TRACERADVECTION_HPP
+#pragma once
 
 #include <deal.II/base/function.h>
 // The following files include the oceano libraries
@@ -37,7 +36,7 @@ namespace ICBC
   // accuracy of the discontinous Galerkin method.
 
   using namespace dealii;
-  
+
   // We define global parameters that help in the definition of the initial
   // and boundary conditions. In this case the parameters of the initial concentration,
   // the channel water depth and the free-stream velocity.
@@ -46,7 +45,7 @@ namespace ICBC
   // amplitude of 1 and a radius of one fourth of the channel width.
   constexpr double hoo     = 0.5;
   constexpr double uoo     = 1.0;
-  // the depth at the center:  
+  // the depth at the center:
   constexpr double cmax    = 1.0;
   // the radius:
   constexpr double radius0 = 0.25;
@@ -110,7 +109,7 @@ namespace ICBC
   // the concentration, depending on which component is requested. If multiple
   // concentrations are advected, different initial conditions are assigned to
   // the each concentration species.
-  template <int dim, int n_vars>  
+  template <int dim, int n_vars>
   class ExactSolution : public Function<dim>
   {
   public:
@@ -121,7 +120,7 @@ namespace ICBC
 
     virtual double value(const Point<dim> & p,
                          const unsigned int component = 0) const override;
-  };  
+  };
 
   template <int dim, int n_vars>
   double ExactSolution<dim, n_vars>::value(const Point<dim> & x,
@@ -203,5 +202,3 @@ namespace ICBC
     this->set_wall_boundary(0);
   }
 } // namespace ICBC
-
-#endif //ICBC_TRACERADVECTION_HPP
