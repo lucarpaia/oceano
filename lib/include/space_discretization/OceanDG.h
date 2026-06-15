@@ -16,8 +16,8 @@
            Luca Arpaia, 2023
  *         Giuseppe Orlando, 2024
  */
-#ifndef OCEANDG_HPP
-#define OCEANDG_HPP
+#ifndef OCEANDG_H
+#define OCEANDG_H
  
 #include <deal.II/base/conditional_ostream.h>
 #include <deal.II/base/function.h>
@@ -2778,4 +2778,4 @@ namespace SpaceDiscretization
   }
 } // namespace SpaceDiscretization
 
-#endif //OCEANDG_HPP
+#endif //OCEANDG_H

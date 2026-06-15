@@ -16,6 +16,9 @@
  *         Luca Arpaia, 2023
  *         Giuseppe Orlando, 2026
  */
+#ifndef PARAMETERREADER_H
+#define PARAMETERREADER_H
+
 #include <deal.II/base/parameter_handler.h>
 
 /**
@@ -362,3 +365,4 @@ namespace IO
   }
 
 } // namespace IO
+#endif //PARAMETERREADER_H

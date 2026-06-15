@@ -15,8 +15,8 @@
  * Author: Luca Arpaia, 2025
  *         Giuseppe Orlando, 2026
  */
-#ifndef DIFFUSIONCOEFFICIENT_HPP
-#define DIFFUSIONCOEFFICIENT_HPP
+#ifndef DIFFUSIONCOEFFICIENT_H
+#define DIFFUSIONCOEFFICIENT_H
 
 /**
  * Namespace containing the so-called physics of the governing equations.
@@ -158,4 +158,4 @@ namespace Physics
 #endif
 
 } // namespace Physics
-#endif //DIFFUSIONCOEFFICIENT_HPP
+#endif //DIFFUSIONCOEFFICIENT_H

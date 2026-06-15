@@ -15,8 +15,8 @@
  * Author: Luca Arpaia, 2023
  *         Giuseppe Orlando, 2026
  */
-#ifndef CORIOLIS_HPP
-#define CORIOLIS_HPP
+#ifndef CORIOLIS_H
+#define CORIOLIS_H
 
 /**
  * Namespace containing the so-called physics of the governing equations.
@@ -95,4 +95,4 @@ namespace Physics
   }
 
 } // namespace Physics
-#endif //CORIOLIS_HPP
+#endif //CORIOLIS_H

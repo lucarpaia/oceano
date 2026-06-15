@@ -16,8 +16,8 @@
            Luca Arpaia, 2023
  *         Giuseppe Orlando, 2024
  */
-#ifndef OCEANDGWITHTRACER_HPP
-#define OCEANDGWITHTRACER_HPP
+#ifndef OCEANDGWITHTRACER_H
+#define OCEANDGWITHTRACER_H
 
 // The following files include the oceano libraries
 #include <space_discretization/OceanDG.h>
@@ -1106,4 +1106,4 @@ namespace SpaceDiscretization
   }
 } // namespace SpaceDiscretization
 
-#endif //OCEANDGWITHTRACER_HPP
+#endif //OCEANDGWITHTRACER_H

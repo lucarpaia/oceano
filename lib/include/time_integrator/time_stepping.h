@@ -15,8 +15,8 @@
  * Author: Luca Arpaia, 2023
  *         Giuseppe Orlando, 2026
  */
-#ifndef TIMESTEPPINGOCEANO_HPP
-#define TIMESTEPPINGOCEANO_HPP
+#ifndef TIMESTEPPING_H
+#define TIMESTEPPING_H
 
 /**
  * Namespace containing the time stepping methods
@@ -394,4 +394,4 @@ namespace TimeSteppingOceano
   }
 } // namespace TimeSteppingOceano
 
-#endif
+#endif //TIMESTEPPING_H

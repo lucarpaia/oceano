@@ -15,8 +15,8 @@
  * Author: Luca Arpaia, 2023
  *         Giuseppe Orlando, 2026
  */
-#ifndef ICBC_LAKEATREST_HPP
-#define ICBC_LAKEATREST_HPP
+#ifndef ICBC_LAKEATREST_H
+#define ICBC_LAKEATREST_H
 
 #include <deal.II/base/function.h>
 // The following files include the oceano libraries
@@ -238,5 +238,4 @@ namespace ICBC
 #endif
   }
 } // namespace ICBC
-
-#endif //ICBC_LAKEATREST_HPP
+#endif //ICBC_LAKEATREST_H

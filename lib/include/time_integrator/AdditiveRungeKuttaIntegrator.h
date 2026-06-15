@@ -16,8 +16,8 @@
            Luca Arpaia, 2023
  *         Giuseppe Orlando, 2026
  */
-#ifndef ADDITIVERUNGEKUTTAINTEGRATOR_HPP
-#define ADDITIVERUNGEKUTTAINTEGRATOR_HPP
+#ifndef ADDITIVERUNGEKUTTAINTEGRATOR_H
+#define ADDITIVERUNGEKUTTAINTEGRATOR_H
 
 #include <deal.II/base/timer.h>
 #include <deal.II/base/time_stepping.h>
@@ -340,4 +340,4 @@ namespace TimeIntegrator
 
 } // namespace TimeIntegrator
 
-#endif //ADDITIVERUNGEKUTTAINTEGRATOR_HPP
+#endif //ADDITIVERUNGEKUTTAINTEGRATOR_H

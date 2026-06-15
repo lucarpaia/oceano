@@ -15,8 +15,8 @@
  * Author: Luca Arpaia, 2025
            Giuseppe Orlando, 2026
  */
-#ifndef CELLWISEINVERSEMASSMATRIXOCEANO_HPP
-#define CELLWISEINVERSEMASSMATRIXOCEANO_HPP
+#ifndef OPERATORS_H
+#define OPERATORS_H
 
 #include <deal.II/matrix_free/fe_evaluation.h>
 
@@ -281,5 +281,4 @@ namespace MatrixFreeOperatorsOceano
             0.);
   }
 } // namespace MatrixFreeOperatorsOceano
-
-#endif //CELLWISEINVERSEMASSMATRIXOCEANO_HPP
+#endif //OPERATORS_H

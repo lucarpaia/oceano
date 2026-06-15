@@ -18,6 +18,8 @@
  *	    Luca Arpaia, CNR-ISMAR, 2024
  *          Giuseppe Orlando, Ecole Polytecnique, 2026
  */
+#ifndef TXTDATAREADER_H
+#define TXTDATAREADER_H
 
 // Let us start with the include files we need here.The remainder of the
 // include files relate to reading the topography data from a file.
@@ -230,3 +232,4 @@ namespace IO
     return read_nintervals;
   }
 } // namespace IO
+#endif //TXTDATAREADER_H

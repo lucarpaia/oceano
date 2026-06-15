@@ -16,8 +16,8 @@
  *         Luca Arpaia, 2023
  *         Giuseppe Orlando, 2026
  */
-#ifndef HARTENVANLEER_HPP
-#define HARTENVANLEER_HPP
+#ifndef HARTENVANLEER_H
+#define HARTENVANLEER_H
 
 // The following files include the oceano libraries
 #include <numerical_flux/NumericalFluxBase.h>
@@ -151,5 +151,4 @@ namespace NumericalFlux
            s_pos * s_neg * (q_m - q_p));
   }
 } // namespace NumericalFlux
-
-#endif //HARTENVANLEER_HPP
+#endif //HARTENVANLEER_H

@@ -15,8 +15,8 @@
  * Author: Luca Arpaia, 2023
  *         Giuseppe Orlando, 2026
  */
-#ifndef ICBC_STOMMELGYRE_HPP
-#define ICBC_STOMMELGYRE_HPP
+#ifndef ICBC_STOMMELGYRE_H
+#define ICBC_STOMMELGYRE_H
 
 #include <deal.II/base/function.h>
 // The following files include the oceano libraries
@@ -252,5 +252,4 @@ namespace ICBC
     this->set_wall_boundary(0);
   }
 } // namespace ICBC
-
-#endif //ICBC_STOMMELGYRE_HPP
+#endif //ICBC_STOMMELGYRE_H

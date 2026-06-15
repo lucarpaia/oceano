@@ -15,8 +15,8 @@
  * Author: Luca Arpaia, 2023
  *         Giuseppe Orlando, 2026
  */
-#ifndef ICBC_REALISTIC_HPP
-#define ICBC_REALISTIC_HPP
+#ifndef ICBC_REALISTIC_H
+#define ICBC_REALISTIC_H
 
 #include <deal.II/base/function.h>
 // The following files include the oceano libraries
@@ -428,5 +428,4 @@ namespace ICBC
       }
   }
 } // namespace ICBC
-
-#endif //ICBC_REALISTIC_HPP
+#endif //ICBC_REALISTIC_H

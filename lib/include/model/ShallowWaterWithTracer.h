@@ -15,8 +15,8 @@
  * Author: Luca Arpaia, 2023
  *         Giuseppe Orlando, 2026
  */
-#ifndef SHALLOWWATERWITHTRACER_HPP
-#define SHALLOWWATERWITHTRACER_HPP
+#ifndef SHALLOWWATERWITHTRACER_H
+#define SHALLOWWATERWITHTRACER_H
 
 // The following files include the oceano libraries
 #include <model/ShallowWater.h>
@@ -240,4 +240,4 @@ namespace Model
         * h * gradient_tracer;
   }
 } // namespace Model
-#endif //SHALLOWWATERWITHTRACER_HPP
+#endif //SHALLOWWATERWITHTRACER_H

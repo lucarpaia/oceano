@@ -15,8 +15,8 @@
  * Author: Luca Arpaia, 2025
  *         Giuseppe Orlando, 2026
  */
-#ifndef CELLDATASTORAGE_HPP
-#define CELLDATASTORAGE_HPP
+#ifndef CELLDATASTORAGE_H
+#define CELLDATASTORAGE_H
 
 using namespace dealii;
 
@@ -95,4 +95,4 @@ private:
   std::vector<DataType> data_cell;        /*!< Vector of stored objects */
   unsigned int number_of_points_per_cell; /*!< Number of points per cell handled by each instance */
 };
-#endif //CELLDATASTORAGE_HPP
+#endif //CELLDATASTORAGE_H

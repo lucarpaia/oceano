@@ -15,8 +15,8 @@
  * Author: Luca Arpaia, 2023
  *         Giuseppe Orlando, 2026
  */
-#ifndef WINDSTRESS_HPP
-#define WINDSTRESS_HPP
+#ifndef WINDSTRESS_H
+#define WINDSTRESS_H
 
 /**
  * Namespace containing the so-called physics of the governing equations.
@@ -151,4 +151,4 @@ namespace Physics
 #endif
 
 } // namespace Physics
-#endif //WINDSTRESS_HPP
+#endif //WINDSTRESS_H

@@ -16,8 +16,8 @@
  *         Luca Arpaia, 2023
  *         Giuseppe Orlando, 2026
  */
-#ifndef LAXFRIEDRICHSMODIFIED_HPP
-#define LAXFRIEDRICHSMODIFIED_HPP
+#ifndef LAXFRIEDRICHSMODIFIED_H
+#define LAXFRIEDRICHSMODIFIED_H
 
 // The following files include the oceano libraries
 #include <numerical_flux/NumericalFluxBase.h>
@@ -311,5 +311,4 @@ namespace NumericalFlux
   }
 #endif
 } // namespace NumericalFlux
-
-#endif //LAXFRIEDRICHSMODIFIED_HPP
+#endif //LAXFRIEDRICHSMODIFIED_H

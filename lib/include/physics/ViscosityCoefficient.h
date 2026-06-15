@@ -15,8 +15,8 @@
  * Author: Luca Arpaia, 2025
  *         Giuseppe Orlando, 2026
  */
-#ifndef VISCOSITYCOEFFICIENT_HPP
-#define VISCOSITYCOEFFICIENT_HPP
+#ifndef VISCOSITYCOEFFICIENT_H
+#define VISCOSITYCOEFFICIENT_H
 
 /**
  * Namespace containing the so-called physics of the governing equations.
@@ -166,4 +166,4 @@ namespace Physics
 #endif
 
 } // namespace Physics
-#endif //VISCOSITYCOEFFICIENT_HPP
+#endif //VISCOSITYCOEFFICIENT_H

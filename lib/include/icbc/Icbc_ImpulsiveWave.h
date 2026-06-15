@@ -15,8 +15,8 @@
  * Author: Luca Arpaia, 2023
  *         Giuseppe Orlando, 2026
  */
-#ifndef ICBC_IMPULSIVEWAVE_HPP
-#define ICBC_IMPULSIVEWAVE_HPP
+#ifndef ICBC_IMPULSIVEWAVE_H
+#define ICBC_IMPULSIVEWAVE_H
 
 #include <deal.II/base/function.h>
 // The following files include the oceano libraries
@@ -167,5 +167,4 @@ namespace ICBC
     this->set_wall_boundary(0);
   }
 } // namespace ICBC
-
-#endif //ICBC_ISENTROPICVORTEX_HPP
+#endif //ICBC_IMPULSIVEWAVE_H

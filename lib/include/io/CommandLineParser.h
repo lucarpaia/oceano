@@ -15,6 +15,8 @@
  * Author: Luca Arpaia, 2023
  *         Giuseppe Orlando, 2026
  */
+#ifndef COMMANDLINEPARSER_H
+#define COMMANDLINEPARSER_H
 
 /**
  * Namespace containing the input/output file handler.
@@ -89,3 +91,4 @@ namespace IO
   }
 
 } // namespace IO
+#endif //COMMANDLINEPARSER_H

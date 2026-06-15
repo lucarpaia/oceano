@@ -15,8 +15,8 @@
  * Author: Luca Arpaia, 2023
  *         Giuseppe Orlando, 2026
  */
-#ifndef SHALLOWWATER_HPP
-#define SHALLOWWATER_HPP
+#ifndef SHALLOWWATER_H
+#define SHALLOWWATER_H
 
 // The following files include the oceano libraries
 #include <io/ParameterReader.h>
@@ -521,4 +521,4 @@ namespace Model
     return u - 2. * c;
   }
 } // namespace Model
-#endif //SHALLOWWATER_HPP
+#endif //SHALLOWWATER_H

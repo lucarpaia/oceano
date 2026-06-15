@@ -15,8 +15,8 @@
  * Author: Luca Arpaia, 2025
            Giuseppe Orlando, 2026
  */
-#ifndef HPOCEANO_HPP
-#define HPOCEANO_HPP
+#ifndef HPTUNER_H
+#define HPTUNER_H
 
 #include <deal.II/meshworker/mesh_loop.h>
 #include <deal.II/hp/fe_values.h>
@@ -544,4 +544,4 @@ namespace hpOceano
                           MeshWorker::assemble_own_cells);
   }
 } // namespace hpOceano
-#endif //HP_HPPOCEANO
+#endif //HPTUNER_H

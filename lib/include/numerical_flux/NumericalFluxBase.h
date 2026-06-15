@@ -16,8 +16,8 @@
  *         Luca Arpaia, 2023
  *         Giuseppe Orlando, 2026
  */
-#ifndef NUMERICALFLUXBASE_HPP
-#define NUMERICALFLUXBASE_HPP
+#ifndef NUMERICALFLUXBASE_H
+#define NUMERICALFLUXBASE_H
 
 // The following files include the oceano libraries
 #if defined MODEL_SHALLOWWATER
@@ -124,5 +124,4 @@ namespace NumericalFlux
   }
    
 } // namespace NumericalFlux
-
-#endif //NUMERICALFLUXBASE_HPP
+#endif //NUMERICALFLUXBASE_H

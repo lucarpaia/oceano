@@ -16,8 +16,8 @@
  *         Luca Arpaia, 2023
  *         Giuseppe Orlando, 2026
  */
-#ifndef ICBC_ICBCBASE_HPP
-#define ICBC_ICBCBASE_HPP
+#ifndef ICBCBASE_H
+#define ICBCBASE_H
 
 #include <deal.II/base/conditional_ostream.h>
 #include <deal.II/base/utilities.h>
@@ -311,5 +311,4 @@ namespace ICBC
   }
 
 } // namespace ICBC
-
-#endif //ICBC_ICBCBASE_HPP
+#endif //ICBCBASE_H

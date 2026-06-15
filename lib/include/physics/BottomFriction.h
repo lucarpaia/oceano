@@ -15,8 +15,8 @@
  * Author: Luca Arpaia, 2023
  *         Giuseppe Orlando, 2026
  */
-#ifndef BOTTOMFRICTION_HPP
-#define BOTTOMFRICTION_HPP
+#ifndef BOTTOMFRICTION_H
+#define BOTTOMFRICTION_H
 
 /**
  * Namespace containing the so-called physics of the governing equations.
@@ -214,4 +214,4 @@ namespace Physics
 #endif
 
 } // namespace Physics
-#endif //BOTTOMFRICTION_HPP
+#endif //BOTTOMFRICTION_H

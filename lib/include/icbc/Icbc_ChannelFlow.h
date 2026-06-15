@@ -15,8 +15,8 @@
  * Author: Luca Arpaia, 2023
  *         Giuseppe Orlando, 2026
  */
-#ifndef ICBC_CHANNELFLOW_HPP
-#define ICBC_CHANNELFLOW_HPP
+#ifndef ICBC_CHANNELFLOW_H
+#define ICBC_CHANNELFLOW_H
 
 #include <deal.II/base/function.h>
 // The following files include the oceano libraries
@@ -347,4 +347,4 @@ namespace ICBC
     this->set_wall_boundary(0);
   }
 } // namespace ICBC
-#endif //ICBC_CHANNELFLOW_HPP
+#endif //ICBC_CHANNELFLOW_H
