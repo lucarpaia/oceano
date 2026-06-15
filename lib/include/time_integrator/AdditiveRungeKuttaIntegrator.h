@@ -1,21 +1,20 @@
 /* ---------------------------------------------------------------------
  *
- * Copyright (C) 2020 - 2023 by the deal.II authors
+ * Copyright (C) 2022 - 2026 by CNR-ISMAR
  *
- * This file is part of the deal.II library.
- *
- * The deal.II library is free software; you can use it, redistribute
- * it, and/or modify it under the terms of the GNU Lesser General
- * Public License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
- * The full text of the license can be found in the file LICENSE.md at
- * the top level directory of deal.II.
+ * This code, as the deal.II library is free software; you can use it,
+ * redistribute it, and/or modify it under the terms of the GNU Lesser
+ * General Public License as published by the Free Software Foundation;
+ * either version 2.1 of the License, or (at your option) any later
+ * version. The full text of the license can be found in the file
+ * LICENSE.md at the top level directory of deal.II.
  *
  * ---------------------------------------------------------------------
 
  *
- * Author: Martin Kronbichler, 2020
- *         Luca Arpaia,        2023
+ * Author: Martin Kronbichler (copied from), 2020
+           Luca Arpaia, 2023
+ *         Giuseppe Orlando, 2026
  */
 #ifndef ADDITIVERUNGEKUTTAINTEGRATOR_HPP
 #define ADDITIVERUNGEKUTTAINTEGRATOR_HPP
@@ -50,13 +49,13 @@ namespace TimeIntegrator
   // and the tracer equations. Additive Runge-Kutta are useful for problems that
   // can be written as the sum of a stiff and non-stiff components. Then an
   // implicit and an explicit companion scheme are applied to the each component.
-  // The stiff-part is to be designed into the PDE operator but we anticipate 
+  // The stiff-part is to be designed into the PDE operator but we anticipate
   // that for our `OceanOperator`, it will be the bottom friction. The main
   // advantage of  this kind of scheme is the enchanced stability.
   // Consider also that the mass equation and the tracers must be solved with
   // the same time-integrator for consistency reason (the so called "tracer
-  // consistency with the mass-equation"). 
-  // 
+  // consistency with the mass-equation").
+  //
   // A first remark on the implementation. In a multi-stage Runge-Kutta scheme
   // we are obliged to time timestep both hydrodynamics and tracers variables
   // with a unique call to `perform_time_step`. To distinguish the two cases,
@@ -67,7 +66,7 @@ namespace TimeIntegrator
   // The Additive Runge-Kutta method has two tableaux with the coefficients
   // $b_i$ and $a_i$, one for the explicit scheme and one for the implicit scheme.
   // The implicit coefficients are typically distinguished with a tilde.
-  // As usual in Runge--Kutta method, we can deduce time steps, 
+  // As usual in Runge--Kutta method, we can deduce time steps,
   // $c_i = \sum_{j=1}^{i-2} b_i + a_{i-1}$ from those coefficients. For the
   // implicit part we extract the diagonal matrix and we store in a separate
   // vector called `dtilde`.
@@ -99,7 +98,7 @@ namespace TimeIntegrator
                 std::vector<VectorType>       &vec_ki_discharge,
                 std::vector<VectorType>       &vec_ki_tracer) const;
 
-    template <typename VectorType, typename Operator>                                  
+    template <typename VectorType, typename Operator>
     void perform_time_step(Operator                &pde_operator,
                            const double             current_time,
                            const double             time_step,
@@ -134,11 +133,11 @@ namespace TimeIntegrator
     TimeSteppingOceano::runge_kutta_method_oceano irk;
     switch (scheme)
       {
-      
+
         // First comes the three-stage scheme of order two by Giraldo et al., (2012).
         // The implicit part is the trapezoidal BDF2 scheme. The explicit part has
         // enhanced stability and monotonicity region ...
-        case stage_3_order_2: 
+        case stage_3_order_2:
           {
             erk = TimeSteppingOceano::THREE_STAGE_SECOND_ORDER;
             irk = TimeSteppingOceano::TRAPEZOIDAL_BDF2;

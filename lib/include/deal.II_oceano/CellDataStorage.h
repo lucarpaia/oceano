@@ -1,20 +1,19 @@
 /* ---------------------------------------------------------------------
  *
- * Copyright (C) 2020 - 2023 by the deal.II authors
+ * Copyright (C) 2022 - 2026 by CNR-ISMAR
  *
- * This file is part of the deal.II library.
- *
- * The deal.II library is free software; you can use it, redistribute
- * it, and/or modify it under the terms of the GNU Lesser General
- * Public License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
- * The full text of the license can be found in the file LICENSE.md at
- * the top level directory of deal.II.
+ * This code, as the deal.II library is free software; you can use it,
+ * redistribute it, and/or modify it under the terms of the GNU Lesser
+ * General Public License as published by the Free Software Foundation;
+ * either version 2.1 of the License, or (at your option) any later
+ * version. The full text of the license can be found in the file
+ * LICENSE.md at the top level directory of deal.II.
  *
  * ---------------------------------------------------------------------
 
  *
- * Author: Luca Arpaia,        2025
+ * Author: Luca Arpaia, 2025
+ *         Giuseppe Orlando, 2026
  */
 #ifndef CELLDATASTORAGE_HPP
 #define CELLDATASTORAGE_HPP
@@ -26,10 +25,12 @@ using namespace dealii;
  * `number_of_points_per_cell` of type `DataType`. This is an adaptation
  * of the the deal.ii class `CellDataStorage` which enables vectorization.
  * The main difference is the data access which does not occurs with an
- * iterator but with a simpler index. In case of vecotrization, that is the
- * objects are of type `VectorizedArray<Number>`, this index batches
- * together multiple cells. For our our SIMD implementation this
+ * iterator but with a simpler index. In case of vectorization, that is the
+ * objects are of type `VectorizedArray<DataType>`, this index batches
+ * together multiple cells. For our SIMD implementation this
  * class should be more efficient than the original one.
+ *
+ * @tparam DataType type of the stored data (it can be generic)
  */
 template <typename DataType>
 class CellDataStorage
@@ -49,8 +50,10 @@ public:
    * Initialize class members, in particular the number of objects to be
    * stored for each cell. It clears also all the data stored in this object.
    * This function has to be called once at the beginning for static runs.
-   * For dynamic runs it has to be called after evrey mesh refinement to
+   * For dynamic runs it has to be called after every mesh refinement to
    * update the stored objects on the new grid.
+   *
+   @param number_of_data_points_per_cell number of points per cell
    */
   void initialize(const unsigned int number_of_data_points_per_cell)
   {
@@ -62,6 +65,8 @@ public:
    * Initialize a single point in the vector of objects.
    * This function has to be called on every point where data is to be
    * stored.
+   *
+   * GO: @param data_point datum to be stored
    */
   void submit_data(const DataType data_point)
   {
@@ -74,6 +79,9 @@ public:
    * `DataType`. To reduce overhead to a minimum, we check that we are not
    * exeeding the vector size with an `Assert` exception which is active in
    * debug mode only.
+   *
+   * @param cell index of the cell
+   * @param q index of the point
    */
   DataType get_data(const unsigned int cell, const unsigned int q) const
   {
@@ -84,7 +92,7 @@ public:
   }
 
 private:
-  std::vector<DataType> data_cell;
-  unsigned int number_of_points_per_cell;
+  std::vector<DataType> data_cell;        /*!< Vector of stored objects */
+  unsigned int number_of_points_per_cell; /*!< Number of points per cell handled by each instance */
 };
 #endif //CELLDATASTORAGE_HPP

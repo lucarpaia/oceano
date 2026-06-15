@@ -1,26 +1,25 @@
 /* ---------------------------------------------------------------------
  *
- * Copyright (C) 2020 - 2023 by the deal.II authors
+ * Copyright (C) 2022 - 2026 by CNR-ISMAR
  *
- * This file is part of the deal.II library.
- *
- * The deal.II library is free software; you can use it, redistribute
- * it, and/or modify it under the terms of the GNU Lesser General
- * Public License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
- * The full text of the license can be found in the file LICENSE.md at
- * the top level directory of deal.II.
+ * This code, as the deal.II library is free software; you can use it,
+ * redistribute it, and/or modify it under the terms of the GNU Lesser
+ * General Public License as published by the Free Software Foundation;
+ * either version 2.1 of the License, or (at your option) any later
+ * version. The full text of the license can be found in the file
+ * LICENSE.md at the top level directory of deal.II.
  *
  * ---------------------------------------------------------------------
 
  *
- * Author: Martin Kronbichler, 2020
- *         Luca Arpaia,        2023
+ * Author: Martin Kronbichler (copied from), 2020
+ *         Luca Arpaia, 2023
+ *         Giuseppe Orlando, 2026
  */
 #ifndef LAXFRIEDRICHSMODIFIED_HPP
 #define LAXFRIEDRICHSMODIFIED_HPP
 
-// The following files include the oceano libraries 
+// The following files include the oceano libraries
 #include <numerical_flux/NumericalFluxBase.h>
 
 /**
@@ -31,13 +30,21 @@ namespace NumericalFlux
 {
 
   using namespace dealii;
-  
-  
-  
-  // For the model class we do not use an implementation file. This
-  // is because of the fact the all the function called are templated
-  // or inlined. Both templated and inlined functions are hard to be separated
-  // between declaration and implementation. We keep them in the header file.
+
+
+
+  // In this and the following functions, we use `z` for the mass variable,
+  // (for us the water height or the free-surface position) and `q`
+  // stands for the discharge. We use variable suffixes `_m` and
+  // `_p` to indicate quantities derived from $\mathbf{w}^-$ and $\mathbf{w}^+$,
+  // i.e., values "here" and "there" relative to the current cell when looking
+  // at a neighbor cell. We also make use of the standard overloads
+  // provided by deal.II's tensor classes for implementing the dot product.
+  //
+  // We do not use an implementation file because of the fact the all the
+  // class function called are templated or inlined. Both templated and inlined
+  // functions are hard to be separated between declaration and implementation.
+  // We keep them in the header file.
   //
   // I would have liked to template the numerical flux class with
   // <int dim, typename Number> which would have been cleaner. But I was not able
@@ -45,15 +52,6 @@ namespace NumericalFlux
   // as argument `Tensor<1, dim, Number>` while is receiving
   // `Tensor<1, dim, VectorizedArray<Number>>`. I don't know why, without
   // a template class, everything works. I leave this for future work.
-  //
-  // In this and the following functions, we use `z` for the mass variable,
-  // (for us the water height or the free-surface position) and `q`
-  // stands for the discharge.
-  // We use variable suffixes `_m` and
-  // `_p` to indicate quantities derived from $\mathbf{w}^-$ and $\mathbf{w}^+$,
-  // i.e., values "here" and "there" relative to the current cell when looking
-  // at a neighbor cell. We also make use of the standard overloads
-  // provided by deal.II's tensor classes for implementing the dot product.
   class LaxFriedrichsModified : public NumericalFluxBase
   {
   public:
@@ -113,26 +111,47 @@ namespace NumericalFlux
 
   // The constructor of the numerical flux class takes as arguments the
   // numerical parameters which may be test-case/user dependent. These
-  // parameters are stored as class members.
-  // In this way they are defined/read from file in one place and then used
-  // whenever needed with `numerical_flux.param`, instead of being read/defined
-  // multiple times. I hope this does not add much overhead.
+  // parameters are stored as class members:
   LaxFriedrichsModified::LaxFriedrichsModified(
     IO::ParameterHandler &param)
     : NumericalFluxBase(param)
   {}
 
-  // For the local Lax--Friedrichs flux, the definition is $\hat{\mathbf{F}}
-  // =\frac{\mathbf{F}(\mathbf{w}^-)+\mathbf{F}(\mathbf{w}^+)}{2} +
-  // \frac{\lambda}{2}\left[\mathbf{w}^--\mathbf{w}^+\right]\otimes
-  // \mathbf{n^-}$, where the factor $\lambda =
-  // \max\left(\|\mathbf{u}^-\|+c^-, \|\mathbf{u}^+\|+c^+\right)$ gives the
-  // maximal wave speed and $c = \sqrt{g h}$ is the speed of the gravity
-  // waves.
+  // For the local Lax--Friedrichs flux in the continuity equation, the definition is:
   //
-  // We use the so-called "hydrostatic reconstruction" for a
-  // discontinuous bathymetry $z_b=\min\left(z_b^+, z_b^-\right)$. This
-  // is necessary, in presence of discontinuous bathymetry, to have positivity
+  // \begin{equation*}
+  //   \rpth{\ave{\disc^{*,(m)}} + \frac{\lambda^{(m)}}{2}\jump{\zeta^{*,(m)}}}
+  // \end{equation*}
+  //
+  // In the computation of the integral at the interface between two elements
+  // a Rusanov flux \cite{rusanov:1962} is used, so that
+  //
+  // \begin{equation*}
+  //   \lambda^{(m)} = \max\rpth{\left|\vel^{+,(m)} \cdot \bm{n}^{+}\right| + \sqrt{gh^{+,(m)}},
+  //      \left|\vel^{-,(m)} \cdot \bm{n}^{-}\right| + \sqrt{gh^{-,(m)}}}.
+  // \end{equation*}
+  //
+  // We employ the so-called hydrostatic reconstruction (Audusse,2004, Gross,2002),
+  // which consists in selecting a single-valued bathymetry at the interface when
+  // the bathymetry is discontinuous, i.e.
+  //
+  // \begin{equation*}
+  //    z^{*}_{b} = \min\rpth{z_{b}^{-}, z_{b}^{+}},
+  // \end{equation*}
+  //
+  // and modifying the water depth, the discharge and the free-surface, accordingly:
+  //
+  // \begin{eqnarray*}
+  //    h^{*,+} = \max\rpth{\zeta^{+} + z^{*}_{b}, 0}, \qquad h^{*,-} = \max\rpth{\zeta^{-} + z^{*}_{b}, 0}
+  // \end{eqnarray*}
+  // \begin{eqnarray*}
+  //   \disc^{*,+} = h^{*,+} \vel^{+},\qquad\qquad\qquad\,\, \disc^{*,-} = h^{*,-} \vel^{-},
+  // \end{eqnarray*}
+  // \begin{eqnarray*}
+  //   \zeta^{*,+} = \max\rpth{\zeta^{+}, -z^{*}_{b}}, \quad \textrm{and}
+  //     \quad \zeta^{*,-} = \max\rpth{\zeta^{-}, -z^{*}_{b}}.
+  // \end{eqnarray*}
+  // This is necessary, in presence of discontinuous bathymetry, to have positivity
   // but it also avoids spurious fluxes.
   //
   // Since the numerical flux is multiplied by the normal vector in the weak
@@ -172,6 +191,12 @@ namespace NumericalFlux
            0.5 * lambda * (zcorr_m - zcorr_p);
   }
 
+  // For the local Lax--Friedrichs flux in the momentum equation, the definition is:
+  //
+  // \begin{eqnarray*}
+  //   \rpth{\ave{\disc^{*,(m)} \otimes \vel^{(m)}} + \frac{\lambda^{(m)}}{2}\tjump{\disc^{*,(m)}}}
+  // \end{equation*}
+  //
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, dim, Number>

@@ -1,21 +1,19 @@
 /* ---------------------------------------------------------------------
  *
- * Copyright (C) 2020 - 2023 by the deal.II authors
+ * Copyright (C) 2022 - 2026 by CNR-ISMAR
  *
- * This file is part of the deal.II library.
- *
- * The deal.II library is free software; you can use it, redistribute
- * it, and/or modify it under the terms of the GNU Lesser General
- * Public License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
- * The full text of the license can be found in the file LICENSE.md at
- * the top level directory of deal.II.
+ * This code, as the deal.II library is free software; you can use it,
+ * redistribute it, and/or modify it under the terms of the GNU Lesser
+ * General Public License as published by the Free Software Foundation;
+ * either version 2.1 of the License, or (at your option) any later
+ * version. The full text of the license can be found in the file
+ * LICENSE.md at the top level directory of deal.II.
  *
  * ---------------------------------------------------------------------
 
  *
- * Author: Martin Kronbichler, 2020
- *         Luca Arpaia,        2023
+ * Author: Luca Arpaia, 2023
+ *         Giuseppe Orlando, 2026
  */
 #ifndef ICBC_SHALLOWWATERVORTEX_HPP
 #define ICBC_SHALLOWWATERVORTEX_HPP
@@ -49,7 +47,7 @@ namespace ICBC
 #define ICBC_SHALLOWWATERVORTEX_REGULARITYP2
 
   using namespace dealii;
-  
+
   // We define constant parameters that help in the definition of the initial
   // and boundary conditions. These are the parameters of the vortex
   // such as the undisturbed water depth and the free-strem velocity.
@@ -57,7 +55,7 @@ namespace ICBC
   // amplitude of 1 and a radius less than half of the channel width.
   constexpr double h0      = 1.0;
   constexpr double uoo     = 6.0;
-  // the depth at the center:  
+  // the depth at the center:
   constexpr double hmin    = 0.9;
   // the radius:
   constexpr double radius0 = 0.25;
@@ -65,23 +63,6 @@ namespace ICBC
 
 
   // @sect3{Equation data}
-  //
-  // We need a class to handle the problem data. Problem data are case dependent; for this
-  // reason it appears inside the `ICBC` namespace. The data in general depends on
-  // both time and space. Deal.II has a class `Function` which returns function
-  // of space and time, thus we simply create a derived class. The size of the data is
-  // fixed to `dim+3=5` scalar quantities. The first component is the bathymetry.
-  // The second is the bottom friction coefficient. The third and fourth components
-  // are the cartesian components of the wind velocity (in order, eastward and northward).
-  // The fifth one is the Coriolis parameter. The test-dependent functions `stommelGyre_wind()`
-  // and `stommelGyre_coriolis()` contain the definition of analytical functions for the
-  // different data. The call to `value()` returns all the external data necessary to
-  // complete the computation.
-  //
-  // Finally the parameter handler class allows to read constants from the prm file.
-  // The parameter handler class may seems redundant but it is not! Constants that appears
-  // in you data may be easily recovered from the configuration file. More important file
-  // names which contains the may be imported too.
   //
   // We do not have any source term and no associated data values.
   template <int dim>
@@ -111,11 +92,30 @@ namespace ICBC
 
 
 
-  // The class `ExactSolution` defines analytical functions that can be useful
-  // to define initial and boundary conditions. Apart for the template for the
-  // dimension which is in common with the base `Function` class, we have added
-  // the number of variables.
-  template <int dim, int n_vars>  
+  // The exact solution is:
+  // \begin{equation*}
+  //  h(R) = h_{0} - \frac{4}{g}\rpth{\frac{4\varGamma r_{0}}{\pi}}^{2}\rpth{H\rpth{\pi/2} - H\rpth{\rho/2}},\quad \rho = \frac{\pi R}{r_{0}},
+  // \end{equation*}
+  // \begin{equation*}
+  //  u = u_{\infty} - \rpth{y - y_{0}}\omega(\rho),
+  // \end{equation*}
+  // \begin{equation*}
+  //  v = \rpth{x - x_{0}}\omega(\rho),
+  // \end{equation*}
+  // with $R$ denoting the distance from the vortex center $\rpth{x_{0}, y_{0}}$. Moreover,
+  // $u_{\infty}$ is the background velocity oriented along the $x-$axis at which the vortex
+  // is transported and $\omega(\rho) = 4\varGamma\cos^{4}\rpth{\rho/2},$ where $\varGamma$
+  // is a free parameter that controls the vortex strength. It has been selected to have a
+  // minimal depth of $h(0) = h_{\text{min}}$ at the center of the vortex. The definition of
+  // $H(x)$ is the following
+  // \begin{equation*}
+  //  H(x) = \frac{35\cos(2x)}{384} + \frac{35x\sin(2x)}{192} + \cos^{6}(x)\rpth{\frac{\cos^{2}(x)}{64} + \frac{7}{288}} + \frac{35\cos^{2}(2x)}{3072} + \frac{35x^{2}}{256}
+  //  + \frac{35x\cos(2x)\sin(2x)}{768} + \frac{x\cos^{5}(x)\sin x\rpth{\cos^{2}(x) + \frac{7}{6}}}{8}.
+  // \end{equation*}
+  // Notice that the initial profiles and the solution are $\mathcal{C}^{4}$ functions, which
+  // is enough to test a fourth order accurate RK-DG scheme, according to  classical
+  // interpolation estimates.
+  template <int dim, int n_vars>
   class ExactSolution : public Function<dim>
   {
   public:
@@ -131,12 +131,10 @@ namespace ICBC
     virtual double value(const Point<dim> & p,
                          const unsigned int component = 0) const override;
 
-  private: 
+  private:
     double g;
-  };  
+  };
 
-  // We return either the water depth or the velocity
-  // depending on which component is requested.
   template <int dim, int n_vars>
   double ExactSolution<dim, n_vars>::value(const Point<dim> & x,
                                            const unsigned int component) const
@@ -146,7 +144,7 @@ namespace ICBC
     Assert(dim == 2, ExcNotImplemented());
 
     Point<dim> x0;
-    x0[0] = 0.5 + uoo *t; 
+    x0[0] = 0.5 + uoo *t;
     x0[1] = 0.5;
 
 #if defined ICBC_SHALLOWWATERVORTEX_REGULARITYP1
@@ -162,7 +160,7 @@ namespace ICBC
 #elif defined ICBC_SHALLOWWATERVORTEX_REGULARITYP2
     const double Gamma = M_PI/(twoPowp*radius0) * std::sqrt( 1./corr* g*(h0-hmin)/(0.034179687*M_PI*M_PI-0.222222222));
 #endif
-        
+
     const double radius = (x - x0).norm();
 
     const double pi_half = 0.5*M_PI;
@@ -175,17 +173,17 @@ namespace ICBC
     double x2 = pi_half*pi_half;
 
 #if defined ICBC_SHALLOWWATERVORTEX_REGULARITYP1
-    double H_pi_half = 0.125*cos2x + 0.25*pi_half*sin2x 
+    double H_pi_half = 0.125*cos2x + 0.25*pi_half*sin2x
       + 0.015625*cos2x2 + 0.1875*x2 + 0.0625*pi_half*cos2x*sin2x;
 #elif defined ICBC_SHALLOWWATERVORTEX_REGULARITYP2
     double sinx = std::sin(pi_half);
-    double H_pi_half = 0.091145833*cos2x + 0.182291667*pi_half*sin2x 
-      + std::pow(cosx,6)* (0.015625*cosx2 + 0.024305556) + 0.011393229*cos2x2 
+    double H_pi_half = 0.091145833*cos2x + 0.182291667*pi_half*sin2x
+      + std::pow(cosx,6)* (0.015625*cosx2 + 0.024305556) + 0.011393229*cos2x2
       + 0.13671875*x2 + 0.045572917*pi_half*cos2x*sin2x + 0.125*pi_half*std::pow(cosx,5)*sinx*(cosx2 + 1.166666667);
 #endif
     H_pi_half *= corr;
 
-    const double rho_half = 0.5*M_PI*radius/radius0; 
+    const double rho_half = 0.5*M_PI*radius/radius0;
 
     cosx = std::cos(rho_half);
     cos2x = std::cos(2.*rho_half);
@@ -195,12 +193,12 @@ namespace ICBC
     x2 = rho_half*rho_half;
 
 #if defined ICBC_SHALLOWWATERVORTEX_REGULARITYP1
-    double H_rho_half = 0.125*cos2x + 0.25*rho_half*sin2x 
+    double H_rho_half = 0.125*cos2x + 0.25*rho_half*sin2x
       + 0.015625*cos2x2 + 0.1875*x2 + 0.0625*rho_half*cos2x*sin2x;
 #elif defined ICBC_SHALLOWWATERVORTEX_REGULARITYP2
     sinx = std::sin(rho_half);
-    double H_rho_half = 0.091145833*cos2x + 0.182291667*rho_half*sin2x 
-      + std::pow(cosx,6)* (0.015625*cosx2 + 0.024305556) + 0.011393229*cos2x2 
+    double H_rho_half = 0.091145833*cos2x + 0.182291667*rho_half*sin2x
+      + std::pow(cosx,6)* (0.015625*cosx2 + 0.024305556) + 0.011393229*cos2x2
       + 0.13671875*x2 + 0.045572917*rho_half*cos2x*sin2x + 0.125*rho_half*std::pow(cosx,5)*sinx*(cosx2 + 1.166666667);
 #endif
     H_rho_half *= corr;
@@ -208,13 +206,13 @@ namespace ICBC
     const double inv_gpi = 1./(g * M_PI * M_PI);
     const double omega = twoPowp * Gamma * std::pow(cosx2,p);
     const double num = twoPowp * Gamma * radius0;
-        
+
     const double depth =
       radius < radius0 ? h0 - inv_gpi * num * num * (H_pi_half - H_rho_half) : h0;
-    const double u     = 
+    const double u     =
       radius < radius0 ? uoo - (x[1]-x0[1]) * omega : uoo;
-    const double v     = 
-      radius < radius0 ? (x[0]-x0[0]) * omega : 0.;             
+    const double v     =
+      radius < radius0 ? (x[0]-x0[0]) * omega : 0.;
 
     if (component == 0)
       return depth;
@@ -228,21 +226,11 @@ namespace ICBC
 
 
 
-  // The `Ic` and `Bc` classes define the initial/boundary condition for the
-  // test-case. They are very similar in the templates and the constructor.
-  // They both take as argument the parameter class and they stored it
-  // internally. This means that we can read the Parameter file from
-  // anywhere when we are implementing ic/bc and we can access constants or
-  // filenames from which the initial/boundary data depends.
-  // In this case the intial condition is recovered from the exact solution 
-  // at time zero. This is realized here thanks to a derived class of
-  // `ExactSolution` that overload the the constructor of the base class 
-  // providing automatically a zero time.
   // Dirichlet boundary conditions (inflow) are specified on the left boundary of the domain.
   // The right boundary is for outflow. Top and bottom boundaries are wall. Please note that,
-  // for the vortex parameters given above, the flow is supercritical and the choice of 
+  // for the vortex parameters given above, the flow is supercritical and the choice of
   // boundary conditions seems appropriate.
-  template <int dim, int n_vars>  
+  template <int dim, int n_vars>
   class Ic : public ExactSolution<dim, n_vars>
   {
   public:
@@ -254,21 +242,21 @@ namespace ICBC
 
 
 
-  template <int dim, int n_vars>  
+  template <int dim, int n_vars>
   class BcShallowWaterVortex : public BcBase<dim, n_vars>
   {
   public:
- 
+
     BcShallowWaterVortex(IO::ParameterHandler &prm)
       : prm(prm)
     {}
     ~BcShallowWaterVortex(){};
-         
+
     void set_boundary_conditions() override;
 
   private:
     ParameterHandler &prm;
-  }; 
+  };
 
   template <int dim, int n_vars>
   void BcShallowWaterVortex<dim, n_vars>::set_boundary_conditions()

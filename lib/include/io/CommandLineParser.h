@@ -1,20 +1,19 @@
 /* ---------------------------------------------------------------------
  *
- * Copyright (C) 2007 - 2023 by the deal.II authors
+ * Copyright (C) 2022 - 2026 by CNR-ISMAR
  *
- * This file is part of the deal.II library.
- *
- * The deal.II library is free software; you can use it, redistribute
- * it, and/or modify it under the terms of the GNU Lesser General
- * Public License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
- * The full text of the license can be found in the file LICENSE.md at
- * the top level directory of deal.II.
+ * This code, as the deal.II library is free software; you can use it,
+ * redistribute it, and/or modify it under the terms of the GNU Lesser
+ * General Public License as published by the Free Software Foundation;
+ * either version 2.1 of the License, or (at your option) any later
+ * version. The full text of the license can be found in the file
+ * LICENSE.md at the top level directory of deal.II.
  *
  * ---------------------------------------------------------------------
- 
+
  *
- * Author: Luca Arpaia,	CNR-ISMAR,                2023
+ * Author: Luca Arpaia, 2023
+ *         Giuseppe Orlando, 2026
  */
 
 /**
@@ -34,11 +33,11 @@ namespace IO
   public:
     CommandLineParser(){}
     void parse_command_line(int argc, char **argv);
- 
+
   private:
     void usage();
   };
- 
+
 
 
   void CommandLineParser::usage()
@@ -47,11 +46,11 @@ namespace IO
     std::cout << " -i   --input <file>    :"
               << " use a configuration file in deal.II PRM format as input."
               << std::endl;
-    std::cout << " -h   --help            :" << " print this message " 
+    std::cout << " -h   --help            :" << " print this message "
               << std::endl;
   }
- 
-  // The function `parse_command_line` does not output anything. It just 
+
+  // The function `parse_command_line` does not output anything. It just
   // raises messages errors and exit the program in case of wrong usage
   // of the executable.
   void CommandLineParser::parse_command_line(int argc, char **argv)
@@ -88,5 +87,5 @@ namespace IO
                                "Check again your command line."));
       }
   }
-  
+
 } // namespace IO

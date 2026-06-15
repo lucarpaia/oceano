@@ -1,23 +1,22 @@
 /* ---------------------------------------------------------------------
  *
- * Copyright (C) 2007 - 2023 by the deal.II authors
+ * Copyright (C) 2022 - 2026 by CNR-ISMAR
  *
- * This file is part of the deal.II library.
- *
- * The deal.II library is free software; you can use it, redistribute
- * it, and/or modify it under the terms of the GNU Lesser General
- * Public License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
- * The full text of the license can be found in the file LICENSE.md at
- * the top level directory of deal.II.
+ * This code, as the deal.II library is free software; you can use it,
+ * redistribute it, and/or modify it under the terms of the GNU Lesser
+ * General Public License as published by the Free Software Foundation;
+ * either version 2.1 of the License, or (at your option) any later
+ * version. The full text of the license can be found in the file
+ * LICENSE.md at the top level directory of deal.II.
  *
  * ---------------------------------------------------------------------
- 
+
  *
- * Authors: Wolfgang Bangerth, Texas A&M University, 2014
- *          Luca Heltai, SISSA, 2014
- *          D. Sarah Stamps, MIT, 2014
- *	    Luca Arpaia,CNR-ISMAR, 2023
+ * Authors: Wolfgang Bangerth (copied from), Texas A&M University, 2014
+ *          Luca Heltai (copied from), SISSA, 2014
+ *          Sarah Stamps (copied from), MIT, 2014
+ *	    Luca Arpaia, CNR-ISMAR, 2024
+ *          Giuseppe Orlando, Ecole Polytecnique, 2026
  */
 
 // Let us start with the include files we need here.The remainder of the
@@ -118,7 +117,7 @@ namespace IO
     AssertThrow(f.fail() == false, ExcIO());
 
     std::vector<double> read_data;
- 
+
     boost::iostreams::filtering_istream in;
     in.push(boost::iostreams::basic_gzip_decompressor<>());
     in.push(boost::iostreams::file_source(filename));
@@ -159,7 +158,7 @@ namespace IO
                                    "from the file <"+filename+">!"));
           }
       }
- 
+
     return read_data;
   }
 
@@ -169,7 +168,7 @@ namespace IO
   std::array<std::pair<double,double>, dim> TxtDataReader<dim>::get_endpoints()
   {
     std::array<std::pair<double,double>, dim> read_endpoints;
- 
+
     boost::iostreams::filtering_istream in;
     in.push(boost::iostreams::basic_gzip_decompressor<>());
     in.push(boost::iostreams::file_source(filename));
@@ -182,7 +181,7 @@ namespace IO
             double endleft, endright;
             in >> endleft >> endright;
             endpoints = {endleft,endright};
- 
+
             read_endpoints[line] = endpoints;
           }
         catch (...)
@@ -200,7 +199,7 @@ namespace IO
   std::array<unsigned int, dim> TxtDataReader<dim>::get_nintervals()
   {
     std::array<unsigned int, dim> read_nintervals;
- 
+
     boost::iostreams::filtering_istream in;
     in.push(boost::iostreams::basic_gzip_decompressor<>());
     in.push(boost::iostreams::file_source(filename));
@@ -226,7 +225,7 @@ namespace IO
                         ExcMessage("Could not read the number of intervals "
                                    "from the file <"+filename+">!"));
           }
-      } 
+      }
 
     return read_nintervals;
   }

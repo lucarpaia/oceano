@@ -1,21 +1,20 @@
 /* ---------------------------------------------------------------------
  *
- * Copyright (C) 2020 - 2023 by the deal.II authors
+ * Copyright (C) 2022 - 2026 by CNR-ISMAR
  *
- * This file is part of the deal.II library.
- *
- * The deal.II library is free software; you can use it, redistribute
- * it, and/or modify it under the terms of the GNU Lesser General
- * Public License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
- * The full text of the license can be found in the file LICENSE.md at
- * the top level directory of deal.II.
+ * This code, as the deal.II library is free software; you can use it,
+ * redistribute it, and/or modify it under the terms of the GNU Lesser
+ * General Public License as published by the Free Software Foundation;
+ * either version 2.1 of the License, or (at your option) any later
+ * version. The full text of the license can be found in the file
+ * LICENSE.md at the top level directory of deal.II.
  *
  * ---------------------------------------------------------------------
 
  *
- * Author: Martin Kronbichler, 2020
- *         Luca Arpaia,        2023
+ * Author: Martin Kronbichler (copied from), 2020
+           Luca Arpaia, 2023
+ *         Giuseppe Orlando, 2026
  */
 #ifndef EXPLICITRUNGEKUTTAINTEGRATOR_HPP
 #define EXPLICITRUNGEKUTTAINTEGRATOR_HPP
@@ -47,26 +46,12 @@ namespace TimeIntegrator
 
 
 
-  // @sect3{Strong Stability Preserving explicit Runge--Kutta time integrators}
+  // @sect3{Explicit Runge--Kutta time integrators}
 
-  // The next few lines implement the Strong Stability Preserving Runge--Kutta
-  // methods for the hydrodynamic and tracer equations. The hydrodynamics and
-  // the tracers must be solved with the same time-integrator for consistency
-  // reason (the so called "tracer consistency with the mass-equation"). We
-  // are obliged to time timestep both hydrodynamics and tracers variables
-  // with a unique call to `perform_time_step`. To distinguish the two cases,
-  // thus avoiding compiler warnings or fake loops when tracers are absent we
-  // use preprocessor. Although this may worsen the code readibility, we believe it is
-  // better then creating a derived class that overloads `perform_time_step`.
-  // The Strong Stability Preserving Runge-Kutta methods have specific tableaux with coefficients
-  // $\beta_i$ and $\alpha_i$ as shown in the introduction. As usual in Runge--Kutta
-  // method, we can deduce time steps, $c_i = \sum_{j=1}^{i-2} b_i + a_{i-1}$
-  // from those coefficients. The main advantage of this kind of scheme is the
-  // non-linear stability.
-  //
-  // We define a single class for the four integrators, distinguished by the
-  // enum described above. To each scheme, we then fill the vectors for the
-  // $b_i$ and $a_i$ to the given variables in the class.
+  // Along with Additive Runge Kutta, the next few lines implement many
+  // Explicit Runge--Kutta methods for the hydrodynamic and tracer equations.
+  // For generic comments on the time integrator please have a look to the
+  // class `AdditiveRungeKutta`.
   class ExplicitRungeKuttaIntegrator //: public RungeKuttaIntegrator
   {
   public:
@@ -89,7 +74,7 @@ namespace TimeIntegrator
                 std::vector<VectorType>       &vec_ki_discharge,
                 std::vector<VectorType>       &vec_ki_tracer) const;
 
-    template <typename VectorType, typename Operator>                                  
+    template <typename VectorType, typename Operator>
     void perform_time_step(Operator                &pde_operator,
                            const double             current_time,
                            const double             time_step,
@@ -131,7 +116,7 @@ namespace TimeIntegrator
 
           // The next scheme is the Strong-Stability-Preserving
           // of order two.
-        case stage_2_order_2: 
+        case stage_2_order_2:
           {
             erk = TimeSteppingOceano::SSP_SECOND_ORDER;
             break;
@@ -139,19 +124,19 @@ namespace TimeIntegrator
 
           // The next scheme is a five-stage scheme of order four, again
           // defined in the paper by Kennedy et al. (2000).
-        case stage_3_order_3: 
+        case stage_3_order_3:
           {
             erk = TimeSteppingOceano::SSP_THIRD_ORDER;
             break;
           }
 
-        case stage_4_order_4: 
+        case stage_4_order_4:
           {
             erk = TimeSteppingOceano::RK_CLASSIC_FOURTH_ORDER;
             break;
           }
 
-        case stage_3_order_2: 
+        case stage_3_order_2:
           {
             erk = TimeSteppingOceano::THREE_STAGE_SECOND_ORDER;
             break;
@@ -190,29 +175,7 @@ namespace TimeIntegrator
       }
   }
 
-  // The main function of the time integrator is to go through the stages,
-  // evaluate the operator, prepare the $\mathbf{r}_i$ vector for the next
-  // evaluation, and update the solution vector $\mathbf{w}$. We hand off
-  // the work to the `pde_operator` involved in order to be able to merge
-  // the vector operations of the Runge--Kutta setup with the evaluation of
-  // the differential operator for better performance, so all we do here is
-  // to delegate the vectors and coefficients.
-  //
-  // We separately call the operator for the first stage because we need
-  // slightly modified arguments there: We evaluate the solution from
-  // the old solution $\mathbf{w}^n$ rather than a $\mathbf r_i$ vector, so
-  // the first argument is `solution`. We here let the stage vector
-  // $\mathbf{r}_i$ also hold the temporary result of the evaluation, as it
-  // is not used otherwise. For all subsequent stages, we use the vector
-  // `vec_ki` as the second vector argument to store the result of the
-  // operator evaluation. Finally, when we are at the last stage, we must
-  // skip the computation of the vector $\mathbf{r}_{s+1}$ as there is no
-  // coefficient $a_s$ available (nor will it be used).
-  //
-  // For mass conservation, we have not used a different code path for
-  // internal and for the last stage. The reason is that we only need the
-  // mass at the end of the time step, thus the mass at internal stages is
-  // simply overwritten.
+  // The main function of the time integrator is:
   template <typename VectorType, typename Operator>
   void ExplicitRungeKuttaIntegrator::perform_time_step(
     Operator                &pde_operator,

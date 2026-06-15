@@ -1,22 +1,20 @@
 /* ---------------------------------------------------------------------
  *
- * Copyright (C) 2020 - 2023 by the deal.II authors
+ * Copyright (C) 2022 - 2026 by CNR-ISMAR
  *
- * This file is part of the deal.II library.
- *
- * The deal.II library is free software; you can use it, redistribute
- * it, and/or modify it under the terms of the GNU Lesser General
- * Public License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
- * The full text of the license can be found in the file LICENSE.md at
- * the top level directory of deal.II.
+ * This code, as the deal.II library is free software; you can use it,
+ * redistribute it, and/or modify it under the terms of the GNU Lesser
+ * General Public License as published by the Free Software Foundation;
+ * either version 2.1 of the License, or (at your option) any later
+ * version. The full text of the license can be found in the file
+ * LICENSE.md at the top level directory of deal.II.
  *
  * ---------------------------------------------------------------------
 
  *
- * Author: Martin Kronbichler, 2020
- *         Luca Arpaia,        2023
- *         Giuseppe Orlando,   2024
+ * Author: Martin Kronbichler (copied from), 2020
+           Luca Arpaia, 2023
+ *         Giuseppe Orlando, 2024
  */
 #ifndef OCEANDG_HPP
 #define OCEANDG_HPP
@@ -56,9 +54,7 @@
 #include <deal.II_oceano/operators.h>
 
 // The following files include the oceano libraries
-#if defined MODEL_EULER
-#include <model/Euler.h>
-#elif defined MODEL_SHALLOWWATER
+#if defined MODEL_SHALLOWWATER
 #include <model/ShallowWater.h>
 #elif defined MODEL_SHALLOWWATERWITHTRACER
 #include <model/ShallowWaterWithTracer.h>
@@ -262,13 +258,11 @@ namespace SpaceDiscretization
 
     // The switch between the different models is realized with
     // Preprocessor keys. As already explained we have avoided pointers to 
-    // interface classes. The Euler and the Shallow Water class must expose
+    // interface classes. All the model class must expose
     // the same interfaces with identical member functions. Note that the
     // model class is public beacause it must be accessed, during postprocessing
     // outside the OceanoOperator class
-#if defined MODEL_EULER
-    Model::Euler model;
-#elif defined MODEL_SHALLOWWATER
+#if defined MODEL_SHALLOWWATER
     Model::ShallowWater model;
 #elif defined MODEL_SHALLOWWATERWITHTRACER
     Model::ShallowWaterWithTracer model;
@@ -615,7 +609,7 @@ namespace SpaceDiscretization
   // multi-component case. One variant utilizes an FEEvaluation
   // object with multiple components embedded into it, specified by an additional
   // template argument `n_vars` for the components in the shallow water system.
-  // The alternative variant followed here uses several FEEvaluation objects, 
+  // The alternative variant followed here uses several FEEvaluation objects,
   // a scalar one for the height and a vector-valued one with `dim` components for the
   // momentum. As
   // we have a single vector for all components, we would go with the second optional
@@ -911,12 +905,12 @@ namespace SpaceDiscretization
   // argument in the list. At the quadrature points, we then go to our
   // free-standing functions for the numerical flux. They receives the solution
   // evaluated at quadrature points from both sides (i.e., $\mathbf{w}^-$ and
-  // $\mathbf{w}^+$), as well as the normal vector onto the minus side. 
+  // $\mathbf{w}^+$), as well as the normal vector onto the minus side.
   // We separate numerical fluxes coming from terms written in weak form from
-  // terms written in strong form. A simple trick is used to have  
-  // discontinuous bathymetry at the quadrature points along the edges. The 
+  // terms written in strong form. A simple trick is used to have
+  // discontinuous bathymetry at the quadrature points along the edges. The
   // quadrature point is shifted perpendicularly to the edge direction by a
-  // very small quantity. Givent the outward sign of the normal, the offset is 
+  // very small quantity. Givent the outward sign of the normal, the offset is
   // positive for the "there" side and negative for the "here" side.
   //
   // For the shallow water equations mass-flux
@@ -1228,7 +1222,7 @@ namespace SpaceDiscretization
 
     for (unsigned int face = face_range.first; face < face_range.second; ++face)
       {
-        phi_height.reinit(face);        
+        phi_height.reinit(face);
         phi_height.gather_evaluate(src[0], EvaluationFlags::values);
         phi_discharge.reinit(face);
         phi_discharge.gather_evaluate(src[1], EvaluationFlags::values);
@@ -2228,8 +2222,8 @@ namespace SpaceDiscretization
   // this because every vector entry has contributions from only a single
   // cell for discontinuous Galerkin discretizations.
   //
-  // The quadrature choosen to do the integral is the normal one stored in 
-  // the finite element evaluation class, thus a Gaussian quadrature 
+  // The quadrature choosen to do the integral is the normal one stored in
+  // the finite element evaluation class, thus a Gaussian quadrature
   // with the points lying at the interior
   // of the cell. This allows to mantain a discontinuous datum with
   // the jump passing through the edges of the cell.
@@ -2375,7 +2369,7 @@ namespace SpaceDiscretization
   // number of lanes with valid data. It equals VectorizedArray::size() on
   // most cells, but can be less on the last cell batch if the number of cells
   // has a remainder compared to the SIMD width.
-  // 
+  //
   // Pay also attention to the implementation of the error formula. The error has
   // dimension `2` because we compute only one error for all the
   // momentum components.
@@ -2414,7 +2408,7 @@ namespace SpaceDiscretization
                   error[0] =
                     model.depth(
                          evaluate_function<dim, Number>(  //lrp: if there is no ref solution why evaluate a function?
-                              function, 
+                              function,
               		      phi_height.quadrature_point(q),
               		      0),
               		 data_quadrature_cell_0.get_data(cell, q)[0]) -

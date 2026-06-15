@@ -1,21 +1,20 @@
 /* ---------------------------------------------------------------------
  *
- * Copyright (C) 2020 - 2023 by the deal.II authors
+ * Copyright (C) 2022 - 2026 by CNR-ISMAR
  *
- * This file is part of the deal.II library.
- *
- * The deal.II library is free software; you can use it, redistribute
- * it, and/or modify it under the terms of the GNU Lesser General
- * Public License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
- * The full text of the license can be found in the file LICENSE.md at
- * the top level directory of deal.II.
+ * This code, as the deal.II library is free software; you can use it,
+ * redistribute it, and/or modify it under the terms of the GNU Lesser
+ * General Public License as published by the Free Software Foundation;
+ * either version 2.1 of the License, or (at your option) any later
+ * version. The full text of the license can be found in the file
+ * LICENSE.md at the top level directory of deal.II.
  *
  * ---------------------------------------------------------------------
 
  *
- * Author: Martin Kronbichler, 2020
- *         Luca Arpaia,        2023
+ * Author: Martin Kronbichler (copied from), 2020
+ *         Luca Arpaia, 2023
+ *         Giuseppe Orlando, 2026
  */
 #ifndef HARTENVANLEER_HPP
 #define HARTENVANLEER_HPP
@@ -31,25 +30,9 @@ namespace NumericalFlux
 {
 
   using namespace dealii;
-  
-  
-  
-  // For the model class we do not use an implementation file. This
-  // is because of the fact the all the function called are templated
-  // or inlined. Both templated and inlined functions are hard to be separated
-  // between declaration and implementation. We keep them in the header file.
-  //
-  // I would have liked to template the numerical flux class with
-  // <int dim, typename Number> which would have been cleaner. But I was not able
-  // to compile the call to the function `numerical_flux_weak()` which take
-  // as argument `Tensor<1, n_vars, Number>` while is receiving
-  // `Tensor<1, n_vars, VectorizedArray<Number>>`. I don't know why, without
-  // a template class, everything works. I leave this for future work.
-  //
-  // In this and the following functions, we use variable suffixes `_m` and
-  // `_p` to indicate quantities derived from $\mathbf{w}^-$ and $\mathbf{w}^+$,
-  // i.e., values "here" and "there" relative to the current cell when looking
-  // at a neighbor cell.
+
+
+
   class HartenVanLeer : public NumericalFluxBase
   {
   public:
@@ -79,20 +62,11 @@ namespace NumericalFlux
                              const Number                  data_p) const;
   };
 
- 
- 
-  // For the model class we do not use an implementation file. This
-  // is because of the fact the all the function called are templated
-  // or inlined. Both templated and inlined functions are hard to be separated
-  // between declaration and implementation. We keep them in the header file.
-  //
-  // The constructor of the numerical flux class takes as arguments the 
+
+
+  // The constructor of the numerical flux class takes as arguments the
   // numerical parameters which may be test-case/user dependent. These
   // parameters are stored as class members.
-  // In this way they are defined/read from file in one place and then used 
-  // whenever needed with `numerical_flux.param`, instead of being read/defined 
-  // multiple times. I hope this does not add much overhead. The physical parameter
-  // `gamma` is also passed to construct the model class.
   HartenVanLeer::HartenVanLeer(
     IO::ParameterHandler &param)
     : NumericalFluxBase(param)
@@ -105,11 +79,6 @@ namespace NumericalFlux
   // sound speed. For the velocity, we here choose a simple arithmetic average
   // which is sufficient for DG scenarios and moderate jumps in material
   // parameters.
-  //
-  // Since the numerical flux is multiplied by the normal vector in the weak
-  // form, we multiply by the result by the normal vector for all terms in the
-  // equation. In these multiplications, the `operator*` defined above enables
-  // a compact notation similar to the mathematical definition.
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Number

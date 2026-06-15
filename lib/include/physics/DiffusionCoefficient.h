@@ -1,26 +1,25 @@
 /* ---------------------------------------------------------------------
  *
- * Copyright (C) 2020 - 2023 by the deal.II authors
+ * Copyright (C) 2022 - 2026 by CNR-ISMAR
  *
- * This file is part of the deal.II library.
- *
- * The deal.II library is free software; you can use it, redistribute
- * it, and/or modify it under the terms of the GNU Lesser General
- * Public License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
- * The full text of the license can be found in the file LICENSE.md at
- * the top level directory of deal.II.
+ * This code, as the deal.II library is free software; you can use it,
+ * redistribute it, and/or modify it under the terms of the GNU Lesser
+ * General Public License as published by the Free Software Foundation;
+ * either version 2.1 of the License, or (at your option) any later
+ * version. The full text of the license can be found in the file
+ * LICENSE.md at the top level directory of deal.II.
  *
  * ---------------------------------------------------------------------
 
  *
- * Author: Luca Arpaia,        2025
+ * Author: Luca Arpaia, 2025
+ *         Giuseppe Orlando, 2026
  */
 #ifndef DIFFUSIONCOEFFICIENT_HPP
 #define DIFFUSIONCOEFFICIENT_HPP
 
 /**
- * Namespace containing the so-called phyisics of the governing equations.
+ * Namespace containing the so-called physics of the governing equations.
  * They are the different parametrizations.
  */
 
@@ -32,12 +31,8 @@ namespace Physics
   // @sect3{Implementation of the horizontal diffusion coefficient}
 
   // In the following classes, we implement the horizontal diffusivity.
-  // The horizontal diffusivity can be the molecular one but, at the scale
-  // at which coastal models operates, it will be more often an eddy diffusivity.
-  // In coastal flows, transport brings closer water masses with different
-  // properties, continuously building up strong gradients. These can be
-  // accurately simulated with TVD schemes or with an horizontal "eddy" diffusion.
-  // The next class and its derived classes, basically compute the eddy diffusivity. 
+  // It is implemented similarly to the class `ViscosityCoefficient`.
+  // Look to that class for details.
   class DiffusionCoefficientBase
   {
   public:
@@ -54,8 +49,8 @@ namespace Physics
       value(const Tensor<dim, dim, Number> &gradient_velocity,
             const Number                    area) const;
   };
-  
-  // Not surprisingly the constructor of the base class takes as arguments 
+
+  // Not surprisingly the constructor of the base class takes as arguments
   // only the parameters handler class in order to read the physical constants
   // from the prm file. Note that $C_M$ will have different meaning depending
   // on the diffusivity formulation.
@@ -90,7 +85,7 @@ namespace Physics
     IO::ParameterHandler &param)
     : DiffusionCoefficientBase(param)
   {}
-  
+
   template <int dim, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Number

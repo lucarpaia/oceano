@@ -1,20 +1,19 @@
 /* ---------------------------------------------------------------------
  *
- * Copyright (C) 2020 - 2023 by the deal.II authors
+ * Copyright (C) 2022 - 2026 by CNR-ISMAR
  *
- * This file is part of the deal.II library.
- *
- * The deal.II library is free software; you can use it, redistribute
- * it, and/or modify it under the terms of the GNU Lesser General
- * Public License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
- * The full text of the license can be found in the file LICENSE.md at
- * the top level directory of deal.II.
+ * This code, as the deal.II library is free software; you can use it,
+ * redistribute it, and/or modify it under the terms of the GNU Lesser
+ * General Public License as published by the Free Software Foundation;
+ * either version 2.1 of the License, or (at your option) any later
+ * version. The full text of the license can be found in the file
+ * LICENSE.md at the top level directory of deal.II.
  *
  * ---------------------------------------------------------------------
 
  *
- *         Luca Arpaia,        2023
+ * Author: Luca Arpaia, 2023
+ *         Giuseppe Orlando, 2026
  */
 #ifndef ICBC_REALISTIC_HPP
 #define ICBC_REALISTIC_HPP
@@ -40,35 +39,12 @@ namespace ICBC
   using namespace dealii;
 
   // @sect3{Equation data}
-  
-  // Next we implement a few classes that are useful to represent functions
-  // for the initial and boundary conditions. Deal.II has a class `Function`
-  // which returns function of space and time, thus we simply create a
-  // derived class.
+  //
   // We specialize a few different derived Function classes to handle data.
   // What changes essentially is the number of components, the type of
   // function, i.e. analytical or from observations saved into file, and
   // the independent variable, i.e is the function time or space dependent?
   // We review these Function classes.
-
-  // First we need to handle the problem surface data. The number of
-  // components for the data is fixed to `dim+3=5` scalar quantities.
-  // We list them here:
-  // begin{itemize}
-  // \item the first component is the bathymetry.
-  // \item the second is the bottom friction coefficient.
-  // \item the third and fourth components are the cartesian components
-  // of the wind velocity (in order, eastward and northward).
-  // \item The fifth one is the Coriolis parameter.
-  // end{itemize}
-  // Surface data in general depends on both time and space, although for
-  // now we have only implemented the space dependence. As you may see the
-  // time variable is never retrieved.
-  //
-  // In some simplified context we may also want to assign constant value
-  // to the data. The parameter handler class may seems redundant but it is
-  // not! Constants that appears in you data may be easily recovered from
-  // the configuration file.
   //
   // More often the data is space-varying and need to be interpolated from
   // a reference field given on a fine mesh. Deal.ii has a special `Function`
@@ -93,7 +69,7 @@ namespace ICBC
   // Last, a note on the `value()` method that actually do the job,
   // specialize the base class method and return all the external data
   // necessary to complete the computation.
-  template <int dim>  
+  template <int dim>
   class ProblemData : public Function<dim>
   {
   public:
@@ -194,7 +170,7 @@ namespace ICBC
   // one dimensional function of time only. The function is constructed
   // taking as input the initial time which is not necessary zero and,
   // in this way, it can be set externally by the user.
-  template <int dim, int n_vars>  
+  template <int dim, int n_vars>
   class BoundaryData : public Function<dim>
   {
   public:
@@ -363,11 +339,11 @@ namespace ICBC
   // example the tidal value for an open boundary or the discharge value
   // for an upstream river boundary), we instantiate one new BoundaryData
   // class to handle this data.
-  template <int dim, int n_vars>  
+  template <int dim, int n_vars>
   class BcRealistic : public BcBase<dim, n_vars>
   {
   public:
-  
+
     BcRealistic(IO::ParameterHandler &prm);
     ~BcRealistic(){};
 
@@ -376,7 +352,7 @@ namespace ICBC
   private:
     ParameterHandler &prm;
   };
-  
+
   template <int dim, int n_vars>
   BcRealistic<dim, n_vars>::BcRealistic(IO::ParameterHandler &prm)
     : prm(prm)

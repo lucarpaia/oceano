@@ -1,21 +1,19 @@
 /* ---------------------------------------------------------------------
  *
- * Copyright (C) 2020 - 2023 by the deal.II authors
+ * Copyright (C) 2022 - 2026 by CNR-ISMAR
  *
- * This file is part of the deal.II library.
- *
- * The deal.II library is free software; you can use it, redistribute
- * it, and/or modify it under the terms of the GNU Lesser General
- * Public License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
- * The full text of the license can be found in the file LICENSE.md at
- * the top level directory of deal.II.
+ * This code, as the deal.II library is free software; you can use it,
+ * redistribute it, and/or modify it under the terms of the GNU Lesser
+ * General Public License as published by the Free Software Foundation;
+ * either version 2.1 of the License, or (at your option) any later
+ * version. The full text of the license can be found in the file
+ * LICENSE.md at the top level directory of deal.II.
  *
  * ---------------------------------------------------------------------
 
  *
- * Author: Martin Kronbichler, 2020
- *         Luca Arpaia,        2023
+ * Author: Luca Arpaia, 2023
+ *         Giuseppe Orlando, 2026
  */
 #ifndef ICBC_LAKEATREST_HPP
 #define ICBC_LAKEATREST_HPP
@@ -52,7 +50,7 @@ namespace ICBC
 #undef  ICBC_LAKEATREST_WATERATRESTDRY
 
   using namespace dealii;
-  
+
   // We define global parameters that help in the definition of the initial
   // and boundary conditions. The parameters that are needed for this test are
   // the bassin depth far from the hill:
@@ -81,23 +79,6 @@ namespace ICBC
 
 
   // @sect3{Equation data}
-  //
-  // We need a class to handle the problem data. Problem data are case dependent; for this
-  // reason it appears inside the `ICBC` namespace. The data in general depends on
-  // both time and space. Deal.II has a class `Function` which returns function
-  // of space and time, thus we simply create a derived class. The size of the data is
-  // fixed to `dim+3=5` scalar quantities. The first component is the bathymetry.
-  // The second is the bottom friction coefficient. The third and fourth components
-  // are the cartesian components of the wind velocity (in order, eastward and northward).
-  // The fifth one is the Coriolis parameter. The test-dependent functions `stommelGyre_wind()`
-  // and `stommelGyre_coriolis()` contain the definition of analytical functions for the
-  // different data. The call to `value()` returns all the external data necessary to
-  // complete the computation.
-  //
-  // Finally the parameter handler class allows to read constants from the prm file.
-  // The parameter handler class may seems redundant but it is not! Constants that appears
-  // in you data may be easily recovered from the configuration file. More important file
-  // names which contains the may be imported too.
   //
   // For this case we need to define the bathyemtry data values.
   template <int dim>
@@ -156,7 +137,7 @@ namespace ICBC
   // to define initial and boundary conditions. Apart for the template for the
   // dimension which is in common with the base `Function` class, we have added
   // the number of variables.
-  template <int dim, int n_vars>  
+  template <int dim, int n_vars>
   class ExactSolution : public Function<dim>
   {
   public:
@@ -167,7 +148,7 @@ namespace ICBC
 
     virtual double value(const Point<dim> & p,
                          const unsigned int component = 0) const override;
-  };  
+  };
 
   // We code the exact solution as the lake at rest state. In the Oceano
   // variables (free-surface and momentum) it is the null vector. If you
@@ -189,30 +170,10 @@ namespace ICBC
 
 
 
-  // The `Ic` and `Bc` classes define the initial/boundary condition for the
-  // test-case. They are very similar in the templates and the constructor.
-  // They both take as argument the parameter class and they stored it
-  // internally. This means that we can read the Parameter file from
-  // anywhere when we are implementing ic/bc and we can access constants or
-  // filenames from which the initial/boundary data depends.
-  // The initial condition is realized thanks to a derived class of the
-  // deal.II `Function` class that define many type of time and space functions.
-  // The initial condition class overloads the constructor of the base class
-  // providing automatically a zero time. Note that, apart for the template for
-  // the dimension which is in common with the base `Function` class, we have
-  // added the number of variables to construct the base class with the correct
-  // number of dimension and do some sanity checks. 
-  // We return either the water depth or the momentum depending on which component
-  // is requested. Two sanity checks have been added. One is to control that the
+  // Two sanity checks have been added. One is to control that the
   // space dimension is two (you cannot run this test in one dimension) and
   // another one on the number of variables, that for two-dimensional shallow
   // water equation is three.
-  //
-  // An absorbing outflow boundary condition is specified on the left and
-  // right boundary of the domain. In this way we let the wave smoothly go out from the
-  // the domain. Top and bottom boundaries are walls. For the water-at-rest test
-  // we use a closed basin with four walls. This avoids spurious effects from the
-  // boundaries.
   template <int dim, int n_vars>
   class Ic : public Function<dim>
   {
@@ -244,16 +205,21 @@ namespace ICBC
 
 
 
-  template <int dim, int n_vars>  
+  // An absorbing outflow boundary condition is specified on the left and
+  // right boundary of the domain. In this way we let the wave smoothly go out from the
+  // the domain. Top and bottom boundaries are walls. For the water-at-rest test
+  // we use a closed basin with four walls. This avoids spurious effects from the
+  // boundaries.
+  template <int dim, int n_vars>
   class BcLakeAtRest : public BcBase<dim, n_vars>
   {
   public:
-  
+
     BcLakeAtRest(IO::ParameterHandler &prm)
       : prm(prm)
     {}
     ~BcLakeAtRest(){};
-         
+
     void set_boundary_conditions() override;
 
   private:

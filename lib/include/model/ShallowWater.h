@@ -1,20 +1,19 @@
 /* ---------------------------------------------------------------------
  *
- * Copyright (C) 2020 - 2023 by the deal.II authors
+ * Copyright (C) 2022 - 2026 by CNR-ISMAR
  *
- * This file is part of the deal.II library.
- *
- * The deal.II library is free software; you can use it, redistribute
- * it, and/or modify it under the terms of the GNU Lesser General
- * Public License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
- * The full text of the license can be found in the file LICENSE.md at
- * the top level directory of deal.II.
+ * This code, as the deal.II library is free software; you can use it,
+ * redistribute it, and/or modify it under the terms of the GNU Lesser
+ * General Public License as published by the Free Software Foundation;
+ * either version 2.1 of the License, or (at your option) any later
+ * version. The full text of the license can be found in the file
+ * LICENSE.md at the top level directory of deal.II.
  *
  * ---------------------------------------------------------------------
 
  *
- * Author: Luca Arpaia,        2023
+ * Author: Luca Arpaia, 2023
+ *         Giuseppe Orlando, 2026
  */
 #ifndef SHALLOWWATER_HPP
 #define SHALLOWWATER_HPP
@@ -35,7 +34,7 @@ namespace Model
 
   using namespace dealii;
 
-  // @sect3{Implementation of point-wise operations of the Shallow Water equations}
+  // @sect3{Implementation of the Shallow Water equations}
 
   // In the following functions, we implement the various problem-specific
   // operators pertaining to the Shallow Water equations. The Shallow Water
@@ -271,7 +270,19 @@ namespace Model
   // is because of the fact the all the function called are templated
   // or inlined. Both templated and inlined functions are hard to be separated
   // between declaration and implementation. We keep them in the header file.
-
+  //
+  // All the model definitions (prognostic variables, fluxes, invariantes) are the
+  // standard ones. The velocity is computed with a modified water
+  // depth in order to avoid the division by a very small number in shallow
+  // areas (Kurganov et al.,2007):
+  //
+  // \begin{equation*}
+  //  \vel = \frac{\disc}{h_{\mathrm{des}}} = \frac{\sqrt{2}h}{\sqrt{\max\left(h^{4},c_u^{4}\right) + h^{4}}}\disc
+  // \end{equation*}
+  //
+  // Here, $c_u$ is a test case-dependent small coefficient that will be
+  // specified in the corresponding section for each benchmark.
+  //
   // The constructor of the model class takes as arguments the parameters handler
   // class in order to read the test-case/user dependent parameters. These
   // parameters are stored as class members. In this way they are defined/read

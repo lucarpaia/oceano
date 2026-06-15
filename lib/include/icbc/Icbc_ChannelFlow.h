@@ -1,21 +1,19 @@
 /* ---------------------------------------------------------------------
  *
- * Copyright (C) 2020 - 2023 by the deal.II authors
+ * Copyright (C) 2022 - 2026 by CNR-ISMAR
  *
- * This file is part of the deal.II library.
- *
- * The deal.II library is free software; you can use it, redistribute
- * it, and/or modify it under the terms of the GNU Lesser General
- * Public License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
- * The full text of the license can be found in the file LICENSE.md at
- * the top level directory of deal.II.
+ * This code, as the deal.II library is free software; you can use it,
+ * redistribute it, and/or modify it under the terms of the GNU Lesser
+ * General Public License as published by the Free Software Foundation;
+ * either version 2.1 of the License, or (at your option) any later
+ * version. The full text of the license can be found in the file
+ * LICENSE.md at the top level directory of deal.II.
  *
  * ---------------------------------------------------------------------
 
  *
- * Author: Martin Kronbichler, 2020
- *         Luca Arpaia,        2023
+ * Author: Luca Arpaia, 2023
+ *         Giuseppe Orlando, 2026
  */
 #ifndef ICBC_CHANNELFLOW_HPP
 #define ICBC_CHANNELFLOW_HPP
@@ -47,10 +45,8 @@ namespace ICBC
   // arguments we impose the discharge at the inflow `q0` and the water height at
   // the outflow taken as zero.
   //
-  // We have added a discontinuous bathymetry with a jump. The regular
-  // solution does not hold anymore but we can compute the weak solution from
-  // the jump relationships. If you want to test a constant flow over a jump
-  // undefine the following preprocessor.
+  // We have added a superviscous test and a test with irregular bathyemtry.
+  // If you want to use this test activate the following preprocessor.
 #undef  ICBC_CHANNELFLOW_MANNINGSUPERVISCOUS
 #define ICBC_CHANNELFLOW_BATHYMETRYIRREGULAR
 
@@ -81,24 +77,10 @@ namespace ICBC
 
   // @sect3{Equation data}
 
-  // We need a class to handle the problem data. Problem data are case dependent;
-  // for this reason it appears inside the `ICBC` namespace. The data in general
-  // depends on both time and space. Deal.II has a class `Function` which returns
-  // function of space and time, thus we simply create a derived class. The size
-  // of the data is fixed to `dim+3=5` scalar quantities. The first component is
-  // the bathymetry. The second is the bottom friction coefficient. The third and
-  // fourth components are the cartesian components of the wind velocity (in order,
-  // eastward and northward). The fifth one is the Coriolis parameter. The test-dependent
-  // `channelFlow_bathymetry()` contain the definition of the analytical bathyemtry
-  // function. The call to `value()` returns all the external data necessary to
-  // complete the computation.
-  //
-  // Finally the parameter handler class allows to read constants from the prm file.
-  // The parameter handler class may seems redundant but it is not! Constants that appears
-  // in you data may be easily recovered from the configuration file. More important file
-  // names which contains the may be imported too.
-  //
   // For this case we need to define the bathyemtry data values and the manning friction.
+  // The test-dependent `channelFlow_bathymetry()` contain the definition of the
+  // analytical bathyemtry function. The call to `value()` returns all the external
+  // data necessary to complete the computation.
   template <int dim>
   class ProblemData : public Function<dim>
   {
@@ -119,6 +101,24 @@ namespace ICBC
 
 
 
+  // In the case `ICBC_CHANNELFLOW_BATHYMETRYIRREGULAR` we employ the following
+  // bathymetry profile
+  // \begin{equation*}
+  //  z_{b}(x) = 4.9 + 0.001 x &- \frac{z_{b0}}{2} \rpth{\tanh\rpth{\frac{x - 0.4L}{c_{0}}} - \tanh\rpth{\frac{x - 0.5L}{c_{0}}}}
+  //  - \frac{z_{b0}}{4}\rpth{\tanh\rpth{\frac{x - 0.55L}{c_{0}}} - \tanh\rpth{\frac{x - 0.6L}{c_{0}}}}. 
+  // \end{equation*}
+  //
+  // that displays two obstacles with steep slopes.
+  // For the other cases we consider the same channel flow benchmark employed in
+  // (Rosatti et al.,2011). However, we consider the smoother depth profile:
+  // \begin{equation*}
+  //  z_{b}(x) = 4.9 + 0.001x -
+  //  \begin{cases}
+  //      z_{b0}\cos^{4}\rpth{\frac{\pi\rpth{x - L/2}}{2c_{0}}}, & \text{if } -c_{0} \leq x - L/2 \leq c_{0}
+  //      0 & \text{otherwise,}
+  //  \end{cases}
+  // \end{equation*}
+  // so as to achieve the correct convergence behaviour for higher polynomial degrees.
   template <int dim>
   inline double ProblemData<dim>::channelFlow_bathymetry(
     const Point<dim> & x) const
@@ -157,12 +157,6 @@ namespace ICBC
 
 
 
-  // Apart from surface data we have the boundary conditions data.
-  // Boundary data has `n_var` components at maximum. In practice in
-  // coastal simulation we often use subcritical boundaries that we
-  // need less conditions, thus less external data, but
-  // we keep the function general so we have hard-coded `n_var`
-  // components.
   // For the channel flow we create a simple boundary data function
   // for constant data only. The boundary data are simple being 0 for
   // the height at the outflow and `q0` for the discharge at the
@@ -198,10 +192,7 @@ namespace ICBC
 
 
 
-  // The class `ExactSolution` defines analytical functions that can be useful
-  // to define initial and boundary conditions. Apart for the template for the
-  // dimension which is in common with the base `Function` class, we have added
-  // the number of variables. As seen in the introduction the free-surface is
+  // As seen in the introduction the free-surface is
   // available in a semi-analytical form and must be read from a file. We have
   // thus modified the constructor with two classes: a data reader class and a
   // the data class itself. Thanks to them we can read and compute the exact
@@ -216,7 +207,7 @@ namespace ICBC
   // interpolation of the data read from file. If tracers are added they are
   // taken constant to check the tracer consistency with the continuity when
   // a non-polynomial bathymetry is present.
-  template <int dim, int n_vars>  
+  template <int dim, int n_vars>
   class ExactSolution : public Function<dim>
   {
   public:
@@ -272,12 +263,6 @@ namespace ICBC
 
 
 
-  // The `Ic` and `Bc` classes define the initial/boundary condition for the
-  // test-case. They are very similar in the templates and the constructor.
-  // They both take as argument the parameter class and they stored it
-  // internally. This means that we can read the Parameter file from
-  // anywhere when we are implementing ic/bc and we can access constants or
-  // filenames from which the initial/boundary data depends.
   // Since the slope of the channel is small we start with a wet channel
   // with a constant water level equal to the exact one at left boundary.
   // We return either the water depth or the momentum depending on which
@@ -329,11 +314,15 @@ namespace ICBC
 
 
 
-  template <int dim, int n_vars>  
+  // Based on physical arguments, we impose, as customary, the discharge value
+  // at the inflow boundary and the water height $\zeta = \SI{0}{\meter}$ at
+  // the outflow boundary. Wall boundary conditions are applied on the
+  // $y-$direction.
+  template <int dim, int n_vars>
   class BcChannelFlow : public BcBase<dim, n_vars>
   {
   public:
-  
+
     BcChannelFlow(IO::ParameterHandler &prm);
     ~BcChannelFlow(){};
 
@@ -342,7 +331,7 @@ namespace ICBC
   private:
     ParameterHandler &prm;
   };
-  
+
   template <int dim, int n_vars>
   BcChannelFlow<dim, n_vars>::BcChannelFlow(IO::ParameterHandler &prm)
     : prm(prm)

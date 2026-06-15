@@ -1,20 +1,19 @@
 /* ---------------------------------------------------------------------
  *
- * Copyright (C) 2020 - 2023 by the deal.II authors
+ * Copyright (C) 2022 - 2026 by CNR-ISMAR
  *
- * This file is part of the deal.II library.
- *
- * The deal.II library is free software; you can use it, redistribute
- * it, and/or modify it under the terms of the GNU Lesser General
- * Public License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
- * The full text of the license can be found in the file LICENSE.md at
- * the top level directory of deal.II.
+ * This code, as the deal.II library is free software; you can use it,
+ * redistribute it, and/or modify it under the terms of the GNU Lesser
+ * General Public License as published by the Free Software Foundation;
+ * either version 2.1 of the License, or (at your option) any later
+ * version. The full text of the license can be found in the file
+ * LICENSE.md at the top level directory of deal.II.
  *
  * ---------------------------------------------------------------------
 
  *
- * Author: Luca Arpaia,        2023
+ * Author: Luca Arpaia, 2023
+ *         Giuseppe Orlando, 2026
  */
 #ifndef SHALLOWWATERWITHTRACER_HPP
 #define SHALLOWWATERWITHTRACER_HPP
@@ -34,7 +33,7 @@ namespace Model
 
 
 
-  // @sect3{Implementation of point-wise operations of the tracer equations}
+  // @sect3{Implementation of the tracer equations}
 
   // In the following functions, we implement the various problem-specific
   // operators pertaining to the tracers equations. Each function acts on the
@@ -123,16 +122,14 @@ namespace Model
 
 
 
-  // For the model class we do not use an implementation file. This
-  // is because of the fact the all the function called are templated
-  // or inlined. Both templated and inlined functions are hard to be separated
-  // between declaration and implementation. We keep them in the header file. 
-  
-  // The constructor of the model class takes as arguments the parameters handler
-  // class in order to read the test-case/user dependent parameters. These
-  // parameters are stored as class members. In this way they are defined/read 
-  // from file in one place and then used whenever needed  with `model.param`, 
-  // instead of being read/defined multiple times.
+  // Similarly to the base class we have the class constructor
+  // and similar class members that implement prognostic variables,
+  // advective and diffusive fluxes, etc ...
+  // The specificity here is that we duplicate/triplicate the flux
+  // functions. The duplication is resolved with an overloading depending
+  // the return data type and allows to handle the case of one single
+  // tracer (with data type Number) and multiple tracers (with data type
+  // Tensor<1, dim, Number>) without an `if` statement.
   ShallowWaterWithTracer::ShallowWaterWithTracer(
     IO::ParameterHandler &prm)
     : ShallowWater(prm)

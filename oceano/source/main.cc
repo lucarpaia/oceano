@@ -19,17 +19,17 @@
  *         Giuseppe Orlando,   2024
  */
 
-// Run-time polymorphism can be an elegant solution do deal within a single code 
-// with multiple physical models and different numerical choices. One for example 
-// would like to test different numerical fluxes or time integrators. Also the 
+// Run-time polymorphism can be an elegant solution do deal within a single code
+// with multiple physical models and different numerical choices. One for example
+// would like to test different numerical fluxes or time integrators. Also the
 // initial and boundary conditions specific to each test case can be resolved with
-// a pointer base class which act as an interface with virtual functions defined in it. 
+// a pointer base class which act as an interface with virtual functions defined in it.
 // However, calls to virtual functions (model flux, numerical flux, boundary conditions)
 // happens at each quadrature points and this can be the cause of a bit of overhead.
-// Moreover these choices are tested in a development phase and typically 
-// both the model and the numerics are kept fixed by users. Also boundary and initial 
-// conditions for real case scenario consists in reading external data and not in 
-// using analytical functions. In order to not introduce in the optimized deal.II code 
+// Moreover these choices are tested in a development phase and typically
+// both the model and the numerics are kept fixed by users. Also boundary and initial
+// conditions for real case scenario consists in reading external data and not in
+// using analytical functions. In order to not introduce in the optimized deal.II code
 // call to virtual functions that would point, almost always, to the same derived class,
 // we use instead c++ preprocessors. C++ preprocessor allows to avoid interface classes
 // and to define just the classes actually used. Each pre-processor must begins with
@@ -48,8 +48,6 @@
 // We implement many test cases and a last generic class named as "Realistic".
 // Here the data are imported from external files and it can target any shallow
 // water simulation.
-#undef  ICBC_ISENTROPICVORTEX
-#undef  ICBC_FLOWAROUNDCYLINDER
 #undef  ICBC_IMPULSIVEWAVE
 #undef  ICBC_SHALLOWWATERVORTEX
 #undef  ICBC_STOMMELGYRE
@@ -58,14 +56,10 @@
 #undef  ICBC_CHANNELFLOW
 #undef  ICBC_THACKEROSCILLATIONS2D
 #define ICBC_REALISTIC
-// We have two models: a non-hydrostatic Euler model for perfect gas which was the
-// original model coded in the deal.II example and the shallow water model. The Euler model
-// is only used for debugging, to check consistency with the original deal.II example and
-// it's not working in the present version.
-// Additionally we can add tracers to the shallow water model.
+// We have two models: the shallow water equations and the shallow water equations
+// plus tracers:
 #define MODEL_SHALLOWWATER
 #undef  MODEL_SHALLOWWATERWITHTRACER
-#undef  MODEL_EULER
 // Next come the physics. With the following cpp keys one can switch between the different
 // formulations of a given term in the right-hand side of the shallow water equations.
 // For the bottom friction one has two formulations: a simple linear bottom friction and
@@ -176,8 +170,8 @@
 #include <deal.II_oceano/hpTuner.h>
 
 // The following files are included depending on
-// the Preprocessor keys. This is necessary because 
-// we have done a limited use of virtual classes; on the contrary 
+// the Preprocessor keys. This is necessary because
+// we have done a limited use of virtual classes; on the contrary
 // each of these header files contains the same class definition, so they
 // cannot be linked together.
 #if defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
@@ -185,11 +179,7 @@
 #elif defined TIMEINTEGRATOR_ADDITIVERUNGEKUTTA
 #include <time_integrator/AdditiveRungeKuttaIntegrator.h>
 #endif
-#if defined ICBC_ISENTROPICVORTEX
-#include <icbc/Icbc_IsentropicVortex.h>
-#elif defined ICBC_FLOWAROUNDCYLINDER
-#include <icbc/Icbc_FlowAroundCylinder.h>
-#elif defined ICBC_IMPULSIVEWAVE
+#if defined ICBC_IMPULSIVEWAVE
 #include <icbc/Icbc_ImpulsiveWave.h>
 #elif defined ICBC_SHALLOWWATERVORTEX
 #include <icbc/Icbc_ShallowWaterVortex.h>
@@ -246,9 +236,7 @@ namespace Problem
   // The user should stop here. The next lines are a consistency check between
   // the parameters and the preprocessors plus we set derived parameters that are
   // also known at compile time.
-#if defined MODEL_EULER
-  constexpr unsigned int n_tracers            = 1;
-#elif defined MODEL_SHALLOWWATER
+#if defined MODEL_SHALLOWWATER
   constexpr unsigned int n_tracers            = 0;
 #endif
   constexpr unsigned int n_variables          = dimension + 1 + n_tracers;
@@ -597,12 +585,12 @@ namespace Problem
 
 
   // We use import the mesh from an external mesher, Gmsh.
-  // Gmsh is the smallest and most quickly set up open source tool we are aware of. 
-  // One of the issues is that deal.II, at least until version 9.2, 
-  // can only deal with meshes that only consist of quadrilaterals and hexahedra - 
-  // tetrahedral meshes were not supported and will likely not be supported with all 
-  // of the features deal.II offers for quadrilateral and hexahedral meshes for several 
-  // versions following the 9.3 release that introduced support for simplicial and 
+  // Gmsh is the smallest and most quickly set up open source tool we are aware of.
+  // One of the issues is that deal.II, at least until version 9.2,
+  // can only deal with meshes that only consist of quadrilaterals and hexahedra -
+  // tetrahedral meshes were not supported and will likely not be supported with all
+  // of the features deal.II offers for quadrilateral and hexahedral meshes for several
+  // versions following the 9.3 release that introduced support for simplicial and
   // mixed meshes first. Gmsh can generate unstructured 2d quad meshes.
   // Having the base mesh in place, we can then perform the specified number of global
   // refinements, create the unknown numbering from the DoFHandler, and hand the
@@ -627,7 +615,7 @@ namespace Problem
 
     GridIn<dim> gridin;
     gridin.attach_triangulation(triangulation);
-  
+
     char cwd[1024];
     if (getcwd(cwd, sizeof(cwd)) == NULL)
       ExcInternalError();
@@ -642,7 +630,7 @@ namespace Problem
     std::ifstream f(current_working_directory+slash+file_msh);
     pcout << "Reading mesh file: " << file_msh << std::endl;
     gridin.read_msh(f);
- 
+
     std::locale s = pcout.get_stream().getloc();
     pcout.get_stream().imbue(std::locale(""));
     pcout << "Initial number of cells: " << std::setw(8) << triangulation.n_global_active_cells()
@@ -978,7 +966,7 @@ namespace Problem
   // This method collects all the model outputs (to screen and to file).
   // The input argument is the preprocessor class that contains useful
   // tools that help in the outputting.
-  // We examine the outputs one by one. 
+  // We examine the outputs one by one.
   //
   // At the beginning, we may need to reinitialize the data attached to the
   // dofs. Just after we postprocess the solution variables depending on the model
@@ -1468,7 +1456,7 @@ namespace Problem
     output_results(postprocessor, 0, postprocess_velocity);
 
     // Now we are ready to start the time loop, which we run until the time
-    // has reached the desired end time. Every 5 time steps, we compute a new    
+    // has reached the desired end time. Every 5 time steps, we compute a new
     // estimate for the time step -- since the solution is nonlinear, it is
     // most effective to adapt the value during the course of the
     // simulation. In case the Courant number was chosen too aggressively, the
@@ -1605,29 +1593,25 @@ int main(int argc, char **argv)
       IO::CommandLineParser prs;
       prs.parse_command_line(argc, argv);
 
-      // We define `ParameterHandler` and `ParameterReader` objects, and let the latter 
+      // We define `ParameterHandler` and `ParameterReader` objects, and let the latter
       // read in the parameter values from a configuration textfile. The values so
       // read are then handed over to an instance of the OceanoProblem class:
       IO::ParameterHandler prm;
-      IO::ParameterReader  param(prm);      
+      IO::ParameterReader  param(prm);
       param.read_parameters(argv[2]);
 
       // The boundary condition class is the only class declared as a pointer.
-      // This is because we want to realize run-time polymrophism. In the base class 
-      // there are defined a bunch of members that are needed for all the test cases. 
-      // Next, the pointer is allocated as a derived class specific 
-      // to the test-case which will override the boundary conditions. 
+      // This is because we want to realize run-time polymrophism. In the base class
+      // there are defined a bunch of members that are needed for all the test cases.
+      // Next, the pointer is allocated as a derived class specific
+      // to the test-case which will override the boundary conditions.
       // The pointer is easily pass as argument to the `OceanoProblem` class.
       ICBC::BcBase<dimension, n_variables> *bc;
       // The switch between the different test-cases is realized with Preprocessor keys.
       // The choice to use a Preprocessor also for the boundary conditions is because we
       // use it for the initial condition and we have mantained the same directive 
       // to easily switch both initial and boundary conditions depending on the test-case.
-#if defined ICBC_ISENTROPICVORTEX
-      bc = new ICBC::BcIsentropicVortex<dimension, n_variables>(prm);
-#elif defined ICBC_FLOWAROUNDCYLINDER
-      bc = new ICBC::BcFlowAroundCylinder<dimension, n_variables>(prm);
-#elif defined ICBC_IMPULSIVEWAVE
+#if defined ICBC_IMPULSIVEWAVE
       bc = new ICBC::BcImpulsiveWave<dimension, n_variables>(prm);
 #elif defined ICBC_SHALLOWWATERVORTEX
       bc = new ICBC::BcShallowWaterVortex<dimension, n_variables>(prm);
@@ -1646,15 +1630,15 @@ int main(int argc, char **argv)
 #else
       Assert(false, ExcNotImplemented());
       return 0.;
-#endif 
-      
+#endif
+
       // The OceanoProblem class takes as argument the only two classes that have been
       // previously defined and that are filled at runtime. One is the pointer class
       // for the boundary conditions, the other is a reference to the parameter
-      // class to read the paramteres from an external config file.     
+      // class to read the paramteres from an external config file.
       OceanoProblem<dimension, n_tracers> oceano_problem(prm, bc);
       oceano_problem.run();
-      
+
       delete bc;
     }
   catch (std::exception &exc)
