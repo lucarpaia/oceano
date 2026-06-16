@@ -55,9 +55,9 @@
 
 // The following files include the oceano libraries
 #if defined MODEL_SHALLOWWATER
-#include <model/ShallowWater.h>
+#include <model/shallow_water/ShallowWater.h>
 #elif defined MODEL_SHALLOWWATERWITHTRACER
-#include <model/ShallowWaterWithTracer.h>
+#include <model/shallow_water_with_tracer/ShallowWaterWithTracer.h>
 #endif
 #include <numerical_flux/LaxFriedrichsModified.h>
 #include <numerical_flux/HartenVanLeer.h>

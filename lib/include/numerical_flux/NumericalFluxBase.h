@@ -21,7 +21,7 @@
 
 // The following files include the oceano libraries
 #if defined MODEL_SHALLOWWATER
-#include <model/ShallowWater.h>
+#include <model/shallow_water/ShallowWater.h>
 #endif
 
 /**

@@ -20,10 +20,10 @@
 
 // The following files include the oceano libraries
 #include <io/ParameterReader.h>
-#include <physics/BottomFriction.h>
-#include <physics/WindStress.h>
-#include <physics/ViscosityCoefficient.h>
-#include <physics/Coriolis.h>
+#include <model/shallow_water/physics/BottomFriction.h>
+#include <model/shallow_water/physics/WindStress.h>
+#include <model/shallow_water/physics/ViscosityCoefficient.h>
+#include <model/shallow_water/physics/Coriolis.h>
 
 /**
  * Namespace containing the model equations.

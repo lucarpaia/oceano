@@ -19,8 +19,8 @@
 #define SHALLOWWATERWITHTRACER_H
 
 // The following files include the oceano libraries
-#include <model/ShallowWater.h>
-#include <physics/DiffusionCoefficient.h>
+#include <model/shallow_water/ShallowWater.h>
+#include <model/shallow_water_with_tracer/physics/DiffusionCoefficient.h>
 
 /**
  * Namespace containing the model equations.
