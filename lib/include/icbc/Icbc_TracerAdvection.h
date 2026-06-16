@@ -59,7 +59,7 @@ namespace ICBC
   {
   public:
     ProblemData(IO::ParameterHandler &prm);
-    ~ProblemData(){};
+    ~ProblemData() = default;
 
     virtual double value(const Point<dim> & p,
                          const unsigned int component = 0) const override;
@@ -94,6 +94,7 @@ namespace ICBC
                   IO::ParameterHandler &/*prm*/)
       : Function<dim>(n_vars, time)
     {}
+    ~ExactSolution() = default;
 
     virtual double value(const Point<dim> & p,
                          const unsigned int component = 0) const override;
@@ -161,7 +162,7 @@ namespace ICBC
     BcTracerAdvection(IO::ParameterHandler &prm)
       : prm(prm)
     {}
-    ~BcTracerAdvection(){};
+    ~BcTracerAdvection() = default;
 
     void set_boundary_conditions() override;
 

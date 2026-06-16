@@ -56,7 +56,7 @@ namespace NumericalFlux
   {
   public:
     LaxFriedrichsModified(IO::ParameterHandler &param);
-    ~LaxFriedrichsModified(){};
+    ~LaxFriedrichsModified() = default;
 
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //

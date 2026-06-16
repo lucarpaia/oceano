@@ -41,6 +41,8 @@ namespace IO
   {
   public:
     ParameterReader(ParameterHandler &);
+    ~ParameterReader() = default;
+
     void read_parameters(const std::string &);
 
   private:

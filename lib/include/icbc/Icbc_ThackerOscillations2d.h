@@ -60,7 +60,7 @@ namespace ICBC
   {
   public:
     ProblemData(IO::ParameterHandler &prm);
-    ~ProblemData(){};
+    ~ProblemData() = default;
 
     inline double thackerOscillations2d_bathymetry(const Point<dim> & p) const;
 
@@ -132,6 +132,7 @@ namespace ICBC
       g = prm.get_double("g");
       prm.leave_subsection();
     }
+    ~ExactSolution() = default;
 
     virtual double value(const Point<dim> & p,
                          const unsigned int component = 0) const override;
@@ -206,7 +207,7 @@ namespace ICBC
     Ic(IO::ParameterHandler &prm)
       : ExactSolution<dim, n_vars>(0.,prm)
     {}
-    ~Ic(){};
+    ~Ic() = default;
   };
 
 
@@ -221,7 +222,7 @@ namespace ICBC
     BcThackerOscillations2d(IO::ParameterHandler &prm)
       : prm(prm)
     {}
-    ~BcThackerOscillations2d(){};
+    ~BcThackerOscillations2d() = default;
 
     void set_boundary_conditions() override;
 

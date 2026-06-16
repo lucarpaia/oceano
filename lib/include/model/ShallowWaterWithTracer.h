@@ -48,7 +48,7 @@ namespace Model
   {
   public:
     ShallowWaterWithTracer(IO::ParameterHandler &prm);
-    ~ShallowWaterWithTracer(){};
+    ~ShallowWaterWithTracer() = default;
 
 #if defined PHYSICS_DIFFUSIONCOEFFICIENTCONSTANT
     Physics::DiffusionCoefficientConstant diffusion_coefficient;

@@ -67,7 +67,7 @@ namespace ICBC
   {
   public:
     ProblemData(IO::ParameterHandler &prm);
-    ~ProblemData(){};
+    ~ProblemData() = default;
 
     double f0;
     double beta;
@@ -143,6 +143,7 @@ namespace ICBC
       g = prm.get_double("g");
       prm.leave_subsection();
     }
+    ~ExactSolution() = default;
 
     virtual double value(const Point<dim> & p,
                          const unsigned int component = 0) const override;
@@ -210,7 +211,7 @@ namespace ICBC
     Ic(IO::ParameterHandler &/*prm*/)
       : Function<dim>(n_vars, 0.)
     {}
-    ~Ic(){};
+    ~Ic() = default;
 
     virtual double value(const Point<dim> & p,
                          const unsigned int component = 0) const override;
@@ -240,7 +241,7 @@ namespace ICBC
   public:
 
     BcStommelGyre(IO::ParameterHandler &/*prm*/){};
-    ~BcStommelGyre(){};
+    ~BcStommelGyre() = default;
 
     void set_boundary_conditions() override;
 

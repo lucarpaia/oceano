@@ -66,7 +66,7 @@ namespace NumericalFlux
   {
   public:
     NumericalFluxBase(IO::ParameterHandler &param);
-    ~NumericalFluxBase(){};
+    ~NumericalFluxBase() = default;
 
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //

@@ -166,6 +166,7 @@ namespace SpaceDiscretization
                    ICBC::BcBase<dim, 1+dim+n_tra> *bc,
                    TimerOutput               &timer_output,
                    const unsigned int         max_iteration_height);
+    ~OceanoOperator() = default;
 
     void reinit(const Mapping<dim> &   mapping,
                 const DoFHandler<dim> &dof_handler_height,

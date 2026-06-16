@@ -70,7 +70,7 @@ namespace ICBC
   {
   public:
     ProblemData(IO::ParameterHandler &prm);
-    ~ProblemData(){};
+    ~ProblemData() = default;
 
     virtual double value(const Point<dim> & p,
                          const unsigned int component = 0) const override;
@@ -127,6 +127,7 @@ namespace ICBC
       g = prm.get_double("g");
       prm.leave_subsection();
     }
+    ~ExactSolution() = default;
 
     virtual double value(const Point<dim> & p,
                          const unsigned int component = 0) const override;
@@ -237,7 +238,7 @@ namespace ICBC
     Ic(IO::ParameterHandler &prm)
       : ExactSolution<dim, n_vars>(0.,prm)
     {}
-    ~Ic(){};
+    ~Ic() = default;
   };
 
 
@@ -250,7 +251,7 @@ namespace ICBC
     BcShallowWaterVortex(IO::ParameterHandler &prm)
       : prm(prm)
     {}
-    ~BcShallowWaterVortex(){};
+    ~BcShallowWaterVortex() = default;
 
     void set_boundary_conditions() override;
 

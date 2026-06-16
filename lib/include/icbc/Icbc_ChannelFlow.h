@@ -86,7 +86,7 @@ namespace ICBC
   {
   public:
     ProblemData(IO::ParameterHandler &prm);
-    ~ProblemData(){};
+    ~ProblemData() = default;
 
     inline double channelFlow_bathymetry(const Point<dim> & p) const;
 
@@ -168,7 +168,7 @@ namespace ICBC
     BoundaryData()
       : Function<dim>(n_vars, 0.)
     {}
-    ~BoundaryData(){};
+    ~BoundaryData() = default;
 
     virtual double value(const Point<dim> & p,
                          const unsigned int component = 0) const override;
@@ -223,6 +223,7 @@ namespace ICBC
                              data_reader.n_intervals.back()+1,
                              data_reader.get_data(data_reader.filename).begin()))
     {}
+    ~ExactSolution() = default;
 
     virtual double value(const Point<dim> & p,
                          const unsigned int component = 0) const override;
@@ -287,7 +288,7 @@ namespace ICBC
       g = prm.get_double("g");
       prm.leave_subsection();
     }
-    ~Ic(){};
+    ~Ic() = default;
 
     virtual double value(const Point<dim> & p,
                          const unsigned int component = 0) const override;
@@ -324,7 +325,7 @@ namespace ICBC
   public:
 
     BcChannelFlow(IO::ParameterHandler &prm);
-    ~BcChannelFlow(){};
+    ~BcChannelFlow() = default;
 
     void set_boundary_conditions() override;
 

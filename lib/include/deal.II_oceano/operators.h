@@ -65,6 +65,11 @@ namespace MatrixFreeOperatorsOceano
                              VectorizedArrayType> &fe_eval);
 
     /**
+     * Default destructor.
+     */
+    ~CellwiseInverseMassMatrix() = default;
+
+    /**
      * Applies the inverse @ref GlossMassMatrix "mass matrix" operation on an input array and
      * assign it to an output array. It is assumed that the passed input and output pointers are
      * of correct size, namely FEEvaluation::dofs_per_cell long for input/output and
@@ -73,6 +78,12 @@ namespace MatrixFreeOperatorsOceano
      * does not check the mask.
      * To call this function vectorized lanes must be unrolled, as we pass the cell index in the
      * batch lane in the last argument.
+     *
+     * @param mass_array mass matrix
+     * @param in_array input vector
+     * @param out_array output vector
+     * @param cell_in_lane cell index in lane
+     * @param mask cell is masked?
      */
     void apply(const VectorizedArrayType *mass_array,
                const VectorizedArrayType *in_array,
@@ -205,6 +216,11 @@ namespace MatrixFreeOperatorsOceano
      * we store only the diagonal. We track the singular case
      * with a `compare_and_apply_mask<SIMDComparison::less_than>` that check if the cell has
      * been masked. The default behaviour does not check the mask.
+     *
+     * @param mass_array mass matrix
+     * @param in_array input vector
+     * @param out_array output vector
+     * @param mask cell is masked?
      */
     void apply(const VectorizedArrayType *mass_array,
                const VectorizedArrayType *in_array,

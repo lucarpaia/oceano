@@ -46,8 +46,8 @@ namespace ICBC
   {
   public:
 
-    BcBase(){};
-    virtual ~BcBase(){};
+    BcBase() = default;
+    virtual ~BcBase() = default;
 
     // The next members are for the functions that appears into the boundary
     // conditions or into the forcing terms. They are defined with the help of the

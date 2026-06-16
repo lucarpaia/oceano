@@ -284,6 +284,7 @@ namespace Problem
   public:
     OceanoProblem(IO::ParameterHandler           &,
                   ICBC::BcBase<dim, 1+dim+n_tra> *bc);
+    ~OceanoProblem() = default;
 
     void run();
 
@@ -339,6 +340,7 @@ namespace Problem
     public:
       Postprocessor(IO::ParameterHandler     &param,
                     std::vector<std::string>  postproc_vars_name);
+      ~Postprocessor() = default;
 
       ParameterHandler &prm;
 

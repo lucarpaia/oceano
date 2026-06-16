@@ -56,7 +56,7 @@ namespace TimeIntegrator
   {
   public:
     ExplicitRungeKuttaIntegrator(const ExplicitRungeKuttaScheme scheme);
-    ~ExplicitRungeKuttaIntegrator(){};
+    ~ExplicitRungeKuttaIntegrator() = default;
 
     unsigned int n_stages() const
     {

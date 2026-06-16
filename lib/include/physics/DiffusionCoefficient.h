@@ -37,7 +37,7 @@ namespace Physics
   {
   public:
     DiffusionCoefficientBase(IO::ParameterHandler &prm);
-    ~DiffusionCoefficientBase(){};
+    ~DiffusionCoefficientBase() = default;
 
     double c_m;
 

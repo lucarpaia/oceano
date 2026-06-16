@@ -80,7 +80,7 @@ namespace TimeIntegrator
   {
   public:
     AdditiveRungeKuttaIntegrator(const AdditiveRungeKuttaScheme scheme);
-    ~AdditiveRungeKuttaIntegrator(){};
+    ~AdditiveRungeKuttaIntegrator() = default;
 
     unsigned int n_stages() const
     {

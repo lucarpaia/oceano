@@ -39,12 +39,12 @@ public:
   /**
    * Default constructor.
    */
-  CellDataStorage(){};
+  CellDataStorage() = default;
 
   /**
    * Default destructor.
    */
-  ~CellDataStorage(){};
+  ~CellDataStorage() = default;
 
   /**
    * Initialize class members, in particular the number of objects to be
@@ -66,7 +66,7 @@ public:
    * This function has to be called on every point where data is to be
    * stored.
    *
-   * GO: @param data_point datum to be stored
+   * @param data_point datum to be stored
    */
   void submit_data(const DataType data_point)
   {

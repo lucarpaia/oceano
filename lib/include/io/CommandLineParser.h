@@ -33,7 +33,9 @@ namespace IO
   class CommandLineParser
   {
   public:
-    CommandLineParser(){}
+    CommandLineParser() = default;
+    ~CommandLineParser() = default;
+
     void parse_command_line(int argc, char **argv);
 
   private:

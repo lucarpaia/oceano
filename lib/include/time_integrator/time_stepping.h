@@ -86,6 +86,10 @@ namespace TimeSteppingOceano
      */
     ExplicitRungeKutta(const runge_kutta_method_oceano method);
     /**
+     * Destructor
+     */
+    ~ExplicitRungeKutta() = default;
+    /**
      * Initialize the explicit Runge-Kutta method.
      */
     void

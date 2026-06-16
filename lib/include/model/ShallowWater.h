@@ -92,7 +92,7 @@ namespace Model
   {
   public:
     ShallowWater(IO::ParameterHandler &prm);
-    ~ShallowWater(){};
+    ~ShallowWater() = default;
 
     double g;
     double cu4;

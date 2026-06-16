@@ -58,7 +58,7 @@ namespace IO
   {
   public:
     TxtDataReader(std::string filename);
-    ~TxtDataReader(){};
+    ~TxtDataReader() = default;
 
     std::string filename;
 

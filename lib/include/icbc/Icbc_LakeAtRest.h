@@ -86,7 +86,7 @@ namespace ICBC
   {
   public:
     ProblemData(IO::ParameterHandler &prm);
-    ~ProblemData(){};
+    ~ProblemData() = default;
 
     inline double lakeAtRest_bathymetry(const Point<dim> & p) const;
 
@@ -145,6 +145,7 @@ namespace ICBC
                   IO::ParameterHandler &/*prm*/)
       : Function<dim>(n_vars, time)
     {}
+    ~ExactSolution() = default;
 
     virtual double value(const Point<dim> & p,
                          const unsigned int component = 0) const override;
@@ -181,7 +182,7 @@ namespace ICBC
     Ic(IO::ParameterHandler &/*prm*/)
       : Function<dim>(n_vars, 0.)
     {}
-    ~Ic(){};
+    ~Ic() = default;
 
     virtual double value(const Point<dim> & p,
                          const unsigned int component = 0) const override;
@@ -218,7 +219,7 @@ namespace ICBC
     BcLakeAtRest(IO::ParameterHandler &prm)
       : prm(prm)
     {}
-    ~BcLakeAtRest(){};
+    ~BcLakeAtRest() = default;
 
     void set_boundary_conditions() override;
 

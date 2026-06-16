@@ -37,7 +37,7 @@ namespace Physics
   {
   public:
     BottomFrictionBase(IO::ParameterHandler &prm);
-    ~BottomFrictionBase(){};
+    ~BottomFrictionBase() = default;
 
     double g;
 

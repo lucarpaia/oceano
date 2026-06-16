@@ -74,7 +74,7 @@ namespace ICBC
   {
   public:
     ProblemData(IO::ParameterHandler &prm);
-    ~ProblemData(){};
+    ~ProblemData() = default;
 
     virtual double value(const Point<dim> & p,
                          const unsigned int component = 0) const override;
@@ -141,6 +141,7 @@ namespace ICBC
                   IO::ParameterHandler &/*prm*/)
       : Function<dim>(n_vars, time)
     {}
+    ~ExactSolution() = default;
 
     virtual double value(const Point<dim> & p,
                          const unsigned int component = 0) const override;
@@ -176,7 +177,7 @@ namespace ICBC
   public:
     BoundaryData(const double                   time,
                  const std::vector<std::string> boundary_filenames);
-    ~BoundaryData(){};
+    ~BoundaryData() = default;
 
     virtual double value(const Point<dim> & p,
                          const unsigned int component = 0) const override;
@@ -258,7 +259,7 @@ namespace ICBC
   {
   public:
     Ic(IO::ParameterHandler &prm);
-    ~Ic(){};
+    ~Ic() = default;
 
     virtual double value(const Point<dim> & p,
                          const unsigned int component = 0) const override;
@@ -345,7 +346,7 @@ namespace ICBC
   public:
 
     BcRealistic(IO::ParameterHandler &prm);
-    ~BcRealistic(){};
+    ~BcRealistic() = default;
 
     void set_boundary_conditions() override;
 

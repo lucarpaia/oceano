@@ -45,7 +45,7 @@ namespace Physics
   {
   public:
     ViscosityCoefficientBase(IO::ParameterHandler &prm);
-    ~ViscosityCoefficientBase(){};
+    ~ViscosityCoefficientBase() = default;
 
     double c_m;
 

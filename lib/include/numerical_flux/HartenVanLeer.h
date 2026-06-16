@@ -37,7 +37,7 @@ namespace NumericalFlux
   {
   public:
     HartenVanLeer(IO::ParameterHandler &param);
-    ~HartenVanLeer(){};
+    ~HartenVanLeer() = default;
 
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //

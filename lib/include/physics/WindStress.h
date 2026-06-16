@@ -39,7 +39,7 @@ namespace Physics
   {
   public:
     WindStressBase(IO::ParameterHandler &prm);
-    ~WindStressBase(){};
+    ~WindStressBase() = default;
 
     double cd;
     double air_density;

@@ -36,7 +36,7 @@ namespace Physics
   {
   public:
     CoriolisBase();
-    ~CoriolisBase(){};
+    ~CoriolisBase() = default;
 
 
 

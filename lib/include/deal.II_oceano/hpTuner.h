@@ -81,9 +81,9 @@ namespace hpOceano
     /**
      * Default destructor.
      */
-    ~hpTuner(){};
+    ~hpTuner() = default;
 
-    double remesh_tick;
+    double remesh_tick;                     /*!< time frequency for refining the mesh */
     float threshold_mesh_refinement;        /*!< Threshold for refining the mesh */
     float threshold_mesh_coarsening;        /*!< Threshold for coarsening the mesh */
     float min_mesh_size;                    /*!< Minimum resolution to be always employed */
@@ -91,9 +91,18 @@ namespace hpOceano
     unsigned int min_level_mesh_refinement; /*!< Minimum number of levels to be always employed */
     std::string refinement_filename;        /*!< Filename containing error estimate/refinement criteria */
 
-    double redegree_tick;
+    double redegree_tick;                   /*!< time frequency for reducing polynomial degree */
     float threshold_degree_coarsening;      /*!< Threshold to reduce polynomial degree to zero */
 
+  /**
+   * Compute the error estimate for h-adaptation
+   *
+   * @param fe finite element for the solution vector
+   * @param dof degrees of freedom for the solution vector
+   * @param solution solution vector
+   * @param data function data
+   * @param error_estimate error estimate
+   */
     template <int dim, typename Number>
     void estimate_error(
       const std::vector<hp::FECollection<dim>*>                     &fe,
@@ -102,6 +111,15 @@ namespace hpOceano
       const Function<dim>                                           &data,
       Vector<float>                                                 &error_estimate) const;
 
+  /**
+   * Compute the smoothness estimate for p-adaptation
+   *
+   * @param fe finite element for the solution vector
+   * @param dof degrees of freedom for the solution vector
+   * @param solution solution vector
+   * @param data function data
+   * @param smoothness_estimate smoothness estimate
+   */
     template <int dim, typename Number>
     void estimate_smoothness(
       const hp::FECollection<dim>*                      fe,
