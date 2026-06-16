@@ -1436,7 +1436,7 @@ namespace SpaceDiscretization
         AlignedVector<VectorizedArray<Number>> rhs_cell(dofs_per_cell);
         AlignedVector<VectorizedArray<Number>> residual_cell(dofs_per_cell);
 
-        for (unsigned int k = 0; (k < max_iteration_height) && (norm_rhs_in_lane > 1e-16); ++k)
+        for (unsigned int k = 0; (k < max_iteration_height) && (norm_rhs_in_lane > 1e-12); ++k)
           {
             phi_height.read_dof_values(src);
 
