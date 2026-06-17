@@ -58,6 +58,8 @@
 #include <model/shallow_water/ShallowWater.h>
 #elif defined MODEL_SHALLOWWATERWITHTRACER
 #include <model/shallow_water_with_tracer/ShallowWaterWithTracer.h>
+#elif defined MODEL_SHALLOWWATERWITHSEDIMENT
+#include <model/shallow_water_with_sediment/ShallowWaterWithSediment.h>
 #endif
 #include <numerical_flux/LaxFriedrichsModified.h>
 #include <numerical_flux/HartenVanLeer.h>
@@ -267,6 +269,8 @@ namespace SpaceDiscretization
     Model::ShallowWater model;
 #elif defined MODEL_SHALLOWWATERWITHTRACER
     Model::ShallowWaterWithTracer model;
+#elif defined MODEL_SHALLOWWATERWITHSEDIMENT
+    Model::ShallowWaterWithSediment model;
 #else
     Assert(false, ExcNotImplemented());
     return 0.;

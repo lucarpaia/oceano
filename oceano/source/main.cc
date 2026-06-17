@@ -60,6 +60,7 @@
 // plus tracers:
 #define MODEL_SHALLOWWATER
 #undef  MODEL_SHALLOWWATERWITHTRACER
+#undef  MODEL_SHALLOWWATERWITHSEDIMENT
 // Next come the physics. With the following cpp keys one can switch between the different
 // formulations of a given term in the right-hand side of the shallow water equations.
 // For the bottom friction one has two formulations: a simple linear bottom friction and
@@ -102,7 +103,7 @@
 // the code more complex to read but, at the same time, they make the implementation more
 // flexible, avoiding to define a new class for each new functionality.
 #undef  OCEANO_WITH_TRACERS
-#if defined MODEL_SHALLOWWATERWITHTRACER
+#if defined MODEL_SHALLOWWATERWITHTRACER || defined MODEL_SHALLOWWATERWITHSEDIMENT
 #define OCEANO_WITH_TRACERS
 #endif
 // Activate global mass conservation checks:
@@ -214,7 +215,7 @@ namespace Problem
   // want to use for the volume terms:
   constexpr unsigned int n_q_points_1d        = floor(1.5*fe_degree) + 1;
   // The number of tracers:
-#if defined MODEL_SHALLOWWATERWITHTRACER
+#if defined OCEANO_WITH_TRACERS
   constexpr unsigned int n_tracers            = 1;
 #endif
   // and the maximum number of iterations for the iterative method that invert the
