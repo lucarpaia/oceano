@@ -232,6 +232,29 @@ namespace IO
                         "Depth threshold used in the de-singularizing of"
                         "the velocity computation: below the threshold"
                         "the division the division is avoided.");
+
+      prm.declare_entry("water_kinematic_viscosity",
+                        "1.e-6",
+                         Patterns::Double(0),
+                         "Water kinematic viscosity");
+
+      // The next parameter are used in the sediment equations.
+      // The default sediment diameter $d50 = 2\times10^-4 m = 0.2 mm$,
+      // is representative of medium-sized quartz sand.
+      prm.declare_entry("sediment_diameter",
+                        "2.e-4",
+                         Patterns::Double(0.0),
+                         "Median sediment diameter d50 [m]");
+
+      // As before, the default default sediment density value,
+      // $2650 kg/m^3$ is typical density of quartz sediment grains.
+      // These defaults are widely used in sediment transport models,
+      //when no site-specific grain-size distribution is available.
+      prm.declare_entry("sediment_density",
+                        "2650.0",
+                         Patterns::Double(0.0),
+                         "Sediment grain density");
+
     }
     prm.leave_subsection();
 

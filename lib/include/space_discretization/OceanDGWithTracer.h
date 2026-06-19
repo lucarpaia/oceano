@@ -324,10 +324,15 @@ namespace SpaceDiscretization
             const auto dt_q = phi_tracer.get_gradient(q);
             const auto du_q = phi_velocity.get_gradient(q);
             const auto zb_q = data_quadrature_cell_0.get_data(cell, q)[0];
+            const auto cf_q = data_quadrature_cell_0.get_data(cell, q)[1];
 
             phi_tracer.submit_gradient(
               model.tracer_advective_diffusive_flux(
                 z_q, q_q, t_q, du_q, dt_q, zb_q, area_cell),
+              q);
+
+            phi_tracer.submit_value(
+              model.tracer_source(z_q, q_q, t_q, zb_q, cf_q),
               q);
           }
 

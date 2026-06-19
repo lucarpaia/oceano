@@ -118,18 +118,40 @@ namespace Model
         const Tensor<1, dim, Number>   &gradient_tracer,
         const Number                    bathymetry,
         const Number                    area) const;
+
+    template <int dim, int n_tra, typename Number>
+    inline DEAL_II_ALWAYS_INLINE //
+      Tensor<1, n_tra, Number>
+      tracer_source(
+        const Number                    height,
+        const Tensor<1, dim, Number>   &discharge,
+        const Tensor<1, n_tra, Number> &tracer,
+        const Number                    bathymetry,
+        const Number                    drag_coefficient) const;
+
+    template <int dim, typename Number>
+    inline DEAL_II_ALWAYS_INLINE //
+      Number
+      tracer_source(
+        const Number                    height,
+        const Tensor<1, dim, Number>   &discharge,
+        const Number                    tracer,
+        const Number                    bathymetry,
+        const Number                    drag_coefficient) const;
   };
 
 
 
   // Similarly to the base class we have the class constructor
   // and similar class members that implement prognostic variables,
-  // advective and diffusive fluxes, etc ...
+  // advective and diffusive fluxes, source etc ...
   // The specificity here is that we duplicate/triplicate the flux
-  // functions. The duplication is resolved with an overloading depending
-  // the return data type and allows to handle the case of one single
-  // tracer (with data type Number) and multiple tracers (with data type
-  // Tensor<1, dim, Number>) without an `if` statement.
+  // and source functions. The duplication is resolved with an overloading
+  // single depending the return data type and allows to handle the case of
+  // one tracer (with data type Number) and multiple tracers (with data
+  // type Tensor<1, dim, Number>) without an `if` statement.
+  // The source term is set to zero, as this class is intended only to
+  // model passive tracers.
   ShallowWaterWithTracer::ShallowWaterWithTracer(
     IO::ParameterHandler &prm)
     : ShallowWater(prm)
@@ -238,6 +260,32 @@ namespace Model
     return tracer * discharge
       - diffusion_coefficient.value<dim, Number>(gradient_velocity, area)
         * h * gradient_tracer;
+  }
+
+  template <int dim, int n_tra, typename Number>
+  inline DEAL_II_ALWAYS_INLINE //
+    Tensor<1, n_tra, Number>
+    ShallowWaterWithTracer::tracer_source(
+      const Number                    /*height*/,
+      const Tensor<1, dim, Number>   &/*discharge*/,
+      const Tensor<1, n_tra, Number> &/*tracer*/,
+      const Number                    /*bathymetry*/,
+      const Number                    /*drag_coefficient*/) const
+  {
+    return Tensor<1, n_tra, Number>();
+  }
+
+  template <int dim, typename Number>
+  inline DEAL_II_ALWAYS_INLINE //
+    Number
+    ShallowWaterWithTracer::tracer_source(
+      const Number                    /*height*/,
+      const Tensor<1, dim, Number>   &/*discharge*/,
+      const Number                    /*tracer*/,
+      const Number                    /*bathymetry*/,
+      const Number                    /*drag_coefficient*/) const
+  {
+    return Number(0.);
   }
 } // namespace Model
 #endif //SHALLOWWATERWITHTRACER_H

@@ -67,22 +67,6 @@ namespace Model
   // may not have figured it out by themselves but where we know for sure that
   // inlining is a win.)
   //
-  // Another trick we apply is a separate variable for the inverse depth
-  // $\frac{1}{h}$. This enables the compiler to only perform a single
-  // division for the flux, despite the division being used at several
-  // places. As divisions are around ten to twenty times as expensive as
-  // multiplications or additions, avoiding redundant divisions is crucial for
-  // performance. We note that taking the inverse first and later multiplying
-  // with it is not equivalent to a division in floating point arithmetic due
-  // to roundoff effects, so the compiler is not allowed to exchange one way by
-  // the other with standard optimization flags. However, it is also not
-  // particularly difficult to write the code in the right way.
-  //
-  // To summarize, the chosen strategy of always inlining and careful
-  // definition of expensive arithmetic operations allows us to write compact
-  // code without passing all intermediate results around, despite making sure
-  // that the code maps to excellent machine code.
-  //
   // I would have liked to template the model class with <int dim, typename Number>
   // which would have been cleaner. But I was not able to compile the call
   // to the class functions which take `Number` while receive
@@ -277,11 +261,22 @@ namespace Model
   // areas (Kurganov et al.,2007):
   //
   // \begin{equation*}
-  //  \vel = \frac{\disc}{h_{\mathrm{des}}} = \frac{\sqrt{2}h}{\sqrt{\max\left(h^{4},c_u^{4}\right) + h^{4}}}\disc
+  //  \vel = \frac{\disc}{h_{\mathrm{des}}} =
+  //       \frac{\sqrt{2}h}{\sqrt{\max\left(h^{4},c_u^{4}\right) + h^{4}}}\disc
   // \end{equation*}
   //
   // Here, $c_u$ is a test case-dependent small coefficient that will be
   // specified in the corresponding section for each benchmark.
+  // Another trick we apply is a separate variable for the inverse depth
+  // $\frac{1}{h}$. This enables the compiler to only perform a single
+  // division for the flux, despite the division being used at several
+  // places. As divisions are around ten to twenty times as expensive as
+  // multiplications or additions, avoiding redundant divisions is crucial for
+  // performance. We note that taking the inverse first and later multiplying
+  // with it is not equivalent to a division in floating point arithmetic due
+  // to roundoff effects, so the compiler is not allowed to exchange one way by
+  // the other with standard optimization flags. However, it is also not
+  // particularly difficult to write the code in the right way.
   //
   // The constructor of the model class takes as arguments the parameters handler
   // class in order to read the test-case/user dependent parameters. These
