@@ -370,6 +370,7 @@ namespace Problem
       double pointHistory_tick;
       // what
       bool do_solution;
+      bool do_data;
       bool do_pointHistory;
       bool do_integralHistory;
       bool do_error;
@@ -415,6 +416,7 @@ namespace Problem
       }
 
     do_solution        = true;
+    do_data            = true;
     do_pointHistory    = !point_vector.empty();
     do_integralHistory = false;
     do_error           = prm.get_bool("Output_error");
@@ -1177,6 +1179,66 @@ namespace Problem
         postprocessor.output_filename + "_"
         + Utilities::int_to_string(result_number, 3) + ".vtu";
       data_out.write_vtu_in_parallel(filename, MPI_COMM_WORLD);
+    }
+
+    if (postprocessor.do_data)
+    {
+      // At the first output frequency we visualize the static data,
+      // evaluated at the quadrature points, in a separate file. We use a separate
+      // file because deal.ii cannot print to vtu two solution vectors
+      // on different dofs. This file support visualization of the
+      // the sub-grid data as the bathymetry. Since the data can be irregular,
+      // high-order polynomial visualization is disabled. Instead, a piecewise
+      // linear representation on the finer grid created with the support points,
+      // is given.
+      FE_DGQArbitraryNodes<dim> fe_data(QGaussLobatto<1>(fe_degree+2));
+      DoFHandler<dim> dof_handler_data(triangulation);
+      LinearAlgebra::distributed::Vector<Number> data_static;
+
+      dof_handler_data.distribute_dofs(fe_data);
+
+      const IndexSet locally_owned_dofs =
+        dof_handler_data.locally_owned_dofs();
+
+      IndexSet locally_relevant_dofs;
+      DoFTools::extract_locally_relevant_dofs(dof_handler_data,
+                                              locally_relevant_dofs);
+
+      data_static.reinit(locally_owned_dofs,
+                         locally_relevant_dofs,
+                         MPI_COMM_WORLD);
+
+      std::map<unsigned int, Point<dim>> dof_points =
+        DoFTools::map_dofs_to_support_points(mapping, dof_handler_data);
+      IndexSet::ElementIterator index = locally_owned_dofs.begin();
+      for (index=locally_owned_dofs.begin(); index!=locally_owned_dofs.end(); ++index)
+        {
+          data_static(*index) =
+            (*oceano_operator.bc->problem_data).value(dof_points[*index], 0);
+        }
+
+      DataOut<dim>  data_out;
+
+      DataOutBase::VtkFlags flags;
+      flags.write_higher_order_cells = false;
+      data_out.set_flags(flags);
+
+      data_out.attach_dof_handler(dof_handler_data);
+      {
+        data_out.add_data_vector(dof_handler_data,
+                                 data_static,
+                                 "bathymetry");
+      }
+
+      data_out.build_patches(mapping,
+                             fe_degree+1,
+                             DataOut<dim>::curved_inner_cells);
+
+      const std::string filename =
+        postprocessor.output_filename + "_data" + ".vtu";
+      data_out.write_vtu_in_parallel(filename, MPI_COMM_WORLD);
+
+      postprocessor.do_data = false;
     }
 
     if (postprocessor.do_pointHistory)
