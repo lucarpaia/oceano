@@ -307,7 +307,6 @@ namespace Model
       vars_name.push_back("hu");
     for (unsigned int d = 0; d < dim; ++d)
       postproc_vars_name.push_back("velocity");
-    postproc_vars_name.push_back("bathymetry");
   }
 
   template <typename Number>
