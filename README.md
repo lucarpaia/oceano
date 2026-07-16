@@ -24,3 +24,12 @@ and compile with:
 ```
 $ make
 ```
+
+## Quick simulation for the tidal circulations in the Venice Lagoon
+
+Prepare a directory containing the executable ```oceano```, the parameter file ```veniceLagoon.prm``` and the input files: the mesh, the bathymetry and the boundary data.
+The mesh is provided
+```
+$ cd veniceLagoon
+$ mpirun -np 12 oceano -i veniceLagoon.prm
+```
