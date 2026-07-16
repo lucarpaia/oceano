@@ -223,7 +223,7 @@ namespace Problem
   // is fast so a few iterations are enough, for wet cells the iterative method is basically
   // a Jacobi method that allows to go beyond first order mass lumping. Again a few iterations
   // are a good threshold beteween the error constant and computational efficiency:
-  constexpr unsigned int max_iteration_height = 3;
+  constexpr unsigned int max_iteration_height = 15;
   // Next off is the choice of the time integrator scheme: please check the time integrator
   // class to see the list of all possible time integrators:
 #if defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
