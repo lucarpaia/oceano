@@ -1,0 +1,41 @@
+# Listing of Parameters
+# ---------------------
+
+subsection Mesh & hp parameters
+  # Mesh filename in Gmsh format (v>=4.1, with extension)
+  set Mesh_filename = shallowWaterVortex_20x10cells.msh
+
+  # Number of global mesh refinement steps applied to initial coarse grid
+  set Global_level_of_mesh_refinement = 0
+  # Error threshold for mesh refinement (adimensional between 0,1)
+  set Threshold_for_mesh_refinement = 0.000010
+  # Error threshold for mesh coarsening (adimensional between 0,1)
+  set Threshold_for_mesh_coarsening = 0.000005
+  # Maximum grid level for refinement (=1 the mesh is halved, etc ...)
+  set Max_level_of_mesh_refinement = 4
+  # Time interval to remesh
+  set Mesh_adaptation_tick = 0.003
+end
+
+subsection Time parameters
+  # Final time the simulation
+  set Final_time = 0.16666667
+  # Courant number
+  set CFL = 0.45
+end
+
+subsection Physical constants
+  # Wave speed
+  set g     = 9.81
+  # Horizontal viscosity coefficient
+  set horizontal_viscosity = 0.
+end
+
+subsection Output parameters
+  # Name of the output file (without extension)
+  set Output_filename = solution
+  # Time interval to output the solution
+  set Solution_tick = 0.025
+  # Flag if you wish to add the error field with respect to an exact solution
+  set Output_error = true
+end
