@@ -1,0 +1,36 @@
+# Listing of Parameters
+# ---------------------
+
+subsection Mesh & hp parameters
+  # Mesh filename in Gmsh format (v>=4.1, with extension) 
+  set Mesh_filename = channelFlow_10x2cells.msh
+
+  # Global grid level for refinement applied to initial coarse grid
+  set Global_level_of_mesh_refinement = 0
+end
+
+subsection Time parameters
+  # Final time the simulation
+  set Final_time = 3600.
+  # Courant number
+  set CFL = 0.075
+end
+
+subsection Physical constants
+  # Wave speed
+  set g     = 9.81
+end
+
+subsection Input data files
+  # Exact solution filename in structured txt format (extension txt.gz) 
+  set Exact_solution_filename = exactFreeSurface_irregular.txt.gz
+end
+
+subsection Output parameters
+  # Name of the output file (without extension)
+  set Output_filename = solution
+  # Time interval to output the solution 
+  set Solution_tick = 60
+  # Flag if you wish to add the error field with respect to an exact solution
+  set Output_error = true 
+end
