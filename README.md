@@ -27,7 +27,7 @@ make
 
 ## Travelling vortex with AMR
 
-<img width="390" height="278" alt="travelling_vortex_contour" src="https://github.com/user-attachments/assets/920711b4-dd79-4c51-a4ba-30afd7147038" /> <img width="390" height="278" alt="travelling_vortex_msh" src="https://github.com/user-attachments/assets/cb19eefc-757f-4111-ac4b-0ecfeee0f580" />
+<img width="350" height="250" alt="travelling_vortex_contour" src="https://github.com/user-attachments/assets/920711b4-dd79-4c51-a4ba-30afd7147038" /> <img width="350" height="250" alt="travelling_vortex_msh" src="https://github.com/user-attachments/assets/cb19eefc-757f-4111-ac4b-0ecfeee0f580" />
 
 We simulate a compactly supported travelling vortex that satisfies the shallow-water equations with a zero forcing term on the right-hand side.
 Before running the code, some test-specific preprocessor definitions and parameters must be set. Open the file `/oceano/source/main.cpp` and make the following changes:
