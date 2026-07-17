@@ -98,7 +98,9 @@ The figure shows contour plots of the free-surface elevation (left) and the adap
 
 ## Channel flow with sub-grid bathymetry
 
-We now examine the capability of the scheme to represent bathymetric obstacles that are not fully resolved at the grid scale. For this purpose, we consider a steady state solution of the one-dimensional shallow water equations with constant discharge, varying topography and friction. We consider a very coarse two-dimensional mesh with 10 elements along the $x-$direction. For such resolution,
+<img width="350" height="250" alt="plotOverLine_solution008_proje_zeta" src="https://github.com/user-attachments/assets/e310c49f-aba3-4f86-8fbc-6ac07c9ecd93" /> <img width="350" height="250" alt="plotOverLine_solution008_proje_u" src="https://github.com/user-attachments/assets/04438080-3605-4526-aaca-84af68226bef" />
+
+We now examine the capability of the scheme to represent bathymetric obstacles that are not fully resolved at the grid scale. For this purpose, we consider a steady state solution of the one-dimensional shallow water equations with constant discharge, varying topography and friction. We consider a very coarse two-dimensional mesh with 10 elements along the x-direction. For such resolution,
 the obstacles are unresolved at the grid scale.
 
 Before running the code, the test-specific preprocessor and parameters must be set. Open the file `/oceano/source/main.cpp` and make the following changes:
