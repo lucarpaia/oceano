@@ -722,7 +722,7 @@ namespace SpaceDiscretization
     FEEvaluation<dim, -1, n_points_1d, dim, Number> phi_discharge(data,cell_range,1);
     FEEvaluation<dim, -1, n_points_1d, dim, Number> phi_velocity(data,cell_range,1);
 
-    const auto inv_degree = 1./degree;
+    const auto inv_degree = degree > 0 ? 1./(degree*degree) : 0.;
 
     for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
       {
@@ -776,7 +776,7 @@ namespace SpaceDiscretization
     FEEvaluation<dim, -1, n_points_1d, dim, Number> phi_discharge(data,cell_range,1);
     FEEvaluation<dim, -1, n_points_1d, dim, Number> phi_velocity(data,cell_range,1);
 
-    const auto inv_degree = 1./degree;
+    const auto inv_degree = degree > 0 ? 1./(degree*degree) : 0.;
 
     for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
       {
@@ -1520,7 +1520,7 @@ namespace SpaceDiscretization
         // and we iterate to conserve the mass. In both cases convergence is
         // quite fast and we exit, in any case, the loop after maximum three
         // iterations.
-        for (unsigned int k = 0; (k < max_iteration_height) && (norm_rhs_in_lane > 1e-16); ++k)
+        for (unsigned int k = 0; (k < max_iteration_height) && (norm_rhs_in_lane > 1e-12); ++k)
           {
             phi_height.gather_evaluate(dst, EvaluationFlags::values);
 
@@ -2903,8 +2903,6 @@ namespace SpaceDiscretization
                 model.pressure(height, zb);
             else if (postproc_names[v+dim] == "depth")
               computed_scalar_quantities[v](*index) = model.depth(height, zb);
-            else if (postproc_names[v+dim] == "bathymetry")
-              computed_scalar_quantities[v](*index) = zb;
             else if (postproc_names[v+dim] == "speed_of_sound")
               computed_scalar_quantities[v](*index) =
                 std::sqrt(model.square_wavespeed(height, zb));

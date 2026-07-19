@@ -184,8 +184,8 @@
 #include <deal.II_oceano/hpTuner.h>
 
 // The following files are included depending on
-// the Preprocessor keys. This is necessary because 
-// we have done a limited use of virtual classes; on the contrary 
+// the Preprocessor keys. This is necessary because
+// we have done a limited use of virtual classes; on the contrary
 // each of these header files contains the same class definition, so they
 // cannot be linked together.
 #if defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
@@ -240,7 +240,7 @@ namespace Problem
   // is fast so a few iterations are enough, for wet cells the iterative method is basically
   // a Jacobi method that allows to go beyond first order mass lumping. Again a few iterations
   // are a good threshold beteween the error constant and computational efficiency:
-  constexpr unsigned int max_iteration_height = 3;
+  constexpr unsigned int max_iteration_height = 15;
   constexpr unsigned int max_iteration_tracer = 5;
   // Next off is the choice of the time integrator scheme: please check the time integrator
   // class to see the list of all possible time integrators:
@@ -389,6 +389,7 @@ namespace Problem
       double pointHistory_tick;
       // what
       bool do_solution;
+      bool do_data;
       bool do_pointHistory;
       bool do_integralHistory;
       bool do_error;
@@ -434,6 +435,7 @@ namespace Problem
       }
 
     do_solution        = true;
+    do_data            = true;
     do_pointHistory    = !point_vector.empty();
     do_integralHistory = false;
     do_error           = prm.get_bool("Output_error");
@@ -637,7 +639,7 @@ namespace Problem
 
     GridIn<dim> gridin;
     gridin.attach_triangulation(triangulation);
-  
+
     char cwd[1024];
     if (getcwd(cwd, sizeof(cwd)) == NULL)
       ExcInternalError();
@@ -652,7 +654,7 @@ namespace Problem
     std::ifstream f(current_working_directory+slash+file_msh);
     pcout << "Reading mesh file: " << file_msh << std::endl;
     gridin.read_msh(f);
- 
+
     std::locale s = pcout.get_stream().getloc();
     pcout.get_stream().imbue(std::locale(""));
     pcout << "Initial number of cells: " << std::setw(8) << triangulation.n_global_active_cells()
@@ -1001,7 +1003,7 @@ namespace Problem
   // This method collects all the model outputs (to screen and to file).
   // The input argument is the preprocessor class that contains useful
   // tools that help in the outputting.
-  // We examine the outputs one by one. 
+  // We examine the outputs one by one.
   //
   // At the beginning, we may need to reinitialize the data attached to the
   // dofs. Just after we postprocess the solution variables depending on the model
@@ -1210,6 +1212,36 @@ namespace Problem
         postprocessor.output_filename + "_"
         + Utilities::int_to_string(result_number, 3) + ".vtu";
       data_out.write_vtu_in_parallel(filename, MPI_COMM_WORLD);
+    }
+
+    if (postprocessor.do_data)
+    {
+      // At the first output frequency we visualize the static data,
+      // evaluated at the quadrature points, in a separate file. Coherently
+      // with the branch we use a piecewise
+      // polynomial representation of the bathymetry.
+      DataOut<dim>  data_out;
+
+      DataOutBase::VtkFlags flags;
+      flags.write_higher_order_cells = true;
+      data_out.set_flags(flags);
+
+      data_out.attach_dof_handler(dof_handler_height);
+      {
+        data_out.add_data_vector(dof_handler_height,
+                                 data_bathymetry,
+                                 "bathymetry");
+      }
+
+      data_out.build_patches(mapping,
+                             fe_degree+1,
+                             DataOut<dim>::curved_inner_cells);
+
+      const std::string filename =
+        postprocessor.output_filename + "_data" + ".vtu";
+      data_out.write_vtu_in_parallel(filename, MPI_COMM_WORLD);
+
+      postprocessor.do_data = false;
     }
 
     if (postprocessor.do_pointHistory)
