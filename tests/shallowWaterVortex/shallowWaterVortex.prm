@@ -14,7 +14,7 @@ subsection Mesh & hp parameters
   # Maximum grid level for refinement (=1 the mesh is halved, etc ...)
   set Max_level_of_mesh_refinement = 4
   # Time interval to remesh
-  set Mesh_adaptation_tick = 0.003
+  set Mesh_adaptation_tick = 0.002
 end
 
 subsection Time parameters
