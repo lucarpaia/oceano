@@ -163,8 +163,8 @@ The figure shows the free-surface elevation (left) and the velocity (right) whic
 
 ## Thacker parabolic oscillations
 
-<img width="350" height="290" alt="plotOverLine_zeta_low_N100" src="https://github.com/user-attachments/assets/ef65e918-85f8-436d-b6a9-96c814e73b8f" />
-<img width="350" height="290" alt="plot_integralHistory_h" src="https://github.com/user-attachments/assets/e5ab1c42-ec81-4ce5-b055-74f808a2042b" />
+<img width="300" height="250" alt="plotOverLine_zeta_low_N100" src="https://github.com/user-attachments/assets/ef65e918-85f8-436d-b6a9-96c814e73b8f" />
+<img width="300" height="250" alt="plot_integralHistory_h" src="https://github.com/user-attachments/assets/3f130959-81e4-47d9-8fa6-30e895d59af8" />
 
 We consider a periodic solution of the shallow water equations with a wet-dry transition. The free surface consists of a radially symmetric, oscillating paraboloid. Before running the code, the test-specific preprocessor definitions and parameters must be set. Open the file `/oceano/source/main.cpp` and make the following changes:
 
@@ -240,5 +240,4 @@ Time:    6.73, cells:     6400, dt:   0.0089, error free_surface:    0.01032, hu
 | rk_stage hydro - inv mass + vec upd |      2163 |     44.62s     3 |      88.4s |     127.9s     1 |
 +-------------------------------------------------+------------------+------------+------------------+
 ```
-The figure compares the numerical and exact solutions during the last oscillation corresponding to the drying phase. In the same figure, the region close to the
-wet-dry interface where the scheme is reverted to r=0 is also highlighted with a gray line. In figure we show the relative mass conservation error, only two iterations of the Newton method are required to ensure mass conservation within numerical round-off errors associated with double precision arithmetic.
+The figure compares the numerical and exact solutions after three oscillations, which corresponds to a drying phase. In the same figure, the region close to the wet-dry interface where the scheme is reverted to r=0 is also highlighted with a gray line. The code also outputs a gnuplot file with suffix `integralHistory` with the time evolution of the total water mass and the boundary flux. From this file, we produce the right figure, which shows the relative mass conservation error; only two iterations of the Newton method are required to ensure mass conservation within numerical round-off errors associated with double precision arithmetic.
