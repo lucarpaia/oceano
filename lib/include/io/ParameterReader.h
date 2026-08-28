@@ -95,7 +95,7 @@ namespace IO
                         "Time interval we perform mesh adaptation");
 
       // The frequency at which we flag cells for coarsening in wet-dry fronts depend on the test
-      // and on the time step. Differently from h-adaptation, the default value is set to 10 seconds
+      // and on the time step. Differently from h-adaptation, the default value is set to 15 seconds
       // which is a conservative time scale for tracking the wet-dry front in flooding simulations.
       // If you do not want to coarsen the degree just put a very high number and no p-adaptation
       // will be performed.
