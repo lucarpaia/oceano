@@ -163,8 +163,8 @@ The figure shows the free-surface elevation (left) and the velocity (right) whic
 
 ## Thacker parabolic oscillations
 
-<img width="350" height="250" alt="plot_integralHistory_h" src="https://github.com/user-attachments/assets/e5ab1c42-ec81-4ce5-b055-74f808a2042b" />
-<img width="350" height="250" alt="plotOverLine_zeta_low_N100" src="https://github.com/user-attachments/assets/ef65e918-85f8-436d-b6a9-96c814e73b8f" />
+<img width="350" height="290" alt="plotOverLine_zeta_low_N100" src="https://github.com/user-attachments/assets/ef65e918-85f8-436d-b6a9-96c814e73b8f" />
+<img width="350" height="290" alt="plot_integralHistory_h" src="https://github.com/user-attachments/assets/e5ab1c42-ec81-4ce5-b055-74f808a2042b" />
 
 We consider a periodic solution of the shallow water equations with a wet-dry transition. The free surface consists of a radially symmetric, oscillating paraboloid. Before running the code, the test-specific preprocessor definitions and parameters must be set. Open the file `/oceano/source/main.cpp` and make the following changes:
 
