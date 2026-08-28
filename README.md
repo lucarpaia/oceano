@@ -163,6 +163,9 @@ The figure shows the free-surface elevation (left) and the velocity (right) whic
 
 ## Thacker parabolic oscillations
 
+<img width="600" height="500" alt="plot_integralHistory_h" src="https://github.com/user-attachments/assets/e5ab1c42-ec81-4ce5-b055-74f808a2042b" />
+<img width="600" height="500" alt="plotOverLine_zeta_low_N100" src="https://github.com/user-attachments/assets/ef65e918-85f8-436d-b6a9-96c814e73b8f" />
+
 We consider a periodic solution of the shallow water equations with a wet-dry transition. The free surface consists of a radially symmetric, oscillating paraboloid. Before running the code, the test-specific preprocessor definitions and parameters must be set. Open the file `/oceano/source/main.cpp` and make the following changes:
 
 ```cpp
@@ -181,11 +184,9 @@ which activates the mass-conservation diagnostics;
 fe_degree = 1;
 ```
 
-which selects the polynomial degree (`r = 1`).
+which selects the polynomial degree (r=1). The use of higher-order polynomials does not provide significant advantages due to the $\mathcal{C}^1$ regularity of the velocity. After making these changes, recompile the code.
 
-After making these changes, recompile the code.
-
-The directory `tests/thackerOscillations2d` contains the mesh file and the parameter file `thacker2d.prm`. In particular, the latter specifies the coarse mesh file, the mesh-refinement level (resulting in 100 elements in each direction), and the time-integration parameters. It also sets two wet-dry constants: the depth threshold used for polynomial-degree coarsening, set to $h_{\mathrm{lim}} = 10^{-2}\,\mathrm{m}$, and the depth threshold used for velocity desingularization, set to $\epsilon = 10^{-2}\,\mathrm{m}$.
+The directory `tests/thackerOscillations2d` contains the mesh file and the parameter file `thacker2d.prm`. In particular, the latter specifies the coarse mesh file, the mesh-refinement level (resulting in 100 elements in each direction), and the time-integration parameters. It also sets two wet-dry constants: the depth threshold used for polynomial-degree coarsening, set to $h_{\mathrm{lim}} = 10^{-2}\mathrm{m}$, and the depth threshold used for velocity desingularization, set to $\epsilon = 10^{-2}\mathrm{m}$.
 
 To run the test, execute:
 
@@ -239,3 +240,5 @@ Time:    6.73, cells:     6400, dt:   0.0089, error free_surface:    0.01032, hu
 | rk_stage hydro - inv mass + vec upd |      2163 |     44.62s     3 |      88.4s |     127.9s     1 |
 +-------------------------------------------------+------------------+------------+------------------+
 ```
+The figure compares the numerical and exact solutions during the last oscillation corresponding to the drying phase. In the same figure, the region close to the
+wet-dry interface where the scheme is reverted to r=0 is also highlighted with a gray line. In figure we show the relative mass conservation error, only two iterations of the Newton method are required to ensure mass conservation within numerical round-off errors associated with double precision arithmetic.

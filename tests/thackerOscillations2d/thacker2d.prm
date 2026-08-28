@@ -1,0 +1,36 @@
+# Listing of Parameters
+# ---------------------
+
+subsection Mesh & hp parameters
+  # Mesh filename in Gmsh format (v>=4.1, with extension) 
+  set Mesh_filename = thacker2d_25x25cells.msh
+  # Global grid level for refinement applied to initial coarse grid
+  set Global_level_of_mesh_refinement = 2
+  # Error threshold for degree coarsening (dimensional)
+  set Threshold_for_degree_coarsening = 0.01
+  # Error threshold for degree coarsening (dimensional)
+  set Degree_adaptation_tick = 0.0001
+end
+
+subsection Time parameters
+  # Final time the simulation
+  set Final_time = 6.728552198
+  # Courant number
+  set CFL = 0.25
+end
+
+subsection Physical constants
+  # Wave speed
+  set g     = 9.81
+  # Threshold for wetdry
+  set Threshold_for_wetdry = 0.01
+end
+
+subsection Output parameters
+  # Name of the output file (without extension)
+  set Output_filename = solution
+  # Time interval to output the solution 
+  set Solution_tick = 0.560712683
+  # Flag if you wish to add the error field with respect to an exact solution
+  set Output_error = true 
+end
