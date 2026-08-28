@@ -11,7 +11,7 @@ end
 
 subsection Time parameters
   # Final time the simulation
-  set Final_time = 3600.
+  set Final_time = 480.
   # Courant number
   set CFL = 0.075
 end
