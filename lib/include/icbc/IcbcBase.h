@@ -299,7 +299,7 @@ namespace ICBC
   // \item the second is the bottom friction coefficient.
   // \item the third and fourth components are the cartesian components
   // of the wind velocity (in order, eastward and northward).
-  // \item The fifth one is the Coriolis parameter.
+  // \item the fifth one is the Coriolis parameter.
   // end{itemize}
   template <int dim, int n_vars>
   void BcBase<dim, n_vars>::set_problem_data(

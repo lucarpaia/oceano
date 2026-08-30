@@ -195,7 +195,9 @@ namespace Model
         const Number                    height,
         const Tensor<1, dim, Number>   &discharge,
         const Tensor<1, dim, Number>   &gradient_height,
-        const Tensor<1, dim+3, Number> &parameters) const;
+        const Number                    bathymetry,
+        const Number                    drag_coefficient,
+        const Tensor<1, dim+1, Number> &data) const;
 
     // For ImEx time integration strategy, we separate the source term in a stiff and
     // a non-stiff part. For now the stiff part of the source term is only the bottom friction.
@@ -208,7 +210,8 @@ namespace Model
         const Number                    height,
         const Tensor<1, dim, Number>   &discharge,
         const Tensor<1, dim, Number>   &gradient_height,
-        const Tensor<1, dim+3, Number> &parameters) const;
+        const Number                    bathymetry,
+        const Tensor<1, dim+1, Number> &data) const;
 
     template <int dim, typename Number>
     inline DEAL_II_ALWAYS_INLINE //
@@ -409,18 +412,20 @@ namespace Model
       const Number                    height,
       const Tensor<1, dim, Number>   &discharge,
       const Tensor<1, dim, Number>   &gradient_height,
-      const Tensor<1, dim+3, Number> &parameters) const
+      const Number                    bathymetry,
+      const Number                    drag_coefficient,
+      const Tensor<1, dim+1, Number> &data) const
   {
     const Tensor<1, dim, Number> v =
-      velocity<dim>(height, discharge, parameters[0]);
-    const Number h = depth(height, parameters[0]);
+      velocity<dim>(height, discharge, bathymetry);
+    const Number h = depth(height, bathymetry);
 
     const Tensor<1, dim, Number> bottomfric =
-      bottom_friction.source<dim, Number>(v, parameters[1], h);
+      bottom_friction.source<dim, Number>(v, drag_coefficient, h);
     const Tensor<1, dim, Number> windstress =
-      wind_stress.source<dim, Number>(&parameters[2]);
+      wind_stress.source<dim, Number>(&data[0]);
     const Tensor<1, dim, Number> coriolis =
-      coriolis_force.source<dim, Number>(discharge, parameters[4]);
+      coriolis_force.source<dim, Number>(discharge, data[2]);
 
     Tensor<1, dim, Number> source =
         - g * h * gradient_height
@@ -438,14 +443,15 @@ namespace Model
       const Number                    height,
       const Tensor<1, dim, Number>   &discharge,
       const Tensor<1, dim, Number>   &gradient_height,
-      const Tensor<1, dim+3, Number> &parameters) const
+      const Number                    bathymetry,
+      const Tensor<1, dim+1, Number> &data) const
   {
-    const Number h = depth(height, parameters[0]);
+    const Number h = depth(height, bathymetry);
 
     const Tensor<1, dim, Number> windstress =
-      wind_stress.source<dim, Number>(&parameters[2]);
+      wind_stress.source<dim, Number>(&data[0]);
     const Tensor<1, dim, Number> coriolis =
-      coriolis_force.source<dim, Number>(discharge, parameters[4]);
+      coriolis_force.source<dim, Number>(discharge, data[2]);
 
     Tensor<1, dim, Number> source =
         - g * h * gradient_height
