@@ -1816,6 +1816,9 @@ namespace SpaceDiscretization
         i.second->set_time(current_time);
       for (auto &i : bc->discharge_inflow_boundaries)
         i.second->set_time(current_time);
+      for (auto &i : bc->absorbing_outflow_boundaries)
+        i.second->set_time(current_time);
+      bc->problem_data->set_time(current_time);
 
       data.loop(&OceanoOperator::local_apply_cell_height,
                 &OceanoOperator::local_apply_face_height,
@@ -1974,6 +1977,9 @@ namespace SpaceDiscretization
         i.second->set_time(current_time);
       for (auto &i : bc->discharge_inflow_boundaries)
         i.second->set_time(current_time);
+      for (auto &i : bc->absorbing_outflow_boundaries)
+        i.second->set_time(current_time);
+      bc->problem_data->set_time(current_time);
 
       data.loop(&OceanoOperator::local_apply_cell_height,
                 &OceanoOperator::local_apply_face_height,
