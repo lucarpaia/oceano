@@ -33,7 +33,7 @@ make
 
 We consider a coarse mesh of the Venice lagoon with 17,084 elements with the edges aligned to the main channels.
 The mesh resolution varies from 2 km at open sea to 200 m at the inlets and in the main channels. Close to salt marshes
-we use a resolution of 400 m. Smaller salt-marshes and channels are therefore unresolved at such a grid scale. The bathymetry dataset is EMODnet with pixels of size of 15 m (data curation by G.Scarpa, CNR-ISMAR). The video shows the wetting and drying during one tidal cycle, obtained with polynomial degree of r=3. It highlights the potential of the sub-grid approach in reproducing accurately the channels geometry as well as the geometry of the salt-marshes, approximated by coarse elements but with a underlying high-resolution bathymetry. The figure shows a close-up of the circulation at the Lido inlet during flood tide.
+we use a resolution of 400 m. Smaller salt-marshes and channels are therefore unresolved at such a grid scale. The bathymetry dataset is EMODnet with pixels of size of 15 m (data curation by G.Scarpa and S.Pavan, CNR-ISMAR). The video shows the wetting and drying during one tidal cycle, obtained with polynomial degree of r=3. It highlights the potential of the sub-grid approach in reproducing accurately the channels geometry as well as the geometry of the salt-marshes, approximated by coarse elements but with a underlying high-resolution bathymetry. The figure shows a close-up of the circulation at the Lido inlet during flood tide.
 
 ## Travelling vortex with AMR
 
