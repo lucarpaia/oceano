@@ -1,6 +1,6 @@
 # What is this repository about?
 
-It is a finite element shallow water solver for coastal applications based on the deal.ii library. It uses high order discontinuous finite elements and adaptive non-conforming quadrilateral meshes.
+A finite element shallow water solver for coastal applications based on the deal.ii library. It uses high order discontinuous finite elements and adaptive non-conforming quadrilateral meshes.
 
 ## Requirements
 
@@ -24,6 +24,16 @@ and compile with:
 ```bash
 make
 ```
+
+## Salt-marsh dynamics in the Venice Lagoon
+
+<img width="406" height="360" alt="Venice_Lagoon_Wetting_Drying_Final" src="https://github.com/user-attachments/assets/482f0d70-aeeb-407f-a847-d32e13db9f38" />
+<img width="420" height="360" alt="solution_velocity_lido_045" src="https://github.com/user-attachments/assets/e32c357c-196b-49d9-8468-22d173402947" />
+
+
+We consider a coarse mesh of the Venice lagoon with 17,084 elements with the edges aligned to the main channels.
+The mesh resolution varies from 2 km at open sea to 200 m at the inlets and in the main channels. Close to salt marshes
+we use a resolution of 400 m. Smaller salt-marshes and channels are therefore unresolved at such a grid scale. The bathymetry dataset is EMODnet with pixels of size of 15 m (data curation by G.Scarpa, CNR-ISMAR). The video shows the wetting and drying during one tidal cycle, obtained with polynomial degree of r=3. It highlights the potential of the sub-grid approach in reproducing accurately the channels geometry as well as the geometry of the salt-marshes, approximated by coarse elements but with a underlying high-resolution bathymetry. The figure shows a close-up of the circulation at the Lido inlet during flood tide.
 
 ## Travelling vortex with AMR
 
@@ -241,11 +251,3 @@ Time:    6.73, cells:     6400, dt:   0.0089, error free_surface:    0.01032, hu
 +-------------------------------------------------+------------------+------------+------------------+
 ```
 The figure compares the numerical and exact solutions after three oscillations, which corresponds to a drying phase. In the same figure, the region close to the wet-dry interface where the scheme is reverted to r=0 is also highlighted with a gray line. The code also outputs a gnuplot file with suffix `integralHistory` with the time evolution of the total water mass and the boundary flux. From this file, we produce the right figure, which shows the relative mass conservation error; only two iterations of the Newton method are required to ensure mass conservation within numerical round-off errors associated with double precision arithmetic.
-
-## Salt-marsh dynamics in the Venice Lagoon
-
-<img width="500" height="350" alt="github_readme_demo_fast_no_frame0" src="https://github.com/user-attachments/assets/19ea2c6a-9f13-4d06-927e-5d36a9b1b903" />
-
-We consider a coarse mesh of the Venice lagoon with 17,084 elements with the edges aligned to the main channels.
-The mesh resolution varies from 2 km at open sea to 200 m at the inlets and in the main channels. Close to salt marshes
-we use a resolution of 400 m. Smaller salt-marshes and channels are therefore unresolved at such a grid scale. The bathymetry dataset is ETOPO with pixels of size of 15 m. The video shows the wetting and drying during one tidal cycle, obtained with r=3. The video highlights the potential of the sub-grid approach in reproducing accurately the channels geometry as well as the geometry of the salt-marshes, approximated by coarse elements but with a variable high-resolution underlying bathymetry.
