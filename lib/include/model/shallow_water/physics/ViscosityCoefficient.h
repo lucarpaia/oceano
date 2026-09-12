@@ -118,8 +118,8 @@ namespace Physics
   // \nu = C_M |K| \mathcal{S}
   // \]
   // with $C_M=C_S^2$. The parameter $C_M$ is read from the
-  // configuration file. If you take $C_S=0.5$ and a Prandtl number
-  // of $Pr=10$ then we can select a value of `c_m=0.025`.
+  // configuration file. If you take $C_S=0.5$, then we can select a
+  // value of `c_m=0.25`.
   // The strain rate is defined in the book (Turbulent Flows, Pope):
   // \[
   // \mathcal{S} = \sqrt(2*S_{ij}*S_{ij}),
