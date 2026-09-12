@@ -13,13 +13,11 @@
 
  *
  * Author: Luca Arpaia, 2023
- *         Giuseppe Orlando, 2026
  */
 #ifndef SHALLOWWATERWITHSEDIMENT_H
 #define SHALLOWWATERWITHSEDIMENT_H
 
 // The following files include the oceano libraries
-#include <model/shallow_water/ShallowWater.h>
 #include <model/shallow_water_with_tracer/ShallowWaterWithTracer.h>
 #include <model/shallow_water_with_sediment/physics/SettlingVelocity.h>
 #include <model/shallow_water_with_sediment/physics/NearBedConcentration.h>
@@ -107,13 +105,17 @@ namespace Model
     , settling_velocity()
     , near_bed_concentration()
   {
-    prm.enter_subsection("Physical constants");
+    prm.enter_subsection("Sedimentation constants");
     g = prm.get_double("g");
     nu = prm.get_double("water_kinematic_viscosity");
-    d50 = prm.get_double("sediment_diameter");
     rho_water = prm.get_double("water_density");
+    prm.leave_subsection();
+
+    prm.enter_subsection("Physical constants");
+    d50 = prm.get_double("sediment_diameter");
     rho_sediment = prm.get_double("sediment_density");
     prm.leave_subsection();
+
     w_s = settling_velocity.value(g, nu, d50, rho_water, rho_sediment);
     shields_denominator = 1./((rho_sediment/rho_water - 1.) * g * d50);
   }

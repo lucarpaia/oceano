@@ -92,7 +92,7 @@ namespace IO
       // continue with the initial mesh given above.
       prm.declare_entry("Mesh_adaptation_tick",
                         "10000000000.", Patterns::Double(0),
-                        "Time interval we perform mesh adaptation");
+                        "Time interval we perform mesh adaptation [time]");
 
       // The frequency at which we flag cells for coarsening in wet-dry fronts depend on the test
       // and on the time step. Differently from h-adaptation, the default value is set to 15 seconds
@@ -101,7 +101,7 @@ namespace IO
       // will be performed.
       prm.declare_entry("Degree_adaptation_tick",
                         "15.", Patterns::Double(0),
-                        "Time interval we perform degree adaptation");
+                        "Time interval we perform degree adaptation [time]");
 
       // These are the two tresholds for the normalized cellwise error after/below which
       // the cell is marked for refinement/coarsening. The remesh thick is the frequency
@@ -109,12 +109,12 @@ namespace IO
       prm.declare_entry("Threshold_for_mesh_refinement",
                         "0.50", Patterns::Double(0,1),
                         "Normalized error threshold after which a cell "
-                        "is marked for grid refinement");
+                        "is marked for grid refinement [-]");
 
       prm.declare_entry("Threshold_for_mesh_coarsening",
                         "0.25", Patterns::Double(0,1),
                         "Normalized error threshold below which a cell "
-                        "is marked for grid coarsening");
+                        "is marked for grid coarsening [-]");
 
       // The max level of refinement is the
       // maximum grid level. The default value (zero) is important
@@ -159,7 +159,7 @@ namespace IO
       prm.declare_entry("Threshold_for_degree_coarsening",
                         "1e-4", Patterns::Double(0,100000),
                         "Smoothness threshold below which a cell "
-                        "is marked for degree coarsening");
+                        "is marked for degree coarsening [depth]");
      }
     prm.leave_subsection();
 
@@ -169,7 +169,7 @@ namespace IO
     prm.enter_subsection("Time parameters");
     {
       prm.declare_entry("Final_time", "0.0", Patterns::Double(0),
-                        "Final time of the simulation");
+                        "Final time of the simulation [time]");
 
       prm.declare_entry("CFL", "1.0", Patterns::Double(0,10),
                         "Courant number");
@@ -177,74 +177,83 @@ namespace IO
     prm.leave_subsection();
 
     // The next subsection is devoted to the physical parameters appearing
-    // in the equation.
+    // in the hydrodynamics equation.
     // Most of them lies in the half-open interval $[0,\infty)$,
     // represented by calling the `Patterns::Double` class with only the
     // left end-point as argument.
     prm.enter_subsection("Physical constants");
     {
-      prm.declare_entry("g", "9.81", Patterns::Double(0), "Gravity");
+      prm.declare_entry("g",
+                        "9.81",
+                        Patterns::Double(0),
+                        "Gravity [length time^-2]");
 
       prm.declare_entry("water_density",
                         "1025.",
                         Patterns::Double(0),
-                        "Reference water density");
+                        "Reference water density [mass length^-3]");
 
       prm.declare_entry("air_density",
                         "1.225",
                         Patterns::Double(0),
-                        "Air density");
+                        "Air density [mass length^-3]");
 
       prm.declare_entry("wind_drag",
                         "0.0025",
                         Patterns::Double(0),
-                        "Wind drag coefficient");
+                        "Wind drag coefficient [-]");
 
       prm.declare_entry("coriolis_f0",
                         "1e-4",
                         Patterns::Double(0),
-                        "Wind drag coefficient");
+                        "Coriolis parameter f0 [time^-1]");
 
       prm.declare_entry("coriolis_beta",
                         "2e-11",
                         Patterns::Double(0),
-                        "Wind drag coefficient");
+                        "Coriolis beta parameter beta [length^-1 time^-1]");
 
       prm.declare_entry("bottom_friction",
                         "0.0",
                         Patterns::Double(0),
                         "Bottom friction coefficient or Manning number"
-                        "depending on the bottom friction formulation");
+                        "depending on the bottom friction formulation"
+                        "[time length^-1/3]");
 
       prm.declare_entry("horizontal_viscosity",
                         "0.",
                         Patterns::Double(0),
-                        "Horizontal viscosity coefficient");
+                        "Horizontal viscosity coefficient [-]");
 
       prm.declare_entry("horizontal_diffusivity",
                         "0.",
                         Patterns::Double(0),
-                        "Horizontal diffusion coefficient");
+                        "Horizontal diffusion coefficient [-]");
 
       prm.declare_entry("Threshold_for_wetdry",
                         "0.1",
                         Patterns::Double(0),
                         "Depth threshold used in the de-singularizing of"
                         "the velocity computation: below the threshold"
-                        "the division the division is avoided.");
+                        "the division the division is avoided [depth]");
 
       prm.declare_entry("water_kinematic_viscosity",
                         "1.e-6",
                          Patterns::Double(0),
-                         "Water kinematic viscosity");
+                         "Water kinematic viscosity [length^2 time^-1]");
+    }
+    prm.leave_subsection();
 
-      // The next parameter are used in the sediment equations.
+    // The next subsection is devoted to the parameters used
+    // in the sediment source terms.
+    prm.enter_subsection("Sedimentation constants");
+    {
       // The default sediment diameter $d50 = 2\times10^-4 m = 0.2 mm$,
       // is representative of medium-sized quartz sand.
       prm.declare_entry("sediment_diameter",
                         "2.e-4",
                          Patterns::Double(0.0),
-                         "Median sediment diameter d50 [m]");
+                         "Median sediment diameter d50 [length]");
 
       // As before, the default default sediment density value,
       // $2650 kg/m^3$ is typical density of quartz sediment grains.
@@ -253,8 +262,59 @@ namespace IO
       prm.declare_entry("sediment_density",
                         "2650.0",
                          Patterns::Double(0.0),
-                         "Sediment grain density");
+                         "Sediment grain density [mass length^-3]");
 
+    }
+    prm.leave_subsection();
+
+    // The next subsection is devoted to the parameters used
+    // in the biological reactions.
+    prm.enter_subsection("Biological constants");
+    {
+      // The prey intrinsic growth rate
+      // corresponds to a characteristic prey growth time of one day.
+      prm.declare_entry("prey_growth_rate",
+                        "1.0",
+                         Patterns::Double(0.0),
+                         "Prey intrinsic growth rate r [time^-1]");
+
+      // The carrying capacity defines the maximum
+      // prey concentration supported by the environment in the absence
+      // of predation.
+      prm.declare_entry("prey_capacity",
+                        "1.0",
+                         Patterns::Double(0.0),
+                         "Prey carrying capacity K [concentration]");
+
+      // The conversion efficiency represents the
+      // fraction of consumed prey converted into predator growth.
+      prm.declare_entry("predator_efficiency",
+                        "0.5",
+                         Patterns::Double(0.0, 1.0),
+                         "Predator conversion efficiency e [-]");
+
+      // The attack rate controls the rate at which
+      // predators encounter and consume prey at low prey concentration.
+      prm.declare_entry("predator_attack_rate",
+                        "1.0",
+                         Patterns::Double(0.0),
+                         "Predator attack rate a [concentration^-1 time^-1]");
+
+      // The handling time represents the average
+      // time spent by a predator handling consumed prey. It limits the
+      // maximum consumption rate per predator to $1/tau$.
+      prm.declare_entry("predator_handling_time",
+                        "0.5",
+                         Patterns::Double(0.0),
+                         "Predator handling time tau [time]");
+
+      // The predator mortality rate
+      // corresponds to a characteristic predator lifetime of five days
+      // in the absence of prey.
+      prm.declare_entry("predator_death_rate",
+                        "0.2",
+                         Patterns::Double(0.0),
+                         "Predator mortality rate d [time^-1]");
     }
     prm.leave_subsection();
 
@@ -340,12 +400,12 @@ namespace IO
       prm.declare_entry("Solution_tick",
                         "10000000000.",
                         Patterns::Double(0),
-                        "Time interval we write the solution");
+                        "Time interval we write the solution [time]");
 
       prm.declare_entry("Point_history_tick",
                         "10000000000.",
                         Patterns::Double(0),
-                        "Time interval we write the point history");
+                        "Time interval we write the point history [time]");
 
       for (unsigned int count = 1; count < 20; ++count)
         prm.declare_entry("Point_history_"+std::to_string(count),
