@@ -336,8 +336,9 @@ namespace SpaceDiscretization
               q);
           }
 
-        phi_tracer.integrate_scatter(EvaluationFlags::gradients,
-                                       dst);
+        phi_tracer.integrate_scatter(EvaluationFlags::values |
+                                     EvaluationFlags::gradients,
+                                    dst);
       }
   }
 
