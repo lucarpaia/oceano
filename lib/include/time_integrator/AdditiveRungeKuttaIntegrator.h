@@ -12,8 +12,7 @@
  * ---------------------------------------------------------------------
 
  *
- * Author: Martin Kronbichler (copied from), 2020
-           Luca Arpaia, 2023
+ * Author: Luca Arpaia, 2023
  *         Giuseppe Orlando, 2026
  */
 #ifndef ADDITIVERUNGEKUTTAINTEGRATOR_H

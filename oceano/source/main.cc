@@ -14,8 +14,7 @@
  * ---------------------------------------------------------------------
 
  *
- * Author: Martin Kronbichler, 2020
- *         Luca Arpaia,        2024
+ * Author: Luca Arpaia,        2024
  *         Giuseppe Orlando,   2024
  */
 
