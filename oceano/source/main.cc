@@ -56,11 +56,13 @@
 #undef  ICBC_CHANNELFLOW
 #undef  ICBC_THACKEROSCILLATIONS2D
 #define ICBC_REALISTIC
-// We have two models: the shallow water equations and the shallow water equations
-// plus tracers:
+// We have a few models: the base model are the shallow water equations. You can add the
+// computation of passive tracers or you can add a simple suspended sediment module or a
+// biological ones. Please select the number of tracers below.
 #define MODEL_SHALLOWWATER
 #undef  MODEL_SHALLOWWATERWITHTRACER
 #undef  MODEL_SHALLOWWATERWITHSEDIMENT
+#undef  MODEL_SHALLOWWATERWITHBIOLOGY
 // Next come the physics. With the following cpp keys one can switch between the different
 // formulations of a given term in the right-hand side of the shallow water equations.
 // For the bottom friction one has two formulations: a simple linear bottom friction and
@@ -103,7 +105,9 @@
 // the code more complex to read but, at the same time, they make the implementation more
 // flexible, avoiding to define a new class for each new functionality.
 #undef  OCEANO_WITH_TRACERS
-#if defined MODEL_SHALLOWWATERWITHTRACER || defined MODEL_SHALLOWWATERWITHSEDIMENT
+#if defined MODEL_SHALLOWWATERWITHTRACER || \
+    defined MODEL_SHALLOWWATERWITHSEDIMENT || \
+    defined MODEL_SHALLOWWATERWITHBIOLOGY
 #define OCEANO_WITH_TRACERS
 #endif
 // Activate global mass conservation checks:
@@ -215,9 +219,7 @@ namespace Problem
   // want to use for the volume terms:
   constexpr unsigned int n_q_points_1d        = floor(1.5*fe_degree) + 1;
   // The number of tracers:
-#if defined OCEANO_WITH_TRACERS
-  constexpr unsigned int n_tracers            = 1;
-#endif
+  constexpr unsigned int n_tracers            = 0;
   // and the maximum number of iterations for the iterative method that invert the
   // mass matrix in the continuity equation. For wet-dry cells convergence
   // is fast so a few iterations are enough, for wet cells the iterative method is basically
@@ -238,7 +240,13 @@ namespace Problem
   // the parameters and the preprocessors plus we set derived parameters that are
   // also known at compile time.
 #if defined MODEL_SHALLOWWATER
-  constexpr unsigned int n_tracers            = 0;
+  static_assert(n_tracers == 0, "MODEL_SHALLOWWATER requires n_tracers == 0");
+#elif defined MODEL_SHALLOWWATERWITHTRACER
+  static_assert(n_tracers > 0, "MODEL_SHALLOWWATERWITHTRACER requires n_tracers > 0");
+#elif defined MODEL_SHALLOWWATERWITHSEDIMENT
+  static_assert(n_tracers > 0, "MODEL_SHALLOWWATERWITHSEDIMENT requires n_tracers > 0");
+#elif defined MODEL_SHALLOWWATERWITHBIOLOGY
+  static_assert(n_tracers == 2, "MODEL_SHALLOWWATERWITHBIOLOGY requires n_tracers == 2");
 #endif
   constexpr unsigned int n_variables          = dimension + 1 + n_tracers;
 

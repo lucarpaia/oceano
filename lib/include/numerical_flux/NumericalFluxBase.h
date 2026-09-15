@@ -83,6 +83,8 @@ namespace NumericalFlux
     Model::ShallowWaterWithTracer model;
 #elif defined MODEL_SHALLOWWATERWITHSEDIMENT
     Model::ShallowWaterWithSediment model;
+#elif defined MODEL_SHALLOWWATERWITHBIOLOGY
+    Model::ShallowWaterWithBiology model;
 #endif
   };
 

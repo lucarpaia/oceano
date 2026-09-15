@@ -33,20 +33,30 @@ namespace ICBC
   // A concentration is realesed at the initial time upstream. The initial concentration
   // profile is advected with the flow without changing its shape. We can test the
   // accuracy of the discontinous Galerkin method.
+  // The test can be also run with the biological model and
+  // balanced source terms $S=0$, to check the proper implementation of such terms.
+  //
+  // Two different concentration profiles are available: a smooth cosine bell and
+  // a discontinuous one.
+#undef  ICBC_TRACERADVECTION_COSINE
+#define ICBC_TRACERADVECTION_DISCONTINUOUS
+
 
   using namespace dealii;
 
   // We define global parameters that help in the definition of the initial
   // and boundary conditions. In this case the parameters of the initial concentration,
   // the channel water depth and the free-stream velocity.
-  // follows. We choose a channel $[0,1]\times[0,2]$ with a depth of 1.
-  // The initial concentration is a cosine bell with an
-  // amplitude of 1 and a radius of one fourth of the channel width.
+  // follows. We choose a channel $[0,1]\times[0,2]$ with a depth of hoo.
   constexpr double hoo     = 0.5;
-  constexpr double uoo     = 1.0;
-  // the depth at the center:
-  constexpr double cmax    = 1.0;
-  // the radius:
+  constexpr double uoo     = 0.25;
+  // The initial concentrations have prescribed amplitudes and a prescribed radius.
+  // In particular, the following amplitudes are chosen so that they correspond to
+  // an equilibrium of the biological reaction terms (with the default biological parameters).
+  // In the case of coupling with the biological model, the flow speed is chosen to allow
+  // sufficiently long dynamics to observe the effects of any unbalanced reaction terms.
+  constexpr double cmax1   = 0.5;
+  constexpr double cmax2   = 0.625;
   constexpr double radius0 = 0.25;
 
 
@@ -113,10 +123,15 @@ namespace ICBC
     x0[1] = 0.5;
 
     const double radius = (x - x0).norm();
-    const double rho_half = 0.5*M_PI*radius/radius0;
 
+#if defined ICBC_TRACERADVECTION_COSINE
+    const double rho_half = 0.5*M_PI*radius/radius0;
     const double conc =
       radius < radius0 ? cmax * std::cos(rho_half) : 0.0;
+#else
+    const double conc =
+      radius < radius0 ? 1.0 : 0.0;
+#endif
 
     if (component == 0)
       return 0.;
@@ -125,14 +140,14 @@ namespace ICBC
     else if (component == 2)
       return 0.;
     else if (component == 3)
-      return conc;
+      return cmax1;
     else
-      return conc * 2.0;
+      return cmax2;
   }
 
 
 
-  // In this case the initial condition is recovered from the exact solution
+  // The initial condition is recovered from the exact solution
   // at time zero. This is realized here thanks to a derived class of `ExactSolution`
   // that overload the the constructor of the base class providing automatically
   // a zero time. If multiple
