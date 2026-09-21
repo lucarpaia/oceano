@@ -181,40 +181,7 @@ namespace SpaceDiscretization
                 const DoFHandler<dim> &dof_handler_discharge,
                 const DoFHandler<dim> &dof_handler_tracer);
 
-    void apply(const double                                      current_time,
-               const LinearAlgebra::distributed::Vector<Number> &src,
-               LinearAlgebra::distributed::Vector<Number> &      dst) const;
-
-#if defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
-    void
-    perform_stage_hydro(
-      const unsigned int                                             cur_stage,
-      const Number                                                   cur_time,
-      const Number                                                  *factor_residual,
-      const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
-      std::vector<LinearAlgebra::distributed::Vector<Number>>       &vec_ki_height,
-      std::vector<LinearAlgebra::distributed::Vector<Number>>       &vec_ki_discharge,
-      LinearAlgebra::distributed::Vector<Number>                    &solution_height,
-      LinearAlgebra::distributed::Vector<Number>                    &solution_discharge,
-      LinearAlgebra::distributed::Vector<Number>                    &next_ri_height,
-      LinearAlgebra::distributed::Vector<Number>                    &next_ri_discharge) const;
-#elif defined TIMEINTEGRATOR_ADDITIVERUNGEKUTTA
-    void
-    perform_stage_hydro(
-      const unsigned int                                             cur_stage,
-      const Number                                                   cur_time,
-      const Number                                                  *factor_residual,
-      const Number                                                  *factor_tilde_residual,
-      const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
-      std::vector<LinearAlgebra::distributed::Vector<Number>>       &vec_ki_height,
-      std::vector<LinearAlgebra::distributed::Vector<Number>>       &vec_ki_discharge,
-      LinearAlgebra::distributed::Vector<Number>                    &solution_height,
-      LinearAlgebra::distributed::Vector<Number>                    &solution_discharge,
-      LinearAlgebra::distributed::Vector<Number>                    &next_ri_height,
-      LinearAlgebra::distributed::Vector<Number>                    &next_ri_discharge) const;
-#endif
-    void
-    check_mass(
+    void check_mass(
       const Number                                                   factor_residual,
       const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
       const LinearAlgebra::distributed::Vector<Number>              &solution_height);
@@ -255,52 +222,6 @@ namespace SpaceDiscretization
     void initialize_data_at_dofs(
       const Mapping<dim>    &mapping,
       const DoFHandler<dim> &dof_handler_height);
-
-    ICBC::BcBase<dim, 1+dim+n_tra> *bc;
-
-    CellDataStorage<Tensor<1, 2, VectorizedArray<Number>>> data_quadrature_cell_0;
-    CellDataStorage<VectorizedArray<Number>>               data_quadrature_cell_1;
-    CellDataStorage<Tensor<1, 2, VectorizedArray<Number>>> data_quadrature_cell_2;
-    CellDataStorage<VectorizedArray<Number>>               data_quadrature_face;
-    CellDataStorage<VectorizedArray<Number>>               data_quadrature_boundary;
-    CellDataStorage<Number> data_dofs;
-
-    // The switch between the different models is realized with
-    // Preprocessor keys. As already explained we have avoided pointers to 
-    // interface classes. All the model class must expose
-    // the same interfaces with identical member functions. Note that the
-    // model class is public beacause it must be accessed, during postprocessing
-    // outside the OceanoOperator class
-#if defined MODEL_SHALLOWWATER
-    Model::ShallowWater model;
-#elif defined MODEL_SHALLOWWATERWITHTRACER
-    Model::ShallowWaterWithTracer model;
-#elif defined MODEL_SHALLOWWATERWITHSEDIMENT
-    Model::ShallowWaterWithSediment model;
-#elif defined MODEL_SHALLOWWATERWITHBIOLOGY
-    Model::ShallowWaterWithBiology model;
-#else
-    Assert(false, ExcNotImplemented());
-    return 0.;
-#endif
-
-   protected:
-    // Similarly the switch between the different numerical flux:
-#if defined NUMERICALFLUX_LAXFRIEDRICHSMODIFIED
-    NumericalFlux::LaxFriedrichsModified num_flux;
-#elif defined NUMERICALFLUX_HARTENVANLEER
-    NumericalFlux::HartenVanLeer         num_flux;
-#else
-    Assert(false, ExcNotImplemented());
-    return 0.;
-#endif
-
-    MatrixFree<dim, Number> data;
-
-    TimerOutput &timer;
-
-  private:
-    unsigned int max_iteration_height;
 
     void local_apply_inverse_mass_matrix_height(
       const MatrixFree<dim, Number>                                 &data,
@@ -385,6 +306,51 @@ namespace SpaceDiscretization
       LinearAlgebra::distributed::Vector<Number>                    &dst,
       const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
       const std::pair<unsigned int, unsigned int>                   &face_range) const;
+
+    ICBC::BcBase<dim, 1+dim+n_tra> *bc;
+
+    CellDataStorage<Tensor<1, 2, VectorizedArray<Number>>> data_quadrature_cell_0;
+    CellDataStorage<VectorizedArray<Number>>               data_quadrature_cell_1;
+    CellDataStorage<Tensor<1, 2, VectorizedArray<Number>>> data_quadrature_cell_2;
+    CellDataStorage<VectorizedArray<Number>>               data_quadrature_face;
+    CellDataStorage<VectorizedArray<Number>>               data_quadrature_boundary;
+    CellDataStorage<Number> data_dofs;
+
+    // The switch between the different models is realized with
+    // Preprocessor keys. As already explained we have avoided pointers to
+    // interface classes. All the model class must expose
+    // the same interfaces with identical member functions. Note that the
+    // model class is public beacause it must be accessed, during postprocessing
+    // outside the OceanoOperator class
+#if defined MODEL_SHALLOWWATER
+    Model::ShallowWater model;
+#elif defined MODEL_SHALLOWWATERWITHTRACER
+    Model::ShallowWaterWithTracer model;
+#elif defined MODEL_SHALLOWWATERWITHSEDIMENT
+    Model::ShallowWaterWithSediment model;
+#elif defined MODEL_SHALLOWWATERWITHBIOLOGY
+    Model::ShallowWaterWithBiology model;
+#else
+    Assert(false, ExcNotImplemented());
+    return 0.;
+#endif
+
+  protected:
+    // Similarly the switch between the different numerical flux:
+#if defined NUMERICALFLUX_LAXFRIEDRICHSMODIFIED
+    NumericalFlux::LaxFriedrichsModified num_flux;
+#elif defined NUMERICALFLUX_HARTENVANLEER
+    NumericalFlux::HartenVanLeer         num_flux;
+#else
+    Assert(false, ExcNotImplemented());
+    return 0.;
+#endif
+
+    MatrixFree<dim, Number> data;
+    TimerOutput &timer;
+
+  private:
+    unsigned int max_iteration_height;
   };
 
 
@@ -1672,477 +1638,8 @@ namespace SpaceDiscretization
   {
   }
 
-  // @sect4{The apply() and related functions}
-
-  // We now come to the function which implements the evaluation of the ocean
-  // operator as a whole, i.e., $\mathcal M^{-1} \mathcal L(t, \mathbf{w})$,
-  // calling into the local evaluators presented above. The steps should be
-  // clear from the previous code. One thing to note is that we need to adjust
-  // the time in the functions we have associated with the various parts of
-  // the boundary, in order to be consistent with the equation in case the
-  // boundary data is time-dependent. Then, we call MatrixFree::loop() to
-  // perform the cell and face integrals, including the necessary ghost data
-  // exchange in the `src` vector. The seventh argument to the function,
-  // `true`, specifies that we want to zero the `dst` vector as part of the
-  // loop, before we start accumulating integrals into it. This variant is
-  // preferred over explicitly calling `dst = 0.;` before the loop as the
-  // zeroing operation is done on a subrange of the vector in parts that are
-  // written by the integrals nearby. This enhances data locality and allows
-  // for caching, saving one roundtrip of vector data to main memory and
-  // enhancing performance. The last two arguments to the loop determine which
-  // data is exchanged: Since we only access the values of the shape functions
-  // one faces, typical of first-order hyperbolic problems, and since we have
-  // a nodal basis with nodes at the reference element surface, we only need
-  // to exchange those parts. This again saves precious memory bandwidth.
-  //
-  // Once the spatial operator $\mathcal L$ is applied, we need to make a
-  // second round and apply the inverse mass matrix. Here, we call
-  // MatrixFree::cell_loop() since only cell integrals appear. The cell loop
-  // is cheaper than the full loop as access only goes to the degrees of
-  // freedom associated with the locally owned cells, which is simply the
-  // locally owned degrees of freedom for DG discretizations. Thus, no ghost
-  // exchange is needed here.
-  //
-  // Around all these functions, we put timer scopes to record the
-  // computational time for statistics about the contributions of the various
-  // parts.
-  template <int dim, int n_tra, int degree, int n_points_1d>
-  void OceanoOperator<dim, n_tra, degree, n_points_1d>::apply(
-    const double                                      current_time,
-    const LinearAlgebra::distributed::Vector<Number> &src,
-    LinearAlgebra::distributed::Vector<Number> &      dst) const
-  {
-    {
-      TimerOutput::Scope t(timer, "apply - integrals");
-
-      for (auto &i : bc->supercritical_inflow_boundaries)
-        i.second->set_time(current_time);
-      for (auto &i : bc->height_inflow_boundaries)
-        i.second->set_time(current_time);
-      for (auto &i : bc->discharge_inflow_boundaries)
-        i.second->set_time(current_time);
-      for (auto &i : bc->absorbing_outflow_boundaries)
-        i.second->set_time(current_time);
-
-      data.loop(&OceanoOperator::local_apply_cell,
-                &OceanoOperator::local_apply_face,
-                &OceanoOperator::local_apply_boundary_face,
-                this,
-                dst,
-                src,
-                true,
-                MatrixFree<dim, Number>::DataAccessOnFaces::values,
-                MatrixFree<dim, Number>::DataAccessOnFaces::values);
-    }
-
-    {
-      TimerOutput::Scope t(timer, "apply - inverse mass");
-
-      data.cell_loop(&OceanoOperator::local_apply_inverse_mass_matrix,
-                     this,
-                     dst,
-                     dst);
-    }
-  }
 
 
-
-  // Let us move to the function that does an entire stage of a Runge--Kutta
-  // update. It calls OceanoOperator::apply() followed by some updates
-  // to the vectors. Rather than performing these
-  // steps through the vector interfaces, we here present an alternative
-  // strategy that is faster on cache-based architectures. As the memory
-  // consumed by the vectors is often much larger than what fits into caches,
-  // the data has to effectively come from the slow RAM memory. The situation
-  // can be improved by loop fusion, i.e., performing both the updates to
-  // `next_ki` and `solution` within a single sweep. In that case, we would
-  // read the two vectors `rhs` and `solution` and write into `next_ki` and
-  // `solution`, compared to at least 4 reads and two writes in the baseline
-  // case. Here, we go one step further and perform the loop immediately when
-  // the mass matrix inversion has finished on a part of the
-  // vector. MatrixFree::cell_loop() provides a mechanism to attach an
-  // `std::function` both before the loop over cells first touches a vector
-  // entry (which we do not use here, but is e.g. used for zeroing the vector)
-  // and a second `std::function` to be called after the loop last touches
-  // an entry. The callback is in form of a range over the given vector (in
-  // terms of the local index numbering in the MPI universe) that can be
-  // addressed by `local_element()` functions.
-  //
-  // For this second callback, we create a lambda that works on a range and
-  // write the respective update on this range. Ideally, we would add the
-  // `DEAL_II_OPENMP_SIMD_PRAGMA` before the local loop to suggest to the
-  // compiler to SIMD parallelize this loop (which means in practice that we
-  // ensure that there is no overlap, also called aliasing, between the index
-  // ranges of the pointers we use inside the loops). It turns out that at the
-  // time of this writing, GCC 7.2 fails to compile an OpenMP pragma inside a
-  // lambda function, so we comment this pragma out below. If your compiler is
-  // newer, you should be able to uncomment these lines again.
-  //
-  // Note that we select a different code path for the last
-  // Runge--Kutta stage when we do not need to update the `next_ri`
-  // vector. This strategy gives a considerable speedup. Whereas the inverse
-  // mass matrix and vector updates take more than 60% of the computational
-  // time with default vector updates on a 40-core machine, the percentage is
-  // around 35% with the more optimized variant. In other words, this is a
-  // speedup of around a third.
-  //
-  // We code here the explicit Runge-Kutta method written
-  // in the standard Butcher tableau form. This kind of method are generals then
-  // the low storage ones, although less optimized. We update one single vector at
-  // at every stage (`next_ri` for internal stages and `solution` for the last stage)
-  // so we cannot benefit of loop fusion. Moreover we access to `n_stages` vector
-  // (`n_stages-1` residual plus the solution) compared to only two vectors of the
-  // low-storage scheme. For a low number of stage the difference is comparable.
-  // We still use to perform the loop immediately when the mass matrix inversion has
-  // finished on a part of the vector. The second `std::function` is in fact called
-  // after the loop last touches an entry. A different code path is again used for
-  // the last stage when we do not need to update the `next_ri` vector.
-#if defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
-  template <int dim, int n_tra, int degree, int n_points_1d>
-  void OceanoOperator<dim, n_tra, degree, n_points_1d>::perform_stage_hydro(
-    const unsigned int                                             current_stage,
-    const Number                                                   current_time,
-    const Number                                                  *factor_residual,
-    const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
-    std::vector<LinearAlgebra::distributed::Vector<Number>>       &vec_ki_height,
-    std::vector<LinearAlgebra::distributed::Vector<Number>>       &vec_ki_discharge,
-    LinearAlgebra::distributed::Vector<Number>                    &solution_height,
-    LinearAlgebra::distributed::Vector<Number>                    &solution_discharge,
-    LinearAlgebra::distributed::Vector<Number>                    &next_ri_height,
-    LinearAlgebra::distributed::Vector<Number>                    &next_ri_discharge) const
-  {
-    {
-      TimerOutput::Scope t(timer, "rk_stage hydro - integrals L_h");
-
-      for (auto &i : bc->supercritical_inflow_boundaries)
-        i.second->set_time(current_time);
-      for (auto &i : bc->height_inflow_boundaries)
-        i.second->set_time(current_time);
-      for (auto &i : bc->discharge_inflow_boundaries)
-        i.second->set_time(current_time);
-      for (auto &i : bc->absorbing_outflow_boundaries)
-        i.second->set_time(current_time);
-      bc->problem_data->set_time(current_time);
-
-      data.loop(&OceanoOperator::local_apply_cell_height,
-                &OceanoOperator::local_apply_face_height,
-                &OceanoOperator::local_apply_boundary_face_height,
-                this,
-                vec_ki_height[current_stage+1],
-                current_ri,
-                true,
-                MatrixFree<dim, Number>::DataAccessOnFaces::values,
-                MatrixFree<dim, Number>::DataAccessOnFaces::values);
-
-      data.loop(&OceanoOperator::local_apply_cell_discharge,
-                &OceanoOperator::local_apply_face_discharge,
-                &OceanoOperator::local_apply_boundary_face_discharge,
-                this,
-                vec_ki_discharge.front(),
-                current_ri,
-                true,
-                MatrixFree<dim, Number>::DataAccessOnFaces::values,
-                MatrixFree<dim, Number>::DataAccessOnFaces::values);
-    }
-
-
-    {
-      unsigned int n_stages = vec_ki_height.size()-1;
-      TimerOutput::Scope t(timer, "rk_stage hydro - inv mass + vec upd");
-      data.cell_loop(
-        &OceanoOperator::local_apply_cell_mass_height,
-        this,
-        vec_ki_height.front(),
-        solution_height,
-        [&](const unsigned int start_range, const unsigned int end_range) {
-          /* DEAL_II_OPENMP_SIMD_PRAGMA */
-          for (unsigned int i = start_range; i < end_range; ++i)
-            {
-              Number k_i           = vec_ki_height[1].local_element(i);
-              vec_ki_height.front().local_element(i)  = factor_residual[0]  * k_i;
-              for (unsigned int j = 1; j < current_stage+1; ++j)
-		{
-		  k_i              = vec_ki_height[j+1].local_element(i);
-		  vec_ki_height.front().local_element(i) += factor_residual[j]  * k_i;
-		}
-            }
-	},
-        std::function<void(const unsigned int, const unsigned int)>(),
-        0);
-
-      if (current_stage == n_stages-1)
-        {
-          solution_height.zero_out_ghost_values();
-          data.cell_loop(
-            &OceanoOperator::local_apply_inverse_mass_matrix_height,
-            this,
-            solution_height,
-            vec_ki_height.front());
-        }
-      else
-        {
-          next_ri_height = solution_height;
-          next_ri_height.zero_out_ghost_values();
-          data.cell_loop(
-            &OceanoOperator::local_apply_inverse_mass_matrix_height,
-            this,
-            next_ri_height,
-            vec_ki_height.front());
-        }
-
-
-      data.cell_loop(
-        &OceanoOperator::local_apply_inverse_mass_matrix_discharge,
-        this,
-        vec_ki_discharge[current_stage+1],
-        vec_ki_discharge.front(),
-        std::function<void(const unsigned int, const unsigned int)>(),
-        [&](const unsigned int start_range, const unsigned int end_range) {
-          if (current_stage == n_stages-1)
-            {
-              /* DEAL_II_OPENMP_SIMD_PRAGMA */
-              for (unsigned int i = start_range; i < end_range; ++i)
-                {
-                  Number k_i           = vec_ki_discharge[1].local_element(i);
-                  const Number sol_i   = solution_discharge.local_element(i);
-                  solution_discharge.local_element(i)  = sol_i + factor_residual[0] * k_i;
-		  for (unsigned int j = 1; j < current_stage+1; ++j)
-		    {
-                      k_i = vec_ki_discharge[j+1].local_element(i);
-                      solution_discharge.local_element(i) += factor_residual[j]  * k_i;
-                    }
-                }
-            }
-          else
-            {
-              /* DEAL_II_OPENMP_SIMD_PRAGMA */
-              for (unsigned int i = start_range; i < end_range; ++i)
-                {
-                  Number k_i            = vec_ki_discharge[1].local_element(i);
-                  const Number sol_i    = solution_discharge.local_element(i);
-                  next_ri_discharge.local_element(i) = sol_i + factor_residual[0]  * k_i;
-		  for (unsigned int j = 1; j < current_stage+1; ++j)
-		    {
-                      k_i = vec_ki_discharge[j+1].local_element(i);
-                      next_ri_discharge.local_element(i) += factor_residual[j]  * k_i;
-                    }
-                }
-            }
-        },
-        1);
-    }
-  }
-
-  // We apply the same concepts to the Additive Runge-Kutta method. The cost of
-  // ARK scheme are quite higher. The main problem is memory access: the vectors to access
-  // at each stage are `2 * (n_stages-1) +1`, the factor two is related to the presence of
-  // the stiff and non-stiff part of the residual. Since ARK is needed only for the momentum
-  // equation we mantain the explicit code of the previous section for the continuity equation
-  // and we use a different code for the momemtum equation. For the latter we compute the
-  // stiff and non-stiff residuals. Note that for the stiff residual we need to build the
-  // residual associated to the friction term which can be done with a cell loop only.
-  //
-  // As the explicit counterpart (see the commented code), we have also an overhead w.r.t
-  // the standard Runge-Kutta scheme. This is related to the condensed water depth but also
-  // to the implicit friction that does not allow to update the solution with a single call
-  // to `cell_loop()`. First we have to perform vector updates (assemble the right-hand-side
-  // composed of the old solution times the mass-matrix plus the ImEx residuals. This is
-  // cumulated into the auxiliary `vec_ki_discharge.front()`. Then we update the water height.
-  // Only after, we invert the mass-matrix and we put the result into the new solution.
-  // Differently from the explicit scheme, the mass-matrix is modified by the Implicit scheme
-  // (it contains the Jacobian of the implicit part) and this is why we have a different call
-  // to the mass matrix inversion. Moreover this should explain why, into the last
-  // `cell_loop()`, the src vector contains the last updated solution: it is needed to compute
-  // the water depth and the Jacobian of the bottom friction.
-#elif defined TIMEINTEGRATOR_ADDITIVERUNGEKUTTA
-  template <int dim, int n_tra, int degree, int n_points_1d>
-  void OceanoOperator<dim, n_tra, degree, n_points_1d>::perform_stage_hydro(
-    const unsigned int                                             current_stage,
-    const Number                                                   current_time,
-    const Number                                                  *factor_residual,
-    const Number                                                  *factor_tilde_residual,
-    const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
-    std::vector<LinearAlgebra::distributed::Vector<Number>>       &vec_ki_height,
-    std::vector<LinearAlgebra::distributed::Vector<Number>>       &vec_ki_discharge,
-    LinearAlgebra::distributed::Vector<Number>                    &solution_height,
-    LinearAlgebra::distributed::Vector<Number>                    &solution_discharge,
-    LinearAlgebra::distributed::Vector<Number>                    &next_ri_height,
-    LinearAlgebra::distributed::Vector<Number>                    &next_ri_discharge) const
-  {
-
-    unsigned int n_stages = vec_ki_height.size()-1;
-
-    {
-      TimerOutput::Scope t(timer, "rk_stage hydro - integrals L_h");
-
-      for (auto &i : bc->supercritical_inflow_boundaries)
-        i.second->set_time(current_time);
-      for (auto &i : bc->height_inflow_boundaries)
-        i.second->set_time(current_time);
-      for (auto &i : bc->discharge_inflow_boundaries)
-        i.second->set_time(current_time);
-      for (auto &i : bc->absorbing_outflow_boundaries)
-        i.second->set_time(current_time);
-      bc->problem_data->set_time(current_time);
-
-      data.loop(&OceanoOperator::local_apply_cell_height,
-                &OceanoOperator::local_apply_face_height,
-                &OceanoOperator::local_apply_boundary_face_height,
-                this,
-                vec_ki_height[current_stage+1],
-                current_ri,
-                true,
-                MatrixFree<dim, Number>::DataAccessOnFaces::values,
-                MatrixFree<dim, Number>::DataAccessOnFaces::values);
-
-      if (current_stage == n_stages-1)
-        {
-          data.loop(
-                &OceanoOperator::local_apply_cell_discharge,
-                &OceanoOperator::local_apply_face_discharge,
-                &OceanoOperator::local_apply_boundary_face_discharge,
-                this,
-                vec_ki_discharge[2*current_stage+1],
-                current_ri,
-                true,
-                MatrixFree<dim, Number>::DataAccessOnFaces::values,
-                MatrixFree<dim, Number>::DataAccessOnFaces::values);
-        }
-      else
-        {
-          data.loop(
-                &OceanoOperator::local_apply_cell_nonstiff_discharge,
-                &OceanoOperator::local_apply_face_discharge,
-                &OceanoOperator::local_apply_boundary_face_discharge,
-                this,
-                vec_ki_discharge[2*current_stage+1],
-                current_ri,
-                true,
-                MatrixFree<dim, Number>::DataAccessOnFaces::values,
-                MatrixFree<dim, Number>::DataAccessOnFaces::values);
-          data.cell_loop(
-                &OceanoOperator::local_apply_cell_stiff_discharge,
-                this,
-                vec_ki_discharge[2*current_stage+2],
-                current_ri,
-                true);
-        }
-    }
-
-
-    {
-      TimerOutput::Scope t(timer, "rk_stage hydro - inv mass + vec upd");
-      data.cell_loop(
-        &OceanoOperator::local_apply_cell_mass_height,
-        this,
-        vec_ki_height.front(),
-        solution_height,
-        [&](const unsigned int start_range, const unsigned int end_range) {
-          /* DEAL_II_OPENMP_SIMD_PRAGMA */
-          for (unsigned int i = start_range; i < end_range; ++i)
-            {
-              Number k_i           = vec_ki_height[1].local_element(i);
-              vec_ki_height.front().local_element(i)  = factor_residual[0]  * k_i;
-              for (unsigned int j = 1; j < current_stage+1; ++j)
-		{
-		  k_i              = vec_ki_height[j+1].local_element(i);
-		  vec_ki_height.front().local_element(i) += factor_residual[j]  * k_i;
-		}
-            }
-	},
-        std::function<void(const unsigned int, const unsigned int)>(),
-        0);
-
-      if (current_stage == n_stages-1)
-        {
-          solution_height.zero_out_ghost_values();
-          data.cell_loop(
-            &OceanoOperator::local_apply_inverse_mass_matrix_height,
-            this,
-            solution_height,
-            vec_ki_height.front());
-        }
-      else
-        {
-          next_ri_height = solution_height;
-          next_ri_height.zero_out_ghost_values();
-          data.cell_loop(
-            &OceanoOperator::local_apply_inverse_mass_matrix_height,
-            this,
-            next_ri_height,
-            vec_ki_height.front());
-        }
-
-
-      if (current_stage == n_stages-1)
-        {
-          data.cell_loop(
-            &OceanoOperator::local_apply_inverse_mass_matrix_discharge,
-            this,
-            next_ri_discharge,
-            vec_ki_discharge.front(),
-            [&](const unsigned int start_range, const unsigned int end_range) {
-              /* DEAL_II_OPENMP_SIMD_PRAGMA */
-              for (unsigned int i = start_range; i < end_range; ++i)
-                {
-                  Number kex_i           = vec_ki_discharge[1].local_element(i);
-                  vec_ki_discharge.front().local_element(i)  = factor_residual[0] * kex_i;
-		  for (unsigned int j = 1; j < current_stage+1; ++j)
-		    {
-                      kex_i              = vec_ki_discharge[2*j+1].local_element(i);
-                      const Number kim_i = vec_ki_discharge[2*j].local_element(i);
-                      vec_ki_discharge.front().local_element(i) += factor_residual[j]   * kex_i
-                                                                 + factor_residual[j-1] * kim_i;
-                    }
-                }
-            },
-            [&](const unsigned int start_range, const unsigned int end_range) {
-              /* DEAL_II_OPENMP_SIMD_PRAGMA */
-              for (unsigned int i = start_range; i < end_range; ++i)
-                {
-                  const Number sol_i     = next_ri_discharge.local_element(i);
-                  solution_discharge.local_element(i)  += sol_i;
-                }
-            },
-            1);
-        }
-      else
-        {
-          data.cell_loop(
-            &OceanoOperator::local_apply_cell_mass_discharge,
-            this,
-            vec_ki_discharge.front(),
-            solution_discharge,
-            [&](const unsigned int start_range, const unsigned int end_range) {
-              /* DEAL_II_OPENMP_SIMD_PRAGMA */
-              for (unsigned int i = start_range; i < end_range; ++i)
-                {
-                  Number kex_i           = vec_ki_discharge[1].local_element(i);
-                  Number kim_i           = vec_ki_discharge[2].local_element(i);
-                  vec_ki_discharge.front().local_element(i)  = factor_residual[0]       * kex_i
-                                                             + factor_tilde_residual[0] * kim_i;
-                  for (unsigned int j = 1; j < current_stage+1; ++j)
-		    {
-		      kex_i              = vec_ki_discharge[2*j+1].local_element(i);
-	              kim_i              = vec_ki_discharge[2*j+2].local_element(i);
-		      vec_ki_discharge.front().local_element(i) += factor_residual[j]        * kex_i
-		                                                 + factor_tilde_residual[j]  * kim_i;
-		    }
-                }
-	    },
-            std::function<void(const unsigned int, const unsigned int)>(),
-            1);
-
-          data.cell_loop(
-            &OceanoOperator::local_apply_inverse_modified_mass_matrix_discharge,
-            this,
-            next_ri_discharge,
-            {vec_ki_discharge.front(), current_ri[0], current_ri[1]},
-            true);
-        }
-    }
-  }
-#endif
 #ifdef OCEANO_WITH_MASSCONSERVATIONCHECK
   // The mass conservation balance is based on the following global check.
   // The updated mass integral over the whole computational domain must be
@@ -2208,6 +1705,8 @@ namespace SpaceDiscretization
     }
   }
 #endif
+
+
 
   // Having discussed the implementation of the functions that deal with
   // advancing the solution by one time step, let us now move to functions

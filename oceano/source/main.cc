@@ -38,6 +38,11 @@
 // now we have coded general explicit schemes that belong to the family of Runge-Kutta scheme.
 #undef  TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
 #define TIMEINTEGRATOR_ADDITIVERUNGEKUTTA
+// Than it comes the space discretization based on Discontinuous Galerkin. Different
+// combinations are possible: an explicit scheme, a scheme with implicit friction or a
+// semi-implicit scheme:
+#define SPACEDISCRETIZATION_IMPLICITFRICTION
+#undef  SPACEDISCRETIZATION_SEMIIMPLICIT
 // The numerical flux (Riemann solver) at the faces between cells. For this
 // program, we have implemented a modified variant of the Lax--Friedrichs
 // flux and the Harten--Lax--van Leer (HLL) flux:
@@ -167,17 +172,23 @@
 #include <deal.II/grid/grid_refinement.h>
 #include <deal.II/distributed/solution_transfer.h>
 
-// The following files include the oceano libraries:
-#include <space_discretization/OceanDG.h>
-#include <space_discretization/OceanDGWithTracer.h>
-#include <io/CommandLineParser.h>
-#include <deal.II_oceano/hpTuner.h>
-
-// The following files are included depending on
-// the Preprocessor keys. This is necessary because
+// The following files include the oceano classes.
+// In some case, the files are included depending on
+// the Preprocessor keys. For icbc, this is necessary because
 // we have done a limited use of virtual classes; on the contrary
 // each of these header files contains the same class definition, so they
 // cannot be linked together.
+#if defined OCEANO_WITH_TRACERS
+#include <space_discretization/OceanDGWithTracer.h>
+#elif defined SPACEDISCRETIZATION_EXPLICIT
+#include <space_discretization/OceanDGExplicit.h>
+#elif defined SPACEDISCRETIZATION_IMPLICITFRICTION
+#include <space_discretization/OceanDGImplicitFriction.h>
+#elif defined SPACEDISCRETIZATION_SEMIIMPLICIT
+#include <space_discretization/OceanDGSemiImplicit.h>
+#endif
+#include <io/CommandLineParser.h>
+#include <deal.II_oceano/hpTuner.h>
 #if defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
 #include <time_integrator/ExplicitRungeKuttaIntegrator.h>
 #elif defined TIMEINTEGRATOR_ADDITIVERUNGEKUTTA
@@ -217,8 +228,9 @@ namespace Problem
   // we also specify a number of points in the Gauss-Legendre quadrature formula we
   // want to use for the volume terms:
   constexpr unsigned int n_q_points_1d        = floor(1.5*fe_degree) + 1;
-  // The number of tracers:
+  // The number of tracers, and as a consequence of prognostic variables:
   constexpr unsigned int n_tracers            = 0;
+  constexpr unsigned int n_variables          = dimension + 1 + n_tracers;
   // and the maximum number of iterations for the iterative method that invert the
   // mass matrix in the continuity equation. For wet-dry cells convergence
   // is fast so a few iterations are enough, for wet cells the iterative method is basically
@@ -247,7 +259,14 @@ namespace Problem
 #elif defined MODEL_SHALLOWWATERWITHBIOLOGY
   static_assert(n_tracers == 2, "MODEL_SHALLOWWATERWITHBIOLOGY requires n_tracers == 2");
 #endif
-  constexpr unsigned int n_variables          = dimension + 1 + n_tracers;
+
+#if defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
+#define SPACEDISCRETIZATION_EXPLICIT
+#undef  SPACEDISCRETIZATION_IMPLICITFRICTION
+#undef  SPACEDISCRETIZATION_SEMIIMPLICIT
+#else
+#undef  SPACEDISCRETIZATION_EXPLICIT
+#endif
 
   // @sect3{The OceanoProblem class}
 
@@ -332,12 +351,30 @@ namespace Problem
 
     TimerOutput timer;
 
-#ifndef OCEANO_WITH_TRACERS
-    SpaceDiscretization::OceanoOperator<dim, n_tra, fe_degree, n_q_points_1d>
+#if defined SPACEDISCRETIZATION_EXPLICIT
+  #ifndef OCEANO_WITH_TRACERS
+    SpaceDiscretization::OceanoOperatorExplicit<dim, n_tra, fe_degree, n_q_points_1d>
       oceano_operator;
-#else
+  #else
     SpaceDiscretization::OceanoOperatorWithTracer<dim, n_tra, fe_degree, n_q_points_1d>
       oceano_operator;
+  #endif
+#elif defined SPACEDISCRETIZATION_IMPLICITFRICTION
+  #ifndef OCEANO_WITH_TRACERS
+    SpaceDiscretization::OceanoOperatorImplicitFriction<dim, n_tra, fe_degree, n_q_points_1d>
+      oceano_operator;
+  #else
+    SpaceDiscretization::OceanoOperatorWithTracer<dim, n_tra, fe_degree, n_q_points_1d>
+      oceano_operator;
+  #endif
+#elif defined SPACEDISCRETIZATION_SEMIIMPLICIT
+  #ifndef OCEANO_WITH_TRACERS
+    SpaceDiscretization::OceanoOperatorSemiImplicit<dim, n_tra, fe_degree, n_q_points_1d>
+      oceano_operator;
+  #else
+    SpaceDiscretization::OceanoOperatorWithTracer<dim, n_tra, fe_degree, n_q_points_1d>
+      oceano_operator;
+  #endif
 #endif
 
     double time, time_step;

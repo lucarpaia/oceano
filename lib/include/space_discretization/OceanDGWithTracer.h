@@ -12,15 +12,20 @@
  * ---------------------------------------------------------------------
 
  *
- * Author: Martin Kronbichler (copied from), 2020
-           Luca Arpaia, 2023
+ * Author: Luca Arpaia, 2023
  *         Giuseppe Orlando, 2024
  */
 #ifndef OCEANDGWITHTRACER_H
 #define OCEANDGWITHTRACER_H
 
 // The following files include the oceano libraries
-#include <space_discretization/OceanDG.h>
+#if defined SPACEDISCRETIZATION_EXPLICIT
+#include <space_discretization/OceanDGExplicit.h>
+#elif defined SPACEDISCRETIZATION_IMPLICITFRICTION
+#include <space_discretization/OceanDGImplicitFriction.h>
+#elif defined SPACEDISCRETIZATION_SEMIIMPLICIT
+#include <space_discretization/OceanDGSemiImplicit.h>
+#endif
 
 /**
  * Namespace containing the spatial Operator
@@ -120,7 +125,14 @@ namespace SpaceDiscretization
   // name; the overloaded functions set up the MatrixFree variable with
   // the tracers.
   template <int dim, int n_tra, int degree, int n_points_1d>
-  class OceanoOperatorWithTracer : public OceanoOperator<dim, n_tra, degree, n_points_1d>
+  class OceanoOperatorWithTracer :
+#if defined SPACEDISCRETIZATION_EXPLICIT
+    public OceanoOperatorExplicit<dim, n_tra, degree, n_points_1d>
+#elif defined SPACEDISCRETIZATION_IMPLICITFRICTION
+    public OceanoOperatorImplicitFriction<dim, n_tra, degree, n_points_1d>
+#elif defined SPACEDISCRETIZATION_SEMIIMPLICIT
+    public OceanoOperatorSemiImplicit<dim, n_tra, degree, n_points_1d>
+#endif
   {
   public:
     static constexpr unsigned int n_quadrature_points_1d = n_points_1d;
@@ -139,7 +151,6 @@ namespace SpaceDiscretization
                 const DoFHandler<dim> &dof_handler_discharge,
                 const DoFHandler<dim> &dof_handler_tracer);
 
-#if defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA || defined TIMEINTEGRATOR_ADDITIVERUNGEKUTTA
     void
     perform_stage_tracers(
       const unsigned int                                             cur_stage,
@@ -151,7 +162,6 @@ namespace SpaceDiscretization
       LinearAlgebra::distributed::Vector<Number>                    &solution_tracer,
       LinearAlgebra::distributed::Vector<Number>                    &next_ri_tracer) const;
 
-#endif
     void
     check_tracer_mass(
       const Number                                                   factor_residual,
@@ -172,21 +182,19 @@ namespace SpaceDiscretization
       const LinearAlgebra::distributed::Vector<Number> &solution_height,
       LinearAlgebra::distributed::Vector<Number>       &solution_tracer) const;
 
-    using OceanoOperator<dim, n_tra, degree, n_points_1d>::bc;
+    using Base = OceanoOperator<dim, n_tra, degree, n_points_1d>;
+    using Base::bc;
+    using Base::model;
 
-    using OceanoOperator<dim, n_tra, degree, n_points_1d>::data_quadrature_cell_0;
-    using OceanoOperator<dim, n_tra, degree, n_points_1d>::data_quadrature_cell_1;
-    using OceanoOperator<dim, n_tra, degree, n_points_1d>::data_quadrature_face;
-    using OceanoOperator<dim, n_tra, degree, n_points_1d>::data_quadrature_boundary;
-
-    using OceanoOperator<dim, n_tra, degree, n_points_1d>::model;
+    using Base::data_quadrature_cell_0;
+    using Base::data_quadrature_cell_1;
+    using Base::data_quadrature_face;
+    using Base::data_quadrature_boundary;
 
   private:
-    using OceanoOperator<dim, n_tra, degree, n_points_1d>::data;
-
-    using OceanoOperator<dim, n_tra, degree, n_points_1d>::num_flux;
-
-    using OceanoOperator<dim, n_tra, degree, n_points_1d>::timer;
+    using Base::data;
+    using Base::timer;
+    using Base::num_flux;
 
     void local_apply_inverse_modified_mass_matrix_tracer(
       const MatrixFree<dim, Number>                                 &data,
@@ -233,7 +241,13 @@ namespace SpaceDiscretization
     ICBC::BcBase<dim, 1+dim+n_tra>   *bc,
     TimerOutput                      &timer,
     const unsigned int                max_iteration_height)
-    : OceanoOperator<dim, n_tra, degree, n_points_1d>(
+#if defined SPACEDISCRETIZATION_EXPLICIT
+    : OceanoOperatorExplicit<dim, n_tra, degree, n_points_1d>(
+#elif defined SPACEDISCRETIZATION_IMPLICITFRICTION
+    : OceanoOperatorImplicitFriction<dim, n_tra, degree, n_points_1d>(
+#elif defined SPACEDISCRETIZATION_SEMIIMPLICIT
+    : OceanoOperatorSemiImplicit<dim, n_tra, degree, n_points_1d>(
+#endif
       param, bc, timer, max_iteration_height)
   {
      check_tracer_mass_cell_integral = 0.;
@@ -800,7 +814,6 @@ namespace SpaceDiscretization
   // time with default vector updates on a 40-core machine, the percentage is
   // around 35% with the more optimized variant. In other words, this is a
   // speedup of around a third.
-#if defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA || defined TIMEINTEGRATOR_ADDITIVERUNGEKUTTA
   template <int dim, int n_tra, int degree, int n_points_1d>
   void OceanoOperatorWithTracer<dim, n_tra, degree, n_points_1d>::perform_stage_tracers(
     const unsigned int                                             current_stage,
@@ -869,7 +882,7 @@ namespace SpaceDiscretization
         }
     }
   }
-#endif
+
 #ifdef OCEANO_WITH_MASSCONSERVATIONCHECK
   // The tracer conservation balance is based on a similar algorithm of the one
   // that performs the global mass check. We refer the related comments for details.
