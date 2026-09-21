@@ -173,11 +173,11 @@
 #include <deal.II/distributed/solution_transfer.h>
 
 // The following files include the oceano classes.
-// In some case, the files are included depending on
-// the Preprocessor keys. For icbc, this is necessary because
-// we have done a limited use of virtual classes; on the contrary
-// each of these header files contains the same class definition, so they
-// cannot be linked together.
+// In some cases, the files are included depending on
+// the preprocessor keys. For space discretization, we have two different
+// functionalities (time stepping and tracer), which are treated using two
+// levels of base-derived classes. The first level resolves time stepping,
+// while the second handles the cases with and without tracers.
 #if defined OCEANO_WITH_TRACERS
 #include <space_discretization/OceanDGWithTracer.h>
 #elif defined SPACEDISCRETIZATION_EXPLICIT
@@ -194,6 +194,10 @@
 #elif defined TIMEINTEGRATOR_ADDITIVERUNGEKUTTA
 #include <time_integrator/AdditiveRungeKuttaIntegrator.h>
 #endif
+// For icbc, the preprocessor is necessary because
+// we have done a limited use of virtual classes; on the contrary
+// each of these header files contains the same class definition, so they
+// cannot be linked together.
 #if defined ICBC_IMPULSIVEWAVE
 #include <icbc/Icbc_ImpulsiveWave.h>
 #elif defined ICBC_SHALLOWWATERVORTEX
