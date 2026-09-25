@@ -36,6 +36,7 @@ namespace TimeIntegrator
 
   enum AdditiveRungeKuttaScheme
   {
+    stage_1_order_1, /* Forward and Backward Euler */
     stage_3_order_2, /* Three stage second order explicit scheme (Giraldo et al., 2012) and TR-BDF2 */
   };
 
@@ -86,6 +87,11 @@ namespace TimeIntegrator
       return bi.size();
     }
 
+    bool is_last_stage_implicit() const
+    {
+      return dtildei[n_stages()-1] > 0.;
+    }
+
     template <typename VectorType>
     void reinit(const VectorType              &solution_height,
                 const VectorType              &solution_discharge,
@@ -133,6 +139,14 @@ namespace TimeIntegrator
     switch (scheme)
       {
 
+        // First comes the semi-implicit scheme composed by forward and backward
+        // Euler pair.
+        case stage_1_order_1:
+          {
+            erk = TimeSteppingOceano::FORWARD_EULER;
+            irk = TimeSteppingOceano::BACKWARD_EULER;
+            break;
+          }
         // First comes the three-stage scheme of order two by Giraldo et al., (2012).
         // The implicit part is the trapezoidal BDF2 scheme. The explicit part has
         // enhanced stability and monotonicity region ...
@@ -175,7 +189,7 @@ namespace TimeIntegrator
         vec_ki_height[stage].reinit(solution_height);
         vec_ki_tracer[stage].reinit(solution_tracer);
       }
-    for (unsigned int stage = 0; stage < 2*n_stages(); ++stage)
+    for (unsigned int stage = 0; stage < 2*n_stages()+is_last_stage_implicit(); ++stage)
       vec_ki_discharge[stage].reinit(solution_discharge);
   }
 
@@ -227,6 +241,9 @@ namespace TimeIntegrator
     std::vector<double> b_i = bi;
     for (unsigned int i = 0; i < bi.size(); ++i) b_i[i] *= time_step;
 
+    std::vector<double> b_tilde_i = btildei;
+    for (unsigned int i = 0; i < btildei.size(); ++i) b_tilde_i[i] *= time_step;
+
     std::vector<std::vector<double>> a_i = ai;
     for (unsigned int stage = 0; stage < ai.size(); ++stage)
       for (unsigned int i = 0; i < ai[stage].size(); ++i) a_i[stage][i] *= time_step;
@@ -248,7 +265,7 @@ namespace TimeIntegrator
                                        &b_i[0] :
                                        &a_i[0][0]),
                                      (0 == ci.size() - 1 ?
-                                       &b_i[0] :
+                                       &b_tilde_i[0] :
                                        &a_tilde_i[0][0]),
                                      vec_ri,
                                      vec_ki_height,
@@ -300,7 +317,7 @@ namespace TimeIntegrator
                                            &b_i[0] :
                                            &a_i[stage][0]),
                                          (stage == ci.size() - 1 ?
-                                           &b_i[0] :
+                                           &b_tilde_i[0] :
                                            &a_tilde_i[stage][0]),
                                          vec_ri,
                                          vec_ki_height,

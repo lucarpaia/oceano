@@ -40,7 +40,10 @@
 #define TIMEINTEGRATOR_ADDITIVERUNGEKUTTA
 // Than it comes the space discretization based on Discontinuous Galerkin. Different
 // combinations are possible: an explicit scheme, a scheme with implicit friction or a
-// semi-implicit scheme:
+// semi-implicit scheme. Note that the space discretization should match the time
+// discretization, e.g. the explicit space implementation must go with the explicit time
+// discretization:
+#undef  SPACEDISCRETIZATION_EXPLICIT
 #define SPACEDISCRETIZATION_IMPLICITFRICTION
 #undef  SPACEDISCRETIZATION_SEMIIMPLICIT
 // The numerical flux (Riemann solver) at the faces between cells. For this
@@ -262,14 +265,6 @@ namespace Problem
   static_assert(n_tracers > 0, "MODEL_SHALLOWWATERWITHSEDIMENT requires n_tracers > 0");
 #elif defined MODEL_SHALLOWWATERWITHBIOLOGY
   static_assert(n_tracers == 2, "MODEL_SHALLOWWATERWITHBIOLOGY requires n_tracers == 2");
-#endif
-
-#if defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
-#define SPACEDISCRETIZATION_EXPLICIT
-#undef  SPACEDISCRETIZATION_IMPLICITFRICTION
-#undef  SPACEDISCRETIZATION_SEMIIMPLICIT
-#else
-#undef  SPACEDISCRETIZATION_EXPLICIT
 #endif
 
   // @sect3{The OceanoProblem class}
@@ -1456,27 +1451,29 @@ namespace Problem
     }
 
     // For a general Runge--Kutta schemes with Butcher tableau we need a table
-    // to store the updated residual vector at each stage. We blend one of the
-    // two auxiliary vectors with this table in a single entity, so at the end
+    // to store the updated residual vector at each stage. Moreover we need two auxiliary
+    // vectors to store temporarly the current residual and the current solution. We blend
+    // one of the two auxiliary vectors with the RK table in a single entity, so at the end
     // `rk_register_2` has size equal to the number of stage plus one. For
     // the Additive Runge--Kutta the number of stored residuals is doubled
     // because of the explicit and the implicit residuals. We blend the two residuals
-    // per stage in a table, that should have size equal to twice the number of stages plus one.
-    // However the last stage has common residuals so we can save one residual and
-    // the final dimension is just twice the number of stages. Please note that, for now, ARK
-    // is used only for the discharge equation.
+    // per stage in a table, that has size equal to twice the number of stages plus one.
+    // However, if the last stage is explicit, the last stage has a common residuals for
+    // the explicit and implicit part, so we can save one residual and the final dimension
+    // is just twice the number of stages. Please note that, for now, ARK is used only for
+    // the discharge equation.
 #if defined TIMEINTEGRATOR_EXPLICITRUNGEKUTTA
     const TimeIntegrator::ExplicitRungeKuttaIntegrator integrator(rk_scheme);
 
     LinearAlgebra::distributed::Vector<Number> rk_register_height_1;
     LinearAlgebra::distributed::Vector<Number> rk_register_discharge_1;
     LinearAlgebra::distributed::Vector<Number> rk_register_tracer_1;
-    std::vector<LinearAlgebra::distributed::Vector<Number>> rk_register_height_2(
-                                                              integrator.n_stages()+1);
-    std::vector<LinearAlgebra::distributed::Vector<Number>> rk_register_discharge_2(
-                                                              integrator.n_stages()+1);
-    std::vector<LinearAlgebra::distributed::Vector<Number>> rk_register_tracer_2(
-                                                              integrator.n_stages()+1);
+    std::vector<LinearAlgebra::distributed::Vector<Number>>
+      rk_register_height_2(integrator.n_stages() + 1);
+    std::vector<LinearAlgebra::distributed::Vector<Number>>
+     rk_register_discharge_2(integrator.n_stages() + 1);
+    std::vector<LinearAlgebra::distributed::Vector<Number>>
+      rk_register_tracer_2(integrator.n_stages() + 1);
 
     integrator.reinit(solution_height, solution_discharge, solution_tracer,
                       rk_register_height_1,
@@ -1492,12 +1489,12 @@ namespace Problem
     LinearAlgebra::distributed::Vector<Number> rk_register_height_1;
     LinearAlgebra::distributed::Vector<Number> rk_register_discharge_1;
     LinearAlgebra::distributed::Vector<Number> rk_register_tracer_1;
-    std::vector<LinearAlgebra::distributed::Vector<Number>> rk_register_height_2(
-                                                              integrator.n_stages()+1);
-    std::vector<LinearAlgebra::distributed::Vector<Number>> rk_register_discharge_2(
-                                                              2*integrator.n_stages());
-    std::vector<LinearAlgebra::distributed::Vector<Number>> rk_register_tracer_2(
-                                                              integrator.n_stages()+1);
+    std::vector<LinearAlgebra::distributed::Vector<Number>>
+      rk_register_height_2(integrator.n_stages() + 1);
+    std::vector<LinearAlgebra::distributed::Vector<Number>>
+      rk_register_discharge_2(2 * integrator.n_stages() + integrator.is_last_stage_implicit());
+    std::vector<LinearAlgebra::distributed::Vector<Number>>
+      rk_register_tracer_2(integrator.n_stages() + 1);
 
     integrator.reinit(solution_height, solution_discharge, solution_tracer,
                       rk_register_height_1,

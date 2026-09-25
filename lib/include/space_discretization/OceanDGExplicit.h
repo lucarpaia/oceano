@@ -170,12 +170,18 @@ namespace SpaceDiscretization
   // after the loop last touches an entry. A different code path is again used for
   // the last stage when we do not need to update the `next_ri` vector.
   //
-  // The final implementation detail is the static cast of the owning class
+  // An important implementation detail is the static cast of the owning class
   // passed to the data loop. MatrixFree::loop() requires the pointer-to-member
   // functions and the owning object pointer to refer to the same class type.
   // Since the local_apply functions are members of the base class, we cast
   // this from the derived class pointer to a pointer to the base class (this
   // fix was found by chatGPT, otherwise impossible to compile).
+  //
+  // Finally we comment the zeroing out of the ghost cells. Passing to the
+  // matrix-free loop a ghosted destination vector, is not allowed. This is done
+  // for safety as it ensures that ghost slots start at zero before accumalating
+  // values from multiple processors. This is why the solution vectors ghost cells
+  // need to be cleaned out.
   template <int dim, int n_tra, int degree, int n_points_1d>
   void OceanoOperatorExplicit<dim, n_tra, degree, n_points_1d>::perform_stage_hydro(
     const unsigned int                                             current_stage,

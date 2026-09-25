@@ -93,7 +93,7 @@ namespace SpaceDiscretization
 
 
   // This routine is also similar to its explicit counterpart. In fact we apply the same
-  // concepts to the Additive Runge-Kutta (ARK )method where bottom friction is treated
+  // concepts to the Additive Runge-Kutta (ARK) method where bottom friction is treated
   // implicitly. The cost of ARK scheme are quite higher with respect to the explicit
   // scheme. The main problem is memory access: the vectors to access at each stage are
   // `2 * (n_stages-1) +1`, the factor two is related to the presence of the stiff and
@@ -130,7 +130,8 @@ namespace SpaceDiscretization
     LinearAlgebra::distributed::Vector<Number>                    &next_ri_discharge) const
   {
 
-    unsigned int n_stages = vec_ki_height.size()-1;
+    const unsigned int n_stages = vec_ki_height.size()-1;
+    const bool is_last_stage_implicit = Base::factor_matrix > 0.;
 
     {
       TimerOutput::Scope t(timer, "rk_stage hydro - integrals L_h");
@@ -155,7 +156,7 @@ namespace SpaceDiscretization
                 MatrixFree<dim, Number>::DataAccessOnFaces::values,
                 MatrixFree<dim, Number>::DataAccessOnFaces::values);
 
-      if (current_stage == n_stages-1)
+      if (current_stage == n_stages-1 && !is_last_stage_implicit)
         {
           data.loop(
                 &Base::local_apply_cell_discharge,
@@ -234,7 +235,7 @@ namespace SpaceDiscretization
         }
 
 
-      if (current_stage == n_stages-1)
+      if (current_stage == n_stages-1 && !is_last_stage_implicit)
         {
           data.cell_loop(
             &Base::local_apply_inverse_mass_matrix_discharge,
@@ -293,12 +294,25 @@ namespace SpaceDiscretization
             std::function<void(const unsigned int, const unsigned int)>(),
             1);
 
-          data.cell_loop(
-            &Base::local_apply_inverse_modified_mass_matrix_discharge,
-            static_cast<const Base *>(this),
-            next_ri_discharge,
-            {vec_ki_discharge.front(), current_ri[0], current_ri[1]},
-            true);
+          if (current_stage == n_stages-1)
+            {
+              solution_discharge.zero_out_ghost_values();
+              data.cell_loop(
+                &Base::local_apply_inverse_modified_mass_matrix_discharge,
+                static_cast<const Base *>(this),
+                solution_discharge,
+                {vec_ki_discharge.front(), current_ri[0], current_ri[1]},
+                true);
+            }
+         else
+            {
+              data.cell_loop(
+                &Base::local_apply_inverse_modified_mass_matrix_discharge,
+                static_cast<const Base *>(this),
+                next_ri_discharge,
+                {vec_ki_discharge.front(), current_ri[0], current_ri[1]},
+                true);
+            }
         }
     }
   }
