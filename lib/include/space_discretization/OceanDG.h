@@ -136,7 +136,9 @@ namespace SpaceDiscretization
   // otherwise present in matrix-free operators and only implement an `apply`
   // function as well as the combination of `apply` with the required vector
   // updates for the Runge--Kutta time integrator mentioned above
-  // (called `perform_stage`). We have added three additional
+  // (called `perform_stage`).
+  //
+  // We have added three additional
   // functions involving matrix-free routines, namely one to compute an
   // estimate of the time step scaling (that is combined with the Courant
   // number for the actual time step size) based on the velocity and speed of
@@ -166,7 +168,6 @@ namespace SpaceDiscretization
   public:
     static constexpr unsigned int n_quadrature_points_1d = n_points_1d;
 
-    double factor_matrix;
     double check_mass_cell_integral;
     double check_mass_boundary_integral;
 
@@ -181,15 +182,15 @@ namespace SpaceDiscretization
                 const DoFHandler<dim> &dof_handler_discharge,
                 const DoFHandler<dim> &dof_handler_tracer);
 
-    void check_mass(
-      const Number                                                   factor_residual,
-      const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
-      const LinearAlgebra::distributed::Vector<Number>              &solution_height);
-
     void project_hydro(
       const Function<dim>                                     &function,
       LinearAlgebra::distributed::Vector<Number>              &solution_height,
       LinearAlgebra::distributed::Vector<Number>              &solution_discharge) const;
+
+    void check_mass(
+      const Number                                                   factor_residual,
+      const std::vector<LinearAlgebra::distributed::Vector<Number>> &current_ri,
+      const LinearAlgebra::distributed::Vector<Number>              &solution_height);
 
     std::array<double, 2> compute_errors_hydro(
       const Function<dim>                                     &function,
@@ -223,24 +224,6 @@ namespace SpaceDiscretization
       const Mapping<dim>    &mapping,
       const DoFHandler<dim> &dof_handler_height);
 
-    void local_apply_inverse_mass_matrix_height(
-      const MatrixFree<dim, Number>                                 &data,
-      LinearAlgebra::distributed::Vector<Number>                    &dst,
-      const LinearAlgebra::distributed::Vector<Number>              &src,
-      const std::pair<unsigned int, unsigned int>                   &cell_range) const;
-
-    void local_apply_inverse_mass_matrix_discharge(
-      const MatrixFree<dim, Number>                                 &data,
-      LinearAlgebra::distributed::Vector<Number>                    &dst,
-      const LinearAlgebra::distributed::Vector<Number>              &src,
-      const std::pair<unsigned int, unsigned int>                   &cell_range) const;
-
-    void local_apply_inverse_modified_mass_matrix_discharge(
-      const MatrixFree<dim, Number>                                 &data,
-      LinearAlgebra::distributed::Vector<Number>                    &dst,
-      const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
-      const std::pair<unsigned int, unsigned int>                   &cell_range) const;
-
     void local_apply_cell_height(
       const MatrixFree<dim, Number>                                 &data,
       LinearAlgebra::distributed::Vector<Number>                    &dst,
@@ -248,18 +231,6 @@ namespace SpaceDiscretization
       const std::pair<unsigned int, unsigned int>                   &cell_range) const;
 
     void local_apply_cell_discharge(
-      const MatrixFree<dim, Number>                                 &data,
-      LinearAlgebra::distributed::Vector<Number>                    &dst,
-      const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
-      const std::pair<unsigned int, unsigned int>                   &cell_range) const;
-
-    void local_apply_cell_nonstiff_discharge(
-      const MatrixFree<dim, Number>                                 &data,
-      LinearAlgebra::distributed::Vector<Number>                    &dst,
-      const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
-      const std::pair<unsigned int, unsigned int>                   &cell_range) const;
-
-    void local_apply_cell_stiff_discharge(
       const MatrixFree<dim, Number>                                 &data,
       LinearAlgebra::distributed::Vector<Number>                    &dst,
       const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
@@ -300,6 +271,18 @@ namespace SpaceDiscretization
       LinearAlgebra::distributed::Vector<Number>                    &dst,
       const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
       const std::pair<unsigned int, unsigned int>                   &face_range) const;
+
+    void local_apply_inverse_mass_matrix_height(
+      const MatrixFree<dim, Number>                                 &data,
+      LinearAlgebra::distributed::Vector<Number>                    &dst,
+      const LinearAlgebra::distributed::Vector<Number>              &src,
+      const std::pair<unsigned int, unsigned int>                   &cell_range) const;
+
+    void local_apply_inverse_mass_matrix_discharge(
+      const MatrixFree<dim, Number>                                 &data,
+      LinearAlgebra::distributed::Vector<Number>                    &dst,
+      const LinearAlgebra::distributed::Vector<Number>              &src,
+      const std::pair<unsigned int, unsigned int>                   &cell_range) const;
 
     void local_apply_fake(
       const MatrixFree<dim, Number>                                 &data,
@@ -348,6 +331,17 @@ namespace SpaceDiscretization
 
     MatrixFree<dim, Number> data;
     TimerOutput &timer;
+
+    void get_boundary_value(
+      const types::boundary_id                       boundary_id,
+      const VectorizedArray<Number>                  z_m,
+      const Tensor<1, dim, VectorizedArray<Number>> &q_m,
+      const Tensor<1, dim, VectorizedArray<Number>> &normal,
+      const Point<dim, VectorizedArray<Number>>     &point,
+      const VectorizedArray<Number>                  zb_m,
+      VectorizedArray<Number>                       *z_p,
+      Tensor<1, dim, VectorizedArray<Number>>       &q_p,
+      bool                                          *at_outflow) const;
 
   private:
     unsigned int max_iteration_height;
@@ -445,7 +439,7 @@ namespace SpaceDiscretization
 
 
 
-  // With the last two functions we want also to initialize lots of data that
+  // With the next two functions we want also to initialize lots of data that
   // we do not want to recompute at each time-step but rather store in memory
   // and access it. These are bathymetry and friction at quadrature points that
   // are read from large datasets and to be accessed many many times.
@@ -720,95 +714,6 @@ namespace SpaceDiscretization
   }
 
   template <int dim, int n_tra, int degree, int n_points_1d>
-  void OceanoOperator<dim, n_tra, degree, n_points_1d>::local_apply_cell_nonstiff_discharge(
-    const MatrixFree<dim, Number> &,
-    LinearAlgebra::distributed::Vector<Number>                    &dst,
-    const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
-    const std::pair<unsigned int, unsigned int>                   &cell_range) const
-  {
-    FEEvaluation<dim, -1, n_points_1d, 1, Number> phi_height(data,cell_range,0);
-    FEEvaluation<dim, -1, n_points_1d, dim, Number> phi_discharge(data,cell_range,1);
-    FEEvaluation<dim, -1, n_points_1d, dim, Number> phi_velocity(data,cell_range,1);
-
-    const auto inv_degree = degree > 0 ? 1./(degree*degree) : 0.;
-
-    for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
-      {
-        phi_height.reinit(cell);
-        phi_height.gather_evaluate(src[0], EvaluationFlags::values | EvaluationFlags::gradients);
-        phi_discharge.reinit(cell);
-        phi_discharge.gather_evaluate(src[1], EvaluationFlags::values);
-        phi_velocity.reinit(cell);
-        phi_velocity.gather_evaluate(src.back(), EvaluationFlags::gradients);
-
-        VectorizedArray<Number> area_cell;
-        for (unsigned int v = 0; v < data.n_active_entries_per_cell_batch(cell); ++v)
-          area_cell[v] = inv_degree * data.get_cell_iterator(cell,v)->measure();
-
-        for (unsigned int q = 0; q < phi_discharge.n_q_points; ++q)
-          {
-            const auto z_q = phi_height.get_value(q);
-            const auto dz_q = phi_height.get_gradient(q);
-            const auto q_q = phi_discharge.get_value(q);
-            const auto du_q = phi_velocity.get_gradient(q);
-            const auto point_q = phi_discharge.quadrature_point(q);
-
-            const auto zb_q = data_quadrature_cell_0.get_data(cell, q)[0];
-            const auto data_onthefly_q =
-              evaluate_function<dim, Number, dim+1>(*bc->problem_data, point_q, 2);
-
-            phi_discharge.submit_gradient(
-              model.advective_diffusive_flux<dim>(
-                z_q, q_q, model.depth(z_q, zb_q)*du_q, zb_q, area_cell),
-              q);
-
-            phi_discharge.submit_value(
-              model.source_nonstiff<dim>(z_q, q_q, dz_q, zb_q, data_onthefly_q),
-              q);
-          }
-
-        phi_discharge.integrate_scatter(EvaluationFlags::values |
-                                        EvaluationFlags::gradients,
-                                       dst);
-      }
-  }
-
-  template <int dim, int n_tra, int degree, int n_points_1d>
-  void OceanoOperator<dim, n_tra, degree, n_points_1d>::local_apply_cell_stiff_discharge(
-    const MatrixFree<dim, Number> &,
-    LinearAlgebra::distributed::Vector<Number>                    &dst,
-    const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
-    const std::pair<unsigned int, unsigned int>                   &cell_range) const
-  {
-    FEEvaluation<dim, -1, n_points_1d, 1, Number> phi_height(data,cell_range,0);
-    FEEvaluation<dim, -1, n_points_1d, dim, Number> phi_discharge(data,cell_range,1);
-
-    for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
-      {
-        phi_height.reinit(cell);
-        phi_height.gather_evaluate(src[0], EvaluationFlags::values);
-        phi_discharge.reinit(cell);
-        phi_discharge.gather_evaluate(src[1], EvaluationFlags::values);
-
-        for (unsigned int q = 0; q < phi_discharge.n_q_points; ++q)
-          {
-            const auto q_q = phi_discharge.get_value(q);
-            const auto z_q = phi_height.get_value(q);
-
-            const auto zb_q = data_quadrature_cell_0.get_data(cell, q)[0];
-            const auto cf_q = data_quadrature_cell_0.get_data(cell, q)[1];
-
-            phi_discharge.submit_value(
-              model.source_stiff<dim>(z_q, q_q, zb_q, cf_q),
-              q);
-          }
-
-        phi_discharge.integrate_scatter(EvaluationFlags::values,
-                                       dst);
-      }
-  }
-
-  template <int dim, int n_tra, int degree, int n_points_1d>
   void OceanoOperator<dim, n_tra, degree, n_points_1d>::local_apply_cell_mass_height(
     const MatrixFree<dim, Number> &,
     LinearAlgebra::distributed::Vector<Number>                    &dst,
@@ -1033,58 +938,21 @@ namespace SpaceDiscretization
   }
 
   // For faces located at the boundary, we need to impose the appropriate
-  // boundary conditions. In this tutorial program, we implement four cases as
-  // mentioned above. The discontinuous Galerkin
+  // boundary conditions. The discontinuous Galerkin
   // method imposes boundary conditions not as constraints, but only
   // weakly. Thus, the various conditions are imposed by finding an appropriate
   // <i>exterior</i> quantity $\mathbf{w}^+$ that is then handed to the
   // numerical flux function also used for the interior faces. In essence,
   // we "pretend" a state on the outside of the domain in such a way that
-  // if that were reality, the solution of the PDE would satisfy the boundary
-  // conditions we want.
-  //
-  // For wall boundaries, we need to impose a no-normal-flux condition on the
-  // momentum variable, whereas we use a Neumann condition for the water height.
-  // To achieve the no-normal flux condition, we set the exterior values to the
-  // interior values and subtract two times the velocity in wall-normal direction,
-  // i.e., in the direction of the normal vector.
-  //
-  // For supercritical inflow boundaries, we simply set the given Dirichlet data
-  // $\mathbf{w}_\mathrm{D}$ as a boundary value.
-  //
-  // The imposition of a supercritical outflow is essentially a Neumann condition,
-  // i.e., setting $\mathbf{w}^+ = \mathbf{w}^-$.
-  // The next boundary conditions are very important in coastal ocean and
-  // hydraulic simulation for which the flow conditions are essentially
-  // subcritical. For hyperbolic problems we know, from IBV theorem, that we can
-  // impose a number of boundary conditions equal to the number of eigenvalues
-  // ingoing into the computational domain. For two-dimensional shallow water
-  // subcritical flows, this number is two or three depending on the flow direction.
-  // The simple strategy choosen here is to impose always one boundary condition.
-  // The choice of the variable to impose depends on the problem: we have
-  // implemented a prescribed flow height which is useful for open boundaries
-  // with tides and a prescribed discharge which is more
-  // useful for river applications. Please note that in some
-  // applications it can be better to set also the tangential flow but we do not
-  // treat this case here. Concerning the implementation, we use
-  // the evaluate function by component to get the discharge normal to the boundary.
-  // Later it is projected along the boundary normal to get x and y
-  // discharge components to be used in the Riemann solver.
-  //
-  // We have implemented an absorbing outflow boundary where we recover the
-  // information coming from the ingoing eigenvalue. We compute a
-  // boundary state from a far-field state (typically a flow at rest) from
-  // the theory of characteristics, that is by equating at the boundary location,
-  // the outgoing Riemann invariant with the ingoing one.
+  // if that were reality, the solution of the shallow water equations would
+  // satisfy the boundary conditions we want.
   //
   // In the implementation below, we check for the various types
   // of boundaries at the level of quadrature points. Of course, we could also
   // have moved the decision out of the quadrature point loop and treat entire
   // faces as of the same kind, which avoids some map/set lookups in the inner
   // loop over quadrature points. However, the loss of efficiency is hardly
-  // noticeable, so we opt for the simpler code here. Also note that the final
-  // `else` clause will catch the case when some part of the boundary was not
-  // assigned any boundary condition via `OceanoOperator::set_..._boundary(...)`.
+  // noticeable, so we opt for the simpler code here.
   template <int dim, int n_tra, int degree, int n_points_1d>
   void OceanoOperator<dim, n_tra, degree, n_points_1d>::local_apply_boundary_face_height(
     const MatrixFree<dim, Number> &,
@@ -1094,8 +962,6 @@ namespace SpaceDiscretization
   {
     FEFaceEvaluation<dim, -1, n_points_1d, 1, Number> phi_height(data, face_range, true, 0);
     FEFaceEvaluation<dim, -1, n_points_1d, dim, Number> phi_discharge(data, face_range, true, 1);
-
-    const unsigned int n_vars = dim+1;
 
     for (unsigned int face = face_range.first; face < face_range.second; ++face)
       {
@@ -1109,81 +975,18 @@ namespace SpaceDiscretization
             const auto z_m    = phi_height.get_value(q);
             const auto q_m    = phi_discharge.get_value(q);
             const auto normal = phi_height.normal_vector(q);
+            const auto point  = phi_height.quadrature_point(q);
             const auto zb_m   =
               data_quadrature_boundary.get_data(face-data.n_inner_face_batches(), q);
 
-            auto rho_u_dot_n = q_m * normal;
-
             VectorizedArray<Number> z_p;
             Tensor<1, dim, VectorizedArray<Number>> q_p;
-            Tensor<1, n_vars, VectorizedArray<Number>> w_p;
-            const auto boundary_id = data.get_boundary_id(face);
-            if (bc->wall_boundaries.find(boundary_id) != bc->wall_boundaries.end())
-              {
-                z_p = z_m;
-                q_p = q_m - 2. * rho_u_dot_n * normal;
-              }
-            else if (bc->supercritical_inflow_boundaries.find(boundary_id) !=
-                     bc->supercritical_inflow_boundaries.end())
-              {
-                w_p =
-                  evaluate_function<dim, Number, n_vars>(
-                    *bc->supercritical_inflow_boundaries.find(boundary_id)->second,
-                    phi_height.quadrature_point(q));
-                z_p = w_p[0];
-                for (unsigned int d = 0; d < dim; ++d) q_p[d] =
-                  w_p[d+1] * model.depth(z_p, zb_m);
-              }
-            else if (bc->supercritical_outflow_boundaries.find(boundary_id) !=
-                     bc->supercritical_outflow_boundaries.end())
-              {
-                z_p = z_m;
-                q_p = q_m;
-              }
-            else if (bc->height_inflow_boundaries.find(boundary_id) !=
-                     bc->height_inflow_boundaries.end())
-              {
-                z_p =
-                  evaluate_function<dim, Number>(
-                    *bc->height_inflow_boundaries.find(boundary_id)->second,
-                    phi_height.quadrature_point(q), 0);
-                q_p = q_m;
-              }
-            else if (bc->discharge_inflow_boundaries.find(boundary_id) !=
-                     bc->discharge_inflow_boundaries.end())
-              {
-                z_p = z_m;
-                q_p =
-                  evaluate_function<dim, Number>(
-                    *bc->discharge_inflow_boundaries.find(boundary_id)->second,
-                    phi_height.quadrature_point(q), 1) * -normal;
-              }
-            else if (bc->absorbing_outflow_boundaries.find(boundary_id) !=
-                     bc->absorbing_outflow_boundaries.end())
-              {
-                w_p =
-                  evaluate_function<dim, Number, n_vars>(
-                    *bc->absorbing_outflow_boundaries.find(boundary_id)->second,
-                      phi_height.quadrature_point(q));
-                z_p = w_p[0];
-                for (unsigned int d = 0; d < dim; ++d) q_p[d]
-                  = w_p[d+1] * model.depth(z_p, zb_m);
-                const auto r_p
-                  = model.riemann_invariant_p<dim>(z_m, q_m, normal, zb_m);
-                const auto r_m
-                  = model.riemann_invariant_m<dim>(z_p, q_p, normal, zb_m);
-                const auto c_b = 0.25 * (r_p - r_m);
-                const auto h_b = c_b * c_b / model.g;
-                const auto u_b = 0.5 * (r_p + r_m);
+            bool at_outflow;
 
-                z_p = h_b - zb_m;
-                q_p =  u_b * model.depth(z_p, zb_m) * normal;
-              }
-            else
-              AssertThrow(false,
-                          ExcMessage("Unknown boundary id, did "
-                                     "you set a boundary condition for "
-                                     "this part of the domain boundary?"));
+            const auto boundary_id = data.get_boundary_id(face);
+
+            get_boundary_value(
+              boundary_id, z_m, q_m, normal, point, zb_m, &z_p, q_p, &at_outflow);
 
             auto flux =
               num_flux.numerical_massflux_weak<dim>(z_m, z_p, q_m, q_p,
@@ -1206,8 +1009,6 @@ namespace SpaceDiscretization
     FEFaceEvaluation<dim, -1, n_points_1d, 1, Number> phi_height(data, face_range, true, 0);
     FEFaceEvaluation<dim, -1, n_points_1d, dim, Number> phi_discharge(data, face_range, true, 1);
 
-    const unsigned int n_vars = dim+1;
-
     for (unsigned int face = face_range.first; face < face_range.second; ++face)
       {
         phi_height.reinit(face);
@@ -1220,84 +1021,18 @@ namespace SpaceDiscretization
             const auto z_m    = phi_height.get_value(q);
             const auto q_m    = phi_discharge.get_value(q);
             const auto normal = phi_discharge.normal_vector(q);
+            const auto point  = phi_discharge.quadrature_point(q);
             const auto zb_m   =
               data_quadrature_boundary.get_data(face-data.n_inner_face_batches(), q);
 
-            auto rho_u_dot_n = q_m * normal;
-
-            bool at_outflow = false;
-
             VectorizedArray<Number> z_p;
             Tensor<1, dim, VectorizedArray<Number>> q_p;
-            Tensor<1, n_vars, VectorizedArray<Number>> w_p;
-            const auto boundary_id = data.get_boundary_id(face);
-            if (bc->wall_boundaries.find(boundary_id) != bc->wall_boundaries.end())
-              {
-                z_p = z_m;
-                q_p = q_m - 2. * rho_u_dot_n * normal;
-              }
-            else if (bc->supercritical_inflow_boundaries.find(boundary_id) !=
-                     bc->supercritical_inflow_boundaries.end())
-              {
-                w_p =
-                  evaluate_function<dim, Number, n_vars>(
-                    *bc->supercritical_inflow_boundaries.find(boundary_id)->second,
-                    phi_discharge.quadrature_point(q));
-                z_p = w_p[0];
-                for (unsigned int d = 0; d < dim; ++d) q_p[d] =
-                  w_p[d+1] * model.depth(z_p, zb_m);
-              }
-            else if (bc->supercritical_outflow_boundaries.find(boundary_id) !=
-                     bc->supercritical_outflow_boundaries.end())
-              {
-                z_p = z_m;
-                q_p = q_m;
-                at_outflow = true;
-              }
-            else if (bc->height_inflow_boundaries.find(boundary_id) !=
-                     bc->height_inflow_boundaries.end())
-              {
-                z_p =
-                  evaluate_function<dim, Number>(
-                    *bc->height_inflow_boundaries.find(boundary_id)->second,
-                    phi_discharge.quadrature_point(q), 0);
-                q_p = q_m;
-              }
-            else if (bc->discharge_inflow_boundaries.find(boundary_id) !=
-                     bc->discharge_inflow_boundaries.end())
-              {
-                z_p = z_m;
-                q_p =
-                  evaluate_function<dim, Number>(
-                    *bc->discharge_inflow_boundaries.find(boundary_id)->second,
-                    phi_discharge.quadrature_point(q), 1) * -normal;
-              }
-            else if (bc->absorbing_outflow_boundaries.find(boundary_id) !=
-                     bc->absorbing_outflow_boundaries.end())
-              {
-                w_p =
-                  evaluate_function<dim, Number, n_vars>(
-                    *bc->absorbing_outflow_boundaries.find(boundary_id)->second,
-                      phi_discharge.quadrature_point(q));
-                z_p = w_p[0];
-                for (unsigned int d = 0; d < dim; ++d) q_p[d] =
-                  w_p[d+1] * model.depth(z_p, zb_m);
-                const auto r_p
-                  = model.riemann_invariant_p<dim>(z_m, q_m, normal, zb_m);
-                const auto r_m
-                  = model.riemann_invariant_m<dim>(z_p, q_p, normal, zb_m);
-                const auto c_b = 0.25 * (r_p - r_m);
-                const auto h_b = c_b * c_b / model.g;
-                const auto u_b = 0.5 * (r_p + r_m);
+            bool at_outflow;
 
-                z_p = h_b - zb_m;
-                q_p =  u_b * model.depth(z_p, zb_m) * normal;
-              }
-            else
-              AssertThrow(false,
-                          ExcMessage("Unknown boundary id, did "
-                                     "you set a boundary condition for "
-                                     "this part of the domain boundary?"));
+            const auto boundary_id = data.get_boundary_id(face);
+
+            get_boundary_value(
+              boundary_id, z_m, q_m, normal, point, zb_m, &z_p, q_p, &at_outflow);
 
             auto flux =
               num_flux.numerical_advflux_weak<dim>(z_m, z_p, q_m, q_p, normal, zb_m, zb_m);
@@ -1309,6 +1044,7 @@ namespace SpaceDiscretization
             if (at_outflow)
               for (unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v)
                 {
+                  auto rho_u_dot_n = q_m * normal;
                   if (rho_u_dot_n[v] < -1e-12)
                     for (unsigned int d = 0; d < dim; ++d)
                       flux[d][v] = 0.;
@@ -1549,80 +1285,6 @@ namespace SpaceDiscretization
             inverse_dry.apply(&cell_matrix[0], phi_discharge.begin_dof_values(),
               phi_discharge.begin_dof_values());
           }
-        phi_discharge.set_dof_values(dst);
-      }
-  }
-
-  template <int dim, int n_tra, int degree, int n_points_1d>
-  void OceanoOperator<dim, n_tra, degree, n_points_1d>::local_apply_inverse_modified_mass_matrix_discharge(
-    const MatrixFree<dim, Number> &,
-    LinearAlgebra::distributed::Vector<Number>                    &dst,
-    const std::vector<LinearAlgebra::distributed::Vector<Number>> &src,
-    const std::pair<unsigned int, unsigned int>                   &cell_range) const
-  {
-    FEEvaluation<dim, -1, degree + 1, dim, Number> phi_discharge(data, cell_range, 1, 2);
-    FEEvaluation<dim, -1, degree + 1, 1, Number> phi_height_ri(data, cell_range, 0, 2);
-    FEEvaluation<dim, -1, degree + 1, dim, Number> phi_discharge_ri(data, cell_range, 1, 2);
-    MatrixFreeOperators::CellwiseInverseMassMatrix<dim, degree, dim, Number>
-      inverse(phi_discharge);
-    MatrixFreeOperatorsOceano::CellwiseInverseMassMatrixLumped<dim, 0, dim, Number>
-      inverse_dry(phi_discharge);
-
-    for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
-      {
-        phi_discharge.reinit(cell);
-        phi_discharge.read_dof_values(src[0]);
-
-        phi_height_ri.reinit(cell);
-        phi_height_ri.gather_evaluate(src[1], EvaluationFlags::values);
-        phi_discharge_ri.reinit(cell);
-        phi_discharge_ri.gather_evaluate(src[2], EvaluationFlags::values);
-
-        if (phi_discharge.get_active_fe_index())
-          {
-            AlignedVector<VectorizedArray<Number>> inverse_jxw(phi_discharge.n_q_points);
-	    inverse.fill_inverse_JxW_values(inverse_jxw);
-
-            for (unsigned int q = 0; q < phi_discharge.n_q_points; ++q)
-              {
-                const auto z_q = phi_height_ri.get_value(q);
-                const auto q_q = phi_discharge_ri.get_value(q);
-                const auto zb_q = data_quadrature_cell_2.get_data(cell, q)[0];
-                const auto cf_q = data_quadrature_cell_2.get_data(cell, q)[1];
-
-                inverse_jxw[q] *= 1. / ( 1. + factor_matrix
-                  * model.bottom_friction.jacobian<dim>(model.velocity<dim>(z_q, q_q, zb_q),
-                                                        cf_q,
-                                                        model.depth(z_q, zb_q))
-                                       );
-              }
-
-            inverse.apply(inverse_jxw, dim, phi_discharge.begin_dof_values(),
-              phi_discharge.begin_dof_values());
-          }
-        else
-          {
-            for (unsigned int q = 0; q < phi_discharge.n_q_points; ++q)
-              {
-                const auto z_q = phi_height_ri.get_value(q);
-                const auto q_q = phi_discharge_ri.get_value(q);
-                const auto zb_q = data_quadrature_cell_2.get_data(cell, q)[0];
-                const auto cf_q = data_quadrature_cell_2.get_data(cell, q)[1];
-
-                phi_height_ri.submit_value(1. + factor_matrix
-                    * model.bottom_friction.jacobian<dim>(model.velocity<dim>(z_q, q_q, zb_q),
-                                                          cf_q,
-                                                          model.depth(z_q, zb_q)),
-                                              q);
-              }
-            phi_height_ri.integrate(EvaluationFlags::values);
-
-            AlignedVector<VectorizedArray<Number>> cell_matrix(1);
-            cell_matrix[0] = phi_height_ri.get_dof_value(0);
-            inverse_dry.apply(&cell_matrix[0], phi_discharge.begin_dof_values(),
-              phi_discharge.begin_dof_values());
-          }
-
         phi_discharge.set_dof_values(dst);
       }
   }
@@ -2302,6 +1964,142 @@ namespace SpaceDiscretization
         },
         solution_height,
         solution_height);
+  }
+
+
+
+  // @sect{Operation on quadrature points}
+
+  // The next function is a more local, quadrature-point-level operation.
+  // It factorizes the computation of the boundary value for each color
+  // of boundary condition: the color is passed as the first argument,
+  // and the output is the ocean state at the boundary.
+  //
+  // For wall boundaries, we need to impose a no-normal-flux condition on the
+  // momentum variable, whereas we use a Neumann condition for the water height.
+  // To achieve the no-normal flux condition, we set the exterior values to the
+  // interior values and subtract two times the velocity in wall-normal direction,
+  // i.e., in the direction of the normal vector.
+  //
+  // For supercritical inflow boundaries, we simply set the given Dirichlet data
+  // $\mathbf{w}_\mathrm{D}$ as a boundary value.
+  //
+  // The imposition of a supercritical outflow is essentially a Neumann condition,
+  // i.e., setting $\mathbf{w}^+ = \mathbf{w}^-$.
+  // The next boundary conditions are very important in coastal ocean and
+  // hydraulic simulation for which the flow conditions are essentially
+  // subcritical. For hyperbolic problems we know, from IBV theorem, that we can
+  // impose a number of boundary conditions equal to the number of eigenvalues
+  // ingoing into the computational domain. For two-dimensional shallow water
+  // subcritical flows, this number is two or three depending on the flow direction.
+  // The simple strategy choosen here is to impose always one boundary condition.
+  // The choice of the variable to impose depends on the problem: we have
+  // implemented a prescribed flow height which is useful for open boundaries
+  // with tides and a prescribed discharge which is more
+  // useful for river applications. Please note that in some
+  // applications it can be better to set also the tangential flow but we do not
+  // treat this case here. Concerning the implementation, we use
+  // the evaluate function by component to get the discharge normal to the boundary.
+  // Later it is projected along the boundary normal to get x and y
+  // discharge components to be used in the Riemann solver.
+  //
+  // We have implemented an absorbing outflow boundary where we recover the
+  // information coming from the ingoing eigenvalue. We compute a
+  // boundary state from a far-field state (typically a flow at rest) from
+  // the theory of characteristics, that is by equating at the boundary location,
+  // the outgoing Riemann invariant with the ingoing one.
+  //
+  // Also note that the final `else` clause will catch the case when some part of
+  // the boundary was not assigned any boundary condition via
+  // `OceanoOperator::set_..._boundary(...)`.
+  template <int dim, int n_tra, int degree, int n_points_1d>
+  void OceanoOperator<dim, n_tra, degree, n_points_1d>::get_boundary_value(
+      const types::boundary_id                       boundary_id,
+      const VectorizedArray<Number>                  z_m,
+      const Tensor<1, dim, VectorizedArray<Number>> &q_m,
+      const Tensor<1, dim, VectorizedArray<Number>> &normal,
+      const Point<dim, VectorizedArray<Number>>     &point,
+      const VectorizedArray<Number>                  zb_m,
+      VectorizedArray<Number>                       *z_p,
+      Tensor<1, dim, VectorizedArray<Number>>       &q_p,
+      bool                                          *at_outflow) const
+  {
+    *at_outflow = false;
+
+    if (bc->wall_boundaries.find(boundary_id) != bc->wall_boundaries.end())
+      {
+        auto rho_u_dot_n = q_m * normal;
+
+        *z_p = z_m;
+        q_p = q_m - 2. * rho_u_dot_n * normal;
+      }
+    else if (bc->supercritical_inflow_boundaries.find(boundary_id) !=
+               bc->supercritical_inflow_boundaries.end())
+      {
+        const unsigned int n_vars = dim+1;
+        Tensor<1, n_vars, VectorizedArray<Number>> w_p;
+
+        w_p = evaluate_function<dim, Number, n_vars>(
+                *bc->supercritical_inflow_boundaries.find(boundary_id)->second,
+                point);
+        *z_p = w_p[0];
+        for (unsigned int d = 0; d < dim; ++d) q_p[d] =
+          w_p[d+1] * model.depth(*z_p, zb_m);
+      }
+    else if (bc->supercritical_outflow_boundaries.find(boundary_id) !=
+               bc->supercritical_outflow_boundaries.end())
+      {
+        *z_p = z_m;
+        q_p = q_m;
+        *at_outflow = true;
+      }
+    else if (bc->height_inflow_boundaries.find(boundary_id) !=
+               bc->height_inflow_boundaries.end())
+      {
+        *z_p =
+          evaluate_function<dim, Number>(
+            *bc->height_inflow_boundaries.find(boundary_id)->second,
+            point, 0);
+        q_p = q_m;
+      }
+    else if (bc->discharge_inflow_boundaries.find(boundary_id) !=
+               bc->discharge_inflow_boundaries.end())
+      {
+        *z_p = z_m;
+        q_p =
+          evaluate_function<dim, Number>(
+            *bc->discharge_inflow_boundaries.find(boundary_id)->second,
+            point, 1) * -normal;
+      }
+    else if (bc->absorbing_outflow_boundaries.find(boundary_id) !=
+               bc->absorbing_outflow_boundaries.end())
+      {
+        const unsigned int n_vars = dim+1;
+        Tensor<1, n_vars, VectorizedArray<Number>> w_p;
+
+        w_p =
+          evaluate_function<dim, Number, n_vars>(
+            *bc->absorbing_outflow_boundaries.find(boundary_id)->second,
+              point);
+        *z_p = w_p[0];
+        for (unsigned int d = 0; d < dim; ++d) q_p[d] =
+          w_p[d+1] * model.depth(*z_p, zb_m);
+        const auto r_p
+          = model.riemann_invariant_p<dim>(z_m, q_m, normal, zb_m);
+        const auto r_m
+          = model.riemann_invariant_m<dim>(*z_p, q_p, normal, zb_m);
+        const auto c_b = 0.25 * (r_p - r_m);
+        const auto h_b = c_b * c_b / model.g;
+        const auto u_b = 0.5 * (r_p + r_m);
+
+        *z_p = h_b - zb_m;
+        q_p =  u_b * model.depth(*z_p, zb_m) * normal;
+      }
+    else
+      AssertThrow(false,
+                  ExcMessage("Unknown boundary id, did "
+                             "you set a boundary condition for "
+                             "this part of the domain boundary?"));
   }
 } // namespace SpaceDiscretization
 
