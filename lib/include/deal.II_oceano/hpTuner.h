@@ -251,6 +251,12 @@ namespace hpOceano
   // multicomponent solution vector and we store it in a two
   // dimensional vector of Tensors, with the quadrature points
   // along the lines and the dim-components along the columns.
+  //
+  // Note: the nested std::vector for the velocity gradients causes a heap
+  // allocation and non-contiguous memory per quadrature point, which is not
+  // ideal for hot loops such as this one. The allocation could be hoisted out
+  // of the cell worker. However, measurements show no significant impact
+  // for a small number of quadrature points.
   template <int dim, int n_tra, typename Number>
     void hpTuner::estimate_error(
       const std::vector<hp::FECollection<dim>*>                     &fe,
