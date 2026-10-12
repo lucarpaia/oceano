@@ -103,7 +103,7 @@ namespace hpOceano
    * @param data function data
    * @param error_estimate error estimate
    */
-    template <int dim, typename Number>
+    template <int dim, int n_tra, typename Number>
     void estimate_error(
       const std::vector<hp::FECollection<dim>*>                     &fe,
       const std::vector<DoFHandler<dim>*>                           &dof,
@@ -192,7 +192,7 @@ namespace hpOceano
   // The number of quadrature points is equal to the finite element
   // degree; for linear polynomials the gradient is constant and one
   // point it is enough to evaluate it, etc ...
-  template <int dim, typename Number>
+  template <int dim, int n_tra, typename Number>
     void hpTuner::estimate_error(
       const std::vector<hp::FECollection<dim>*>                     &fe,
       const std::vector<DoFHandler<dim>*>                           &dof,
@@ -251,7 +251,7 @@ namespace hpOceano
   // multicomponent solution vector and we store it in a two
   // dimensional vector of Tensors, with the quadrature points
   // along the lines and the dim-components along the columns.
-  template <int dim, typename Number>
+  template <int dim, int n_tra, typename Number>
     void hpTuner::estimate_error(
       const std::vector<hp::FECollection<dim>*>                     &fe,
       const std::vector<DoFHandler<dim>*>                           &dof,
@@ -308,15 +308,12 @@ namespace hpOceano
   // The third error estimator is the the gradient of a tracer (its norm).
   // This is recommended to improve the resolution near tracer fronts.
   // The cell_worker computes the finite element gradient
-  // of the tracer for all quadrature points and assign to
-  // each cell the maximum value. In case of multiple tracers, for now,
-  // the adaptation criteria is only driven by the first tracer-
+  // of all the tracer at all quadrature points and assign to
+  // each cell the maximum value.
   // The number of quadrature points is equal to the finite element
   // degree; for linear polynomials the gradient is constant and one
-  // point it is enough to evaluate it, etc .... Please note that since the
-  // tracers and the free-surface are co-located we can use the same dof
-  // structure.
-  template <int dim, typename Number>
+  // point it is enough to evaluate it, etc ....
+  template <int dim, int n_tra, typename Number>
     void hpTuner::estimate_error(
       const std::vector<hp::FECollection<dim>*>                     &fe,
       const std::vector<DoFHandler<dim>*>                           &dof,
@@ -324,7 +321,7 @@ namespace hpOceano
       const Function<dim>                                           &/*data*/,
       Vector<float>                                                 &error_estimate) const
   {
-    const unsigned int n_q_points_1d = fe[0]->max_degree();
+    const unsigned int n_q_points_1d = fe[2]->max_degree();
     using Iterator = typename DoFHandler<dim>::active_cell_iterator;
 
     auto cell_worker = [&](const Iterator   &cell,
@@ -334,7 +331,8 @@ namespace hpOceano
       hp_fe_values.reinit(cell);
       const FEValues<dim>& fe_values = hp_fe_values.get_present_fe_values();
 
-      std::vector<Tensor<1, dim>> gradients(fe_values.n_quadrature_points);
+      std::vector<std::vector<Tensor<1, dim>>>
+        gradients(fe_values.n_quadrature_points, std::vector<Tensor<1, dim>>(n_tra));
       fe_values.get_function_gradients(solution[2], gradients);
 
       copy_data.cell_index = cell->active_cell_index();
@@ -342,9 +340,12 @@ namespace hpOceano
       float max_gradient = 0.0;
       for(unsigned q = 0; q < fe_values.n_quadrature_points; ++q)
         {
-          float gradient_norm_square =
-            gradients[q][0]*gradients[q][0] + gradients[q][1]*gradients[q][1];
-          max_gradient = std::max(gradient_norm_square, max_gradient);
+          for(unsigned t = 0; t < n_tra; ++t)
+            {
+              float gradient_norm_square = gradients[q][t][0]*gradients[q][t][0]
+                + gradients[q][t][1]*gradients[q][t][1];
+              max_gradient = std::max(gradient_norm_square, max_gradient);
+            }
         }
       copy_data.value = std::sqrt(max_gradient);
     };
@@ -357,10 +358,10 @@ namespace hpOceano
     const UpdateFlags cell_flags = update_gradients | update_quadrature_points;
     hp::QCollection<dim> quadrature;
     quadrature.push_back(QGauss<dim>(n_q_points_1d));
-    ScratchData<dim> scratch_data(*fe[0], quadrature, cell_flags);
+    ScratchData<dim> scratch_data(*fe[2], quadrature, cell_flags);
     CopyData copy_data;
-    MeshWorker::mesh_loop(dof[0]->begin_active(),
-                          dof[0]->end(),
+    MeshWorker::mesh_loop(dof[2]->begin_active(),
+                          dof[2]->end(),
                           cell_worker,
                           copier,
                           scratch_data,
@@ -382,7 +383,7 @@ namespace hpOceano
   // cost of evaluating the bathymetry on a large number of points
   // is taken only during the initial refinement stage and we expect
   // to not impact much the final computational time.
-  template <int dim, typename Number>
+  template <int dim, int n_tra, typename Number>
     void hpTuner::estimate_error(
       const std::vector<hp::FECollection<dim>*>                     &fe,
       const std::vector<DoFHandler<dim>*>                           &dof,
@@ -443,7 +444,7 @@ namespace hpOceano
   // As before we use a large number of quadrature points
   // to be sure to detect all features, even starting from a
   // very coarse mesh.
-  template <int dim, typename Number>
+  template <int dim, int n_tra, typename Number>
     void hpTuner::estimate_error(
       const std::vector<hp::FECollection<dim>*>                     &fe,
       const std::vector<DoFHandler<dim>*>                           &dof,
