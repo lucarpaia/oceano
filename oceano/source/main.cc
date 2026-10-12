@@ -745,13 +745,18 @@ namespace Problem
       fe_collections.push_back(&fe_collection_height);
       fe_collections.push_back(&fe_collection_discharge);
 
-      hp_tuner.estimate_error<dim,Number>(fe_collections,
-                                          dof_handlers,
-                                          {solution_height,
-                                          postprocess_velocity,
-                                          solution_tracer},
-                                          *oceano_operator.bc->problem_data,
-                                          estimated_error_per_cell);
+#ifdef OCEANO_WITH_TRACERS
+      dof_handlers.push_back(&dof_handler_tracer);
+      fe_collections.push_back(&fe_collection_tracer);
+#endif
+
+      hp_tuner.estimate_error<dim,n_tra,Number>(fe_collections,
+                                                dof_handlers,
+                                                {solution_height,
+                                                postprocess_velocity,
+                                                solution_tracer},
+                                                *oceano_operator.bc->problem_data,
+                                                estimated_error_per_cell);
 
       float max_error = estimated_error_per_cell.linfty_norm();
       max_error = Utilities::MPI::max(max_error, MPI_COMM_WORLD);

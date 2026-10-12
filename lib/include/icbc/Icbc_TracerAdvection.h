@@ -29,17 +29,15 @@ namespace ICBC
 {
 
   // This test consists in a flat-bottom channel with constant discharge and height.
-  // The code should be able to preserve this initial state.
   // A concentration is realesed at the initial time upstream. The initial concentration
   // profile is advected with the flow without changing its shape. We can test the
-  // accuracy of the discontinous Galerkin method.
-  // The test can be also run with the biological model and
-  // balanced source terms $S=0$, to check the proper implementation of such terms.
+  // accuracy of the discontinous Galerkin method and of the capability of AMR to follow
+  // the initial concentration profile.
   //
   // Two different concentration profiles are available: a smooth cosine bell and
-  // a discontinuous one.
-#undef  ICBC_TRACERADVECTION_COSINE
-#define ICBC_TRACERADVECTION_DISCONTINUOUS
+  // a discontinuous one. The smooth test is the default one.
+#define ICBC_TRACERADVECTION_COSINE
+#undef  ICBC_TRACERADVECTION_DISCONTINUOUS
 
 
   using namespace dealii;
@@ -49,12 +47,8 @@ namespace ICBC
   // the channel water depth and the free-stream velocity.
   // follows. We choose a channel $[0,1]\times[0,2]$ with a depth of hoo.
   constexpr double hoo     = 0.5;
-  constexpr double uoo     = 0.25;
+  constexpr double uoo     = 1.0;
   // The initial concentrations have prescribed amplitudes and a prescribed radius.
-  // In particular, the following amplitudes are chosen so that they correspond to
-  // an equilibrium of the biological reaction terms (with the default biological parameters).
-  // In the case of coupling with the biological model, the flow speed is chosen to allow
-  // sufficiently long dynamics to observe the effects of any unbalanced reaction terms.
   constexpr double cmax1   = 0.5;
   constexpr double cmax2   = 0.625;
   constexpr double radius0 = 0.25;
@@ -126,11 +120,15 @@ namespace ICBC
 
 #if defined ICBC_TRACERADVECTION_COSINE
     const double rho_half = 0.5*M_PI*radius/radius0;
-    const double conc =
-      radius < radius0 ? cmax * std::cos(rho_half) : 0.0;
+    const double conc1 =
+      radius < radius0 ? cmax1 * std::cos(rho_half) : 0.0;
+    const double conc2 =
+      radius < 0.5*radius0 ? cmax2 * std::cos(2.0*rho_half) : 0.0;
 #else
-    const double conc =
-      radius < radius0 ? 1.0 : 0.0;
+    const double conc1 =
+      radius < radius0 ? cmax1 : 0.0;
+    const double conc2 =
+      radius < 0.5*radius0 ? cmax2 : 0.0;
 #endif
 
     if (component == 0)
@@ -140,9 +138,9 @@ namespace ICBC
     else if (component == 2)
       return 0.;
     else if (component == 3)
-      return cmax1;
+      return conc1;
     else
-      return cmax2;
+      return conc2;
   }
 
 
