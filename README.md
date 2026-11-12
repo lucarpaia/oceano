@@ -28,7 +28,7 @@ make
 ## Salt-marsh dynamics in the Venice Lagoon
 
 <img width="406" height="360" alt="Venice_Lagoon_Wetting_Drying_Final" src="https://github.com/user-attachments/assets/482f0d70-aeeb-407f-a847-d32e13db9f38" />
-<img width="420" height="360" alt="solution_velocity_lido_045" src="https://github.com/user-attachments/assets/e32c357c-196b-49d9-8468-22d173402947" />
+<img width="406" height="360" alt="solution_velocity_lido_045" src="https://github.com/user-attachments/assets/e32c357c-196b-49d9-8468-22d173402947" />
 
 
 We consider a coarse mesh of the Venice lagoon with 17,084 elements with the edges aligned to the main channels.
