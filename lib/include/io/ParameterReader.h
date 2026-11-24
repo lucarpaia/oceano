@@ -246,7 +246,7 @@ namespace IO
 
     // The next subsection is devoted to the parameters used
     // in the sediment source terms.
-    prm.enter_subsection("Sedimentation constants");
+    prm.enter_subsection("Sediment constants");
     {
       // The default sediment diameter $d50 = 2\times10^-4 m = 0.2 mm$,
       // is representative of medium-sized quartz sand.

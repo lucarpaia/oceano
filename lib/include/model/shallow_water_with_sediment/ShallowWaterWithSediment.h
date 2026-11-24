@@ -58,6 +58,7 @@ namespace Model
     double rho_sediment;
     double w_s;
     double shields_denominator;
+    double r0;
 
     Physics::SettlingVelocityStokes settling_velocity;
     Physics::NearBedConcentrationZysermanFredsoe near_bed_concentration;
@@ -105,19 +106,20 @@ namespace Model
     , settling_velocity()
     , near_bed_concentration()
   {
-    prm.enter_subsection("Sedimentation constants");
+    prm.enter_subsection("Physical constants");
     g = prm.get_double("g");
     nu = prm.get_double("water_kinematic_viscosity");
     rho_water = prm.get_double("water_density");
     prm.leave_subsection();
 
-    prm.enter_subsection("Physical constants");
+    prm.enter_subsection("Sediment constants");
     d50 = prm.get_double("sediment_diameter");
     rho_sediment = prm.get_double("sediment_density");
     prm.leave_subsection();
 
     w_s = settling_velocity.value(g, nu, d50, rho_water, rho_sediment);
-    shields_denominator = 1./((rho_sediment/rho_water - 1.) * g * d50);
+    shields_denominator = 1./((rho_sediment - rho_water) * g * d50);
+    r0 = 1.4;
   }
 
   template <int dim, int n_tra>
@@ -130,15 +132,24 @@ namespace Model
       vars_name.push_back("sediment_concentration_"+std::to_string(t+1));
   }
 
-  // This implementation provides an erosion-only source for now:
+  // This implementation provides an erosion and deposition source term for
+  // a single class of non-cohesive sediments:
   //
-  // $$E = w_s max(c_b - c, 0)$$
+  // $$E = rho_sediment * w_s * c_b $$
   //
   // where $c_b$ is the near-bed concentration, c is the suspended
   // sediment concentration and $w_s$ is the settling velocity.
   // The near-bed concentration, a function of the Shield
   // parameter $\theta$, and the settling velocity are
   // computed in dedicated physics classes.
+  //
+  // $$D = w_s * r0 * c$$
+  //
+  // where $w_s$ is the settling velocity, r0 is the ratio between
+  // the near-bed concentration and the depth-averaged suspended concentration,
+  // considered constant for now (r0=1.4, see Parker et al., 1987) and
+  // c is the depth-averaged suspended concentration.
+
   template <int dim, int n_tra, typename Number>
   inline DEAL_II_ALWAYS_INLINE //
     Tensor<1, n_tra, Number>
@@ -152,16 +163,16 @@ namespace Model
     const Tensor<1, dim, Number> v =
       velocity<dim>(height, discharge, bathymetry);
     const Number h = depth(height, bathymetry);
-    const Number bottom_fric =
-      bottom_friction.source<dim, Number>(v, drag_coefficient, h).norm();
+    const Number bottom_shear_stress =
+      rho_water * bottom_friction.source<dim, Number>(v, drag_coefficient, h).norm();
 
-    const Number theta = bottom_fric / shields_denominator;
+    const Number theta = bottom_shear_stress / shields_denominator;
     const Number cb = near_bed_concentration.value<Number>(theta);
 
     Tensor<1, n_tra, Number> source;
     for (unsigned int t = 0; t < n_tra; ++t)
       source[t] =
-        w_s * std::max(cb - concentration[t], Number(0.0));
+        w_s * (rho_sediment *cb - r0 * concentration[t]);
 
     return source;
   }
@@ -179,13 +190,13 @@ namespace Model
     const Tensor<1, dim, Number> v =
       velocity<dim>(height, discharge, bathymetry);
     const Number h = depth(height, bathymetry);
-    const Number bottom_fric =
-      bottom_friction.source<dim, Number>(v, drag_coefficient, h).norm();
+    const Number bottom_shear_stress =
+      rho_water * bottom_friction.source<dim, Number>(v, drag_coefficient, h).norm();
 
-    const Number theta = bottom_fric / shields_denominator;
+    const Number theta = bottom_shear_stress / shields_denominator;
     const Number cb = near_bed_concentration.value<Number>(theta);
 
-    return w_s * std::max(cb - concentration, Number(0.0));
+    return w_s * (rho_sediment * cb - r0 * concentration);
   }
 } // namespace Model
 #endif //SHALLOWWATERWITHSEDIMENT_H

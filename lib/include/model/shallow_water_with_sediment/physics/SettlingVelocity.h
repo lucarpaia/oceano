@@ -27,7 +27,7 @@ namespace Physics
   // @sect3{Implementation of the sediment settling velocity}
 
   // In the following classes, we implement different formulas for the
-  // particle settling velocity.
+  // particle settling velocity, based exclusively on particle size.
   class SettlingVelocityBase
   {
   public:
@@ -52,7 +52,7 @@ namespace Physics
   //
   // $$w_s = g d50^2 (s - 1) / (18 nu),  s = rho_s / rho_w.$$
   //
-  // It is appropriate for small particles and low Reynolds number.
+  // It is appropriate for small particles (smaller than 0.1 mm) and low Reynolds number.
   class SettlingVelocityStokes : public SettlingVelocityBase
   {
   public:
@@ -87,6 +87,92 @@ namespace Physics
 
     return g * d50 * d50 * (s - Number(1.0)) /
       (Number(18.0) * Number(nu));
+  }
+
+
+
+  // As adopted by Van Rijn, 1984, the Zanke's formula (1977) for settling velocity
+  // is appropriate for particles from 0.1 to 1 mm (see pag. 100 in Sediment
+  // Transport Dynamics by Weiming Wu, 2024):
+  //
+  // $$w_s = 10 nu/d50 {[1 + 0.01(s - 1) g d50^3 / (nu^2)]^(1/2) -1},  s = rho_s / rho_w.$$
+  //
+  class SettlingVelocityZanke : public SettlingVelocityBase
+  {
+  public:
+    SettlingVelocityZanke();
+    ~SettlingVelocityZanke() = default;
+
+    template <typename Number>
+    inline DEAL_II_ALWAYS_INLINE //
+      Number
+      value(const Number g,
+            const Number nu,
+            const Number d50,
+            const Number rho_water,
+            const Number rho_sediment) const;
+  };
+
+  SettlingVelocityZanke::SettlingVelocityZanke()
+    : SettlingVelocityBase()
+  {}
+
+  template <typename Number>
+  inline DEAL_II_ALWAYS_INLINE //
+    Number
+    SettlingVelocityZanke::value(
+      const Number g,
+      const Number nu,
+      const Number d50,
+      const Number rho_water,
+      const Number rho_sediment) const
+  {
+    const Number s = Number(rho_sediment / rho_water);
+
+    return 10.0 * Number(nu)/d50*(std::sqrt(1.0 + 0.01 * (s - Number(1.0))
+      * g * std::pow(d50,3.0) /std::pow(Number(nu),2.0))-1.0);
+  }
+
+
+
+
+  // As adopted by Van Rijn, 1984, the Van Rijn's formula (1984) for settling velocity
+  // is appropriate for particles larger than 1 mm (see pag. 100 in Sediment
+  // Transport Dynamics by Weiming Wu, 2024):
+  //
+  // $$w_s = 1.1 [(s - 1) g d50]^(1/2),  s = rho_s / rho_w.$$
+  //
+  class SettlingVelocityVanRijn : public SettlingVelocityBase
+  {
+  public:
+    SettlingVelocityVanRijn();
+    ~SettlingVelocityVanRijn() = default;
+
+    template <typename Number>
+    inline DEAL_II_ALWAYS_INLINE //
+      Number
+      value(const Number g,
+            const Number d50,
+            const Number rho_water,
+            const Number rho_sediment) const;
+  };
+
+  SettlingVelocityVanRijn::SettlingVelocityVanRijn()
+    : SettlingVelocityBase()
+  {}
+
+  template <typename Number>
+  inline DEAL_II_ALWAYS_INLINE //
+    Number
+    SettlingVelocityVanRijn::value(
+      const Number g,
+      const Number d50,
+      const Number rho_water,
+      const Number rho_sediment) const
+  {
+    const Number s = Number(rho_sediment / rho_water);
+
+    return 1.1 * std::sqrt((s - Number(1.0)) * g * d50);
   }
 } // namespace Physics
 #endif // SETTLINGVELOCITY_H
